@@ -1,6 +1,6 @@
 'use client';
 
-import { Clapperboard, Settings2 } from 'lucide-react';
+import { Clapperboard, Gamepad2, Settings2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { SearchBar } from '@/components/site/search-bar';
@@ -12,6 +12,7 @@ import { useHasTmdbKey } from '@/lib/settings';
 export function Header() {
   const router = useRouter();
   const openSettings = useCinedeckStore((s) => s.openSettings);
+  const openArcade = useCinedeckStore((s) => s.openArcade);
   const hasKey = useHasTmdbKey();
 
   return (
@@ -39,6 +40,15 @@ export function Header() {
         <nav aria-label="Site actions" className="ml-auto flex items-center gap-1">
           <LanguageMenu />
           <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Open CineDeck Arcade — games"
+            onClick={openArcade}
+            className="size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+          >
+            <Gamepad2 className="size-4.5 text-amber-500 dark:text-amber-400" aria-hidden />
+          </Button>
           <Button
             variant="ghost"
             size="icon"

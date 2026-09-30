@@ -18,6 +18,10 @@ interface CinedeckState {
   settingsOpen: boolean;
   openSettings: () => void;
   closeSettings: () => void;
+  /** Arcade dialog (Emoji Quiz + Roulette) visibility. */
+  arcadeOpen: boolean;
+  openArcade: () => void;
+  closeArcade: () => void;
 }
 
 export const useCinedeckStore = create<CinedeckState>((set) => ({
@@ -41,4 +45,7 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
   settingsOpen: false,
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
+  arcadeOpen: false,
+  openArcade: () => set({ arcadeOpen: true }),
+  closeArcade: () => set({ arcadeOpen: false }),
 }));

@@ -7,6 +7,7 @@ import { Header } from '@/components/site/header';
 import { HomeView } from '@/components/site/home-view';
 import { WatchView } from '@/components/site/watch-view';
 import { SettingsDialog } from '@/components/site/settings-dialog';
+import { ArcadeDialog } from '@/components/site/arcade-dialog';
 import { SiteFooter } from '@/components/site/site-footer';
 import type { MediaType } from '@/lib/tmdb';
 
@@ -37,6 +38,7 @@ function App() {
         </main>
         <SiteFooter />
         <SettingsDialog />
+        <ArcadeDialog />
       </div>
     </AppProviders>
   );
