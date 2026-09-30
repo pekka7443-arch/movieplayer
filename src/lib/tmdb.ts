@@ -169,9 +169,14 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
       payload && typeof payload === 'object' && 'error' in payload
         ? String((payload as { error: unknown }).error)
         : '';
-    const mapped: ApiErrorCode = (['tmdb_key', 'not_found', 'bad_request', 'tmdb_unreachable', 'server_error'] as const).includes(
-      code as ApiErrorCode
-    )
+    const knownCodes: readonly string[] = [
+      'tmdb_key',
+      'not_found',
+      'bad_request',
+      'tmdb_unreachable',
+      'server_error',
+    ];
+    const mapped: ApiErrorCode = knownCodes.includes(code)
       ? (code as ApiErrorCode)
       : response.status === 404
         ? 'not_found'

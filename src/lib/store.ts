@@ -10,6 +10,12 @@ interface CinedeckState {
   /** Currently selected stream provider id (persisted as preferred). */
   server: string;
   setServer: (providerId: string) => void;
+  /**
+   * Switch server WITHOUT persisting it as the user's preference — used by
+   * the auto-scan / auto-failover logic so a transiently dead source never
+   * overwrites the server the user actually chose.
+   */
+  setServerTransient: (providerId: string) => void;
   /** Reset the active server to the persisted preference (used when switching titles). */
   resetServer: () => void;
   /** Pull language + preferred server from localStorage (call once on mount). */
@@ -33,6 +39,9 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
   server: DEFAULT_PROVIDER,
   setServer: (providerId) => {
     updateSettings({ preferredServer: providerId });
+    set({ server: providerId });
+  },
+  setServerTransient: (providerId) => {
     set({ server: providerId });
   },
   resetServer: () => {

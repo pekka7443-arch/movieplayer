@@ -126,6 +126,7 @@ interface CinemetaFullMeta {
     poster?: string | null;
     background?: string | null;
     description?: string;
+    releaseInfo?: string;
     genres?: string[];
     genre?: string | string[];
     cast?: string[];

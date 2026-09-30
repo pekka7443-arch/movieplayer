@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { Database, Loader2, Search, SearchX } from 'lucide-react';
+import { CornerDownLeft, Database, Loader2, Search, SearchX } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useSearch } from '@/hooks/use-media';
 import { useMetaSearch } from '@/hooks/use-meta';
@@ -28,13 +28,27 @@ function useDebounced<T>(value: T, delay: number): T {
   return debounced;
 }
 
-function ResultRow({ item, onSelect }: { item: SearchItem; onSelect: (item: SearchItem) => void }) {
+function ResultRow({
+  item,
+  active,
+  onSelect,
+}: {
+  item: SearchItem;
+  active: boolean;
+  onSelect: (item: SearchItem) => void;
+}) {
   const poster = tmdbImg(item.posterPath, 'w185');
   return (
     <button
       type="button"
       onClick={() => onSelect(item)}
-      className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 focus-visible:outline-none dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70"
+      data-active={active || undefined}
+      className={
+        'flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors focus-visible:outline-none ' +
+        (active
+          ? 'bg-amber-400/10 ring-1 ring-amber-400/40 dark:bg-amber-400/10'
+          : 'hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70')
+      }
     >
       <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950">
         {poster ? (
@@ -75,16 +89,24 @@ function ResultRow({ item, onSelect }: { item: SearchItem; onSelect: (item: Sear
 
 function MetaResultRow({
   item,
+  active,
   onSelect,
 }: {
   item: MetaSearchItem;
+  active: boolean;
   onSelect: (item: MetaSearchItem) => void;
 }) {
   return (
     <button
       type="button"
       onClick={() => onSelect(item)}
-      className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 focus-visible:outline-none dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70"
+      data-active={active || undefined}
+      className={
+        'flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors focus-visible:outline-none ' +
+        (active
+          ? 'bg-amber-400/10 ring-1 ring-amber-400/40 dark:bg-amber-400/10'
+          : 'hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70')
+      }
     >
       <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950">
         {item.poster ? (
@@ -128,9 +150,11 @@ export function SearchBar() {
 
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const debounced = useDebounced(text.trim(), 400);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const trimmed = debounced.trim();
   const tmdbEnabled = hasKey && trimmed.length >= 2;
@@ -141,6 +165,20 @@ export function SearchBar() {
 
   const results = useMemo(() => data ?? [], [data]);
   const metaResults = useMemo(() => metaQuery.data ?? [], [metaQuery.data]);
+  const flat = useMemo(
+    () => (hasKey ? results : metaResults) as Array<SearchItem | MetaSearchItem>,
+    [hasKey, results, metaResults]
+  );
+
+  // Derived (never stored) so a shrinking result list can't leave a stale cursor.
+  const safeIndex = Math.min(activeIndex, Math.max(0, flat.length - 1));
+
+  // Keep the highlighted row visible while arrowing through the list.
+  useEffect(() => {
+    listRef.current
+      ?.querySelector('[data-active]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [safeIndex]);
 
   // Close on outside click.
   useEffect(() => {
@@ -192,8 +230,26 @@ export function SearchBar() {
     [router]
   );
 
+  /** Enter = play the highlighted row (or the best match when closed). */
+  const playActive = useCallback(() => {
+    const item = flat[safeIndex] ?? flat[0];
+    if (!item) return;
+    if ('imdbId' in item) selectMeta(item as MetaSearchItem);
+    else select(item as SearchItem);
+  }, [flat, safeIndex, select, selectMeta]);
+
   const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') {
+    if (event.key === 'ArrowDown' && flat.length > 0) {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex(Math.min(safeIndex + 1, flat.length - 1));
+    } else if (event.key === 'ArrowUp' && flat.length > 0) {
+      event.preventDefault();
+      setActiveIndex(Math.max(safeIndex - 1, 0));
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      playActive();
+    } else if (event.key === 'Escape') {
       setOpen(false);
       event.currentTarget.blur();
     }
@@ -225,9 +281,14 @@ export function SearchBar() {
       );
     } else {
       body = (
-        <div className="p-1">
-          {metaResults.map((item) => (
-            <MetaResultRow key={`${item.mediaType}-${item.imdbId}`} item={item} onSelect={selectMeta} />
+        <div className="p-1" ref={listRef}>
+          {metaResults.map((item, i) => (
+            <MetaResultRow
+              key={`${item.mediaType}-${item.imdbId}`}
+              item={item}
+              active={i === safeIndex}
+              onSelect={selectMeta}
+            />
           ))}
           <p className="flex items-center gap-1.5 px-2 pb-1 pt-1.5 text-[11px] text-zinc-500 dark:text-zinc-600">
             <Database className="size-3" aria-hidden />
@@ -258,9 +319,14 @@ export function SearchBar() {
     );
   } else {
     body = (
-      <div className="p-1">
-        {results.map((item) => (
-          <ResultRow key={`${item.mediaType}-${item.id}`} item={item} onSelect={select} />
+      <div className="p-1" ref={listRef}>
+        {results.map((item, i) => (
+          <ResultRow
+            key={`${item.mediaType}-${item.id}`}
+            item={item}
+            active={i === safeIndex}
+            onSelect={select}
+          />
         ))}
       </div>
     );
@@ -293,6 +359,22 @@ export function SearchBar() {
           className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-1 shadow-xl shadow-black/10 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/40 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-700"
         >
           {body}
+          {flat.length > 0 && (
+            <p className="flex items-center justify-end gap-3 border-t border-zinc-200/70 px-3 pb-1.5 pt-2 text-[10px] font-medium text-zinc-400 dark:border-zinc-800/70 dark:text-zinc-600">
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded border border-zinc-300 px-1 font-mono text-[9px] dark:border-zinc-700">↑↓</kbd>
+                browse
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded border border-amber-400/50 bg-amber-400/10 px-1 font-mono text-[9px] text-amber-600 dark:border-amber-400/40 dark:text-amber-400">↵</kbd>
+                play now
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded border border-zinc-300 px-1 font-mono text-[9px] dark:border-zinc-700">esc</kbd>
+                close
+              </span>
+            </p>
+          )}
         </div>
       )}
     </div>

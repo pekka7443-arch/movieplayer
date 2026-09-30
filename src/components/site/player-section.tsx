@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,6 +13,7 @@ import {
   Radar,
   RotateCw,
   Star,
+  Unplug,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +31,20 @@ import { useServerScan } from '@/hooks/use-meta';
 import { PROVIDERS, getProvider, getEmbedUrl } from '@/lib/providers';
 import { useCinedeckStore } from '@/lib/store';
 import { formatRuntime, yearOf, type MediaDetails, type MediaType, type TvDetails } from '@/lib/tmdb';
+
+/** If the active iframe hasn't fired onLoad within this window, we auto-switch. */
+const FAILOVER_TIMEOUT_MS = 12_000;
+
+/** Auto-failover bookkeeping, tied to the embed URL it applies to. */
+interface FailoverState {
+  forUrl: string;
+  fromName: string;
+  /** Next provider we switched to — null when every candidate is exhausted. */
+  toId: string | null;
+  /** How many sources have been tried (including the failed one). */
+  tried: number;
+  total: number;
+}
 
 export function PlayerSection({
   tmdbId,
@@ -54,6 +70,7 @@ export function PlayerSection({
   const router = useRouter();
   const server = useCinedeckStore((s) => s.server);
   const setServer = useCinedeckStore((s) => s.setServer);
+  const setServerTransient = useCinedeckStore((s) => s.setServerTransient);
   const language = useCinedeckStore((s) => s.language);
 
   const tvDetails = details && details.mediaType === 'tv' ? (details as TvDetails) : undefined;
@@ -65,19 +82,24 @@ export function PlayerSection({
 
   const [nonce, setNonce] = useState(0);
   const [loaded, setLoaded] = useState<{ url: string; nonce: number } | null>(null);
+  /** Auto-failover bookkeeping for the iframe currently on screen. */
+  const [failover, setFailover] = useState<FailoverState | null>(null);
 
   // ---------------------------------------------------------------------------
-  // Source scan — probe every provider for this title and auto-play the best
-  // healthy one. A manual server pick always wins over the auto-selection.
+  // Source scan — probe every provider for this title, rank them and auto-play
+  // the healthiest one. A manual server pick always wins over auto-selection.
   // ---------------------------------------------------------------------------
   const scanQuery = useServerScan(
     { imdb: imdbId ?? null, tmdb: tmdbId ?? null, mediaType, season, episode },
     watchId !== 0,
   );
   const manualPickRef = useRef(false);
+  /** Provider ids the watchdog has already tried for the current title/episode. */
+  const triedRef = useRef<string[]>([]);
 
   useEffect(() => {
     manualPickRef.current = false;
+    triedRef.current = [];
   }, [imdbId, tmdbId, season, episode]);
 
   const healthMap = useMemo(() => {
@@ -87,32 +109,75 @@ export function PlayerSection({
     for (const r of scanQuery.data ?? []) map.set(r.providerId, r.ok ? true : r.status === 403 ? 'unknown' : false);
     return map;
   }, [scanQuery.data]);
-  const healthyIds = useMemo(
-    () => (scanQuery.data ?? []).filter((r) => r.ok).map((r) => r.providerId),
+  const onlineCount = useMemo(
+    () => (scanQuery.data ?? []).filter((r) => r.ok).length,
     [scanQuery.data],
   );
 
-  useEffect(() => {
-    const results = scanQuery.data;
-    if (!results || manualPickRef.current) return;
-    if (healthyIds.length === 0) return;
-    const currentHealth = healthMap.get(server);
-    // Only auto-switch away from a clearly dead source — keep unknowns.
-    if (currentHealth === false) {
-      setServer(healthyIds[0]);
-    }
-  }, [scanQuery.data, healthyIds, healthMap, server, setServer]);
+  /**
+   * Auto-play order: confirmed-online sources first (fastest response wins),
+   * then bot-blocked-but-maybe-working (403), then everything else.
+   */
+  const candidates = useMemo(() => {
+    const rows = scanQuery.data ?? [];
+    const ok = rows.filter((r) => r.ok).sort((a, b) => a.ms - b.ms).map((r) => r.providerId);
+    const unknown = rows.filter((r) => !r.ok && r.status === 403).map((r) => r.providerId);
+    const rest = rows.filter((r) => !r.ok && r.status !== 403).map((r) => r.providerId);
+    return [...ok, ...unknown, ...rest];
+  }, [scanQuery.data]);
 
-  const scanSummary = useMemo(() => {
-    if (!scanQuery.data) return null;
-    const online = healthyIds.length;
-    return `${online}/${scanQuery.data.length} sources online`;
-  }, [scanQuery.data, healthyIds]);
+  // The scan outranked the current server → move on (unless the user picked manually).
+  useEffect(() => {
+    if (!scanQuery.data || manualPickRef.current) return;
+    if (healthMap.get(server) !== false) return;
+    const best = candidates[0];
+    if (best && best !== server) setServerTransient(best);
+  }, [scanQuery.data, healthMap, candidates, server, setServerTransient]);
 
   const provider = getProvider(server);
   const embedUrl = getEmbedUrl(server, mediaType, watchId, isTv ? season : undefined, isTv ? episode : undefined);
   // The overlay shows until the iframe for the *current* URL + refresh nonce reports onLoad.
   const iframeReady = loaded?.url === embedUrl && loaded?.nonce === nonce;
+
+  // ---------------------------------------------------------------------------
+  // Auto-failover watchdog — if the iframe for the active URL never reports
+  // onLoad, that source is dead for this browser: silently move to the next
+  // scan-ranked candidate until something plays or every source is tried.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (watchId === 0) return;
+    const timer = setTimeout(() => {
+      if (manualPickRef.current) return;
+      if (loaded?.url === embedUrl && loaded?.nonce === nonce) return; // playing fine
+      if (!scanQuery.data) return; // scan still running — give it a chance
+
+      if (!triedRef.current.includes(server)) {
+        triedRef.current = [...triedRef.current, server];
+      }
+      const nextId = candidates.find((id) => id !== server && !triedRef.current.includes(id));
+      const total = Math.max(candidates.length, PROVIDERS.length);
+
+      if (nextId) {
+        setFailover({
+          forUrl: embedUrl,
+          fromName: provider.name,
+          toId: nextId,
+          tried: triedRef.current.length,
+          total,
+        });
+        setServerTransient(nextId);
+        toast(`${getProvider(nextId).name} takes over`, {
+          description: `${provider.name} didn't respond — auto-switched sources.`,
+        });
+      } else {
+        setFailover({ forUrl: embedUrl, fromName: provider.name, toId: null, tried: triedRef.current.length, total });
+        toast.error('No source responded', {
+          description: 'Every stream source timed out. Hit Reload to retry or pick a server manually.',
+        });
+      }
+    }, FAILOVER_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [embedUrl, nonce, loaded, scanQuery.data, candidates, server, provider.name, watchId, setServerTransient]);
 
   const navigateTo = (nextSeason: number, nextEpisode: number) => {
     const params = new URLSearchParams({
@@ -254,10 +319,10 @@ export function PlayerSection({
             />
             {scanQuery.isFetching && !scanQuery.data
               ? 'Scanning sources…'
-              : scanSummary
-                ? healthyIds.length > 0
-                  ? `${scanSummary} — green dot = online`
-                  : `${scanSummary} — none responded`
+              : scanQuery.data
+                ? onlineCount > 0
+                  ? `${onlineCount}/${scanQuery.data.length} online — auto-picked ${provider.name}`
+                  : 'No source responded yet'
                 : 'Source scan'}
           </span>
           <Button
@@ -424,22 +489,50 @@ export function PlayerSection({
           // blocking pop-up ads and top-level redirects to random ad pages.
           sandbox="allow-scripts allow-same-origin allow-forms"
           scrolling="no"
-          onLoad={() => setLoaded({ url: embedUrl, nonce })}
+          onLoad={() => {
+            setLoaded({ url: embedUrl, nonce });
+            setFailover(null);
+          }}
           className="absolute inset-0 size-full border-0"
         />
         {!iframeReady && (
           <div
             role="status"
             aria-live="polite"
-            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-50/85 backdrop-blur-sm dark:bg-zinc-950/85"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-50/85 px-6 text-center backdrop-blur-sm dark:bg-zinc-950/85"
           >
-            <span className="flex size-14 items-center justify-center rounded-full bg-amber-400/10">
-              <Loader2 className="size-6 animate-spin text-amber-500 dark:text-amber-400" aria-hidden />
-            </span>
-            <p className="text-sm text-zinc-700 dark:text-zinc-300">Connecting to {provider.name}…</p>
-            <p className="font-mono text-xs text-zinc-500 dark:text-zinc-600">
-              {imdbId ?? `TMDB ${tmdbId}`}
-            </p>
+            {failover?.forUrl === embedUrl && failover.toId === null ? (
+              <>
+                <span className="flex size-14 items-center justify-center rounded-full bg-red-400/10">
+                  <Unplug className="size-6 text-red-500 dark:text-red-400" aria-hidden />
+                </span>
+                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">No source responded</p>
+                <p className="max-w-sm text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
+                  All {failover.total} stream sources timed out for this title. Hit Reload to retry,
+                  or pick a server above — some sources block datacenter scans but work in browsers.
+                </p>
+              </>
+            ) : (
+              <>
+                <span className="flex size-14 items-center justify-center rounded-full bg-amber-400/10">
+                  <Loader2 className="size-6 animate-spin text-amber-500 dark:text-amber-400" aria-hidden />
+                </span>
+                <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                  {failover?.forUrl === embedUrl && failover.toId
+                    ? `Auto-switched to ${getProvider(failover.toId).name}…`
+                    : `Connecting to ${provider.name}…`}
+                </p>
+                {failover?.forUrl === embedUrl && failover.toId ? (
+                  <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-600">
+                    {failover.fromName} timed out · attempt {failover.tried + 1}/{failover.total}
+                  </p>
+                ) : (
+                  <p className="font-mono text-xs text-zinc-500 dark:text-zinc-600">
+                    {imdbId ?? `TMDB ${tmdbId}`}
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -447,9 +540,8 @@ export function PlayerSection({
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-600">
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
-          CineDeck scans all stream sources for this title and auto-plays the healthiest one. If a
-          source still shows an error page, switch to another server (green dot = online) or hit
-          Reload. For subtitles, audio tracks &amp; quality, use the ⚙ / CC menus inside the player.
+          CineDeck scans every source, plays the healthiest one and auto-switches if a source
+          stalls. Subtitles, audio &amp; quality live in the player's own ⚙ / CC menu.
         </span>
       </p>
     </section>
