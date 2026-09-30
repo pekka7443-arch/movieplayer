@@ -17,10 +17,15 @@ function parsePositiveInt(value: string | null): number | null {
   return parsed > 0 ? parsed : null;
 }
 
+function parseImdbId(value: string | null): string | null {
+  return value && /^tt\d+$/.test(value) ? value : null;
+}
+
 function App() {
   const params = useSearchParams();
 
   const id = parsePositiveInt(params.get('id'));
+  const imdbId = parseImdbId(params.get('imdb'));
   const type: MediaType = params.get('type') === 'tv' ? 'tv' : 'movie';
   const season = parsePositiveInt(params.get('s')) ?? 1;
   const episode = parsePositiveInt(params.get('e')) ?? 1;
@@ -32,6 +37,8 @@ function App() {
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
           {id !== null ? (
             <WatchView tmdbId={id} mediaType={type} season={season} episode={episode} />
+          ) : imdbId !== null ? (
+            <WatchView imdbId={imdbId} mediaType={type} season={season} episode={episode} />
           ) : (
             <HomeView />
           )}

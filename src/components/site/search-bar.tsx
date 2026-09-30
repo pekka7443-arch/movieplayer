@@ -9,13 +9,15 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { KeyRound, Loader2, Search, SearchX } from 'lucide-react';
+import { Database, Loader2, Search, SearchX } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useSearch } from '@/hooks/use-media';
+import { useMetaSearch } from '@/hooks/use-meta';
 import { tmdbImg } from '@/lib/languages';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey } from '@/lib/settings';
 import { yearOf, type SearchItem } from '@/lib/tmdb';
+import type { MetaSearchItem } from '@/lib/meta';
 
 function useDebounced<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -71,10 +73,57 @@ function ResultRow({ item, onSelect }: { item: SearchItem; onSelect: (item: Sear
   );
 }
 
+function MetaResultRow({
+  item,
+  onSelect,
+}: {
+  item: MetaSearchItem;
+  onSelect: (item: MetaSearchItem) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item)}
+      className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 focus-visible:outline-none dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70"
+    >
+      <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950">
+        {item.poster ? (
+          <img src={item.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-[10px] text-zinc-500 dark:text-zinc-700">
+            IMDb
+          </span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</span>
+          {item.year && <span className="shrink-0 text-xs text-zinc-500">{item.year}</span>}
+        </span>
+        <span className="mt-1 flex items-center gap-2">
+          <span
+            className={
+              'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ' +
+              (item.mediaType === 'tv'
+                ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300'
+                : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400')
+            }
+          >
+            {item.mediaType}
+          </span>
+          <span className="font-mono text-[11px] text-amber-600/90 dark:text-amber-400/90">{item.imdbId}</span>
+          {item.voteAverage > 0 && (
+            <span className="text-[11px] text-zinc-500">★ {item.voteAverage.toFixed(1)}</span>
+          )}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 export function SearchBar() {
   const router = useRouter();
   const language = useCinedeckStore((s) => s.language);
-  const openSettings = useCinedeckStore((s) => s.openSettings);
   const hasKey = useHasTmdbKey();
 
   const [text, setText] = useState('');
@@ -84,10 +133,14 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const trimmed = debounced.trim();
-  const enabled = hasKey && trimmed.length >= 2;
-  const { data, isFetching } = useSearch(trimmed, language, enabled);
+  const tmdbEnabled = hasKey && trimmed.length >= 2;
+  const metaEnabled = !hasKey && trimmed.length >= 2;
+
+  const { data, isFetching } = useSearch(trimmed, language, tmdbEnabled);
+  const metaQuery = useMetaSearch(trimmed, metaEnabled);
 
   const results = useMemo(() => data ?? [], [data]);
+  const metaResults = useMemo(() => metaQuery.data ?? [], [metaQuery.data]);
 
   // Close on outside click.
   useEffect(() => {
@@ -129,6 +182,16 @@ export function SearchBar() {
     [router]
   );
 
+  // Keyless results play straight from their IMDB id — no TMDB key needed.
+  const selectMeta = useCallback(
+    (item: MetaSearchItem) => {
+      setOpen(false);
+      setText('');
+      router.push(`/?imdb=${item.imdbId}&type=${item.mediaType}`, { scroll: false });
+    },
+    [router]
+  );
+
   const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
       setOpen(false);
@@ -140,24 +203,39 @@ export function SearchBar() {
 
   let body: React.ReactNode;
   if (!hasKey) {
-    body = (
-      <button
-        type="button"
-        onClick={() => {
-          setOpen(false);
-          openSettings();
-        }}
-        className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 focus-visible:outline-none dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70"
-      >
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 text-amber-500 dark:text-amber-400">
-          <KeyRound className="size-4" aria-hidden />
-        </span>
-        <span className="min-w-0">
-          <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">Connect TMDB to search</span>
-          <span className="block text-xs text-zinc-500">Add your free API key in Settings</span>
-        </span>
-      </button>
-    );
+    if (isFetching && metaResults.length === 0 && metaQuery.isPending) {
+      body = (
+        <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
+          <Loader2 className="size-4 animate-spin text-amber-500 dark:text-amber-400" aria-hidden />
+          Searching…
+        </div>
+      );
+    } else if (trimmed.length < 2) {
+      body = (
+        <div className="px-3 py-6 text-sm text-zinc-500">
+          Keep typing — results appear after 2 characters.
+        </div>
+      );
+    } else if (metaResults.length === 0) {
+      body = (
+        <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
+          <SearchX className="size-4 text-zinc-500 dark:text-zinc-600" aria-hidden />
+          No results for “{trimmed}”
+        </div>
+      );
+    } else {
+      body = (
+        <div className="p-1">
+          {metaResults.map((item) => (
+            <MetaResultRow key={`${item.mediaType}-${item.imdbId}`} item={item} onSelect={selectMeta} />
+          ))}
+          <p className="flex items-center gap-1.5 px-2 pb-1 pt-1.5 text-[11px] text-zinc-500 dark:text-zinc-600">
+            <Database className="size-3" aria-hidden />
+            Keyless mode — plays via IMDB · add a TMDB key for the full library
+          </p>
+        </div>
+      );
+    }
   } else if (isFetching) {
     body = (
       <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronLeft,
@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Info,
   Loader2,
+  Radar,
   RotateCw,
   Star,
 } from 'lucide-react';
@@ -24,12 +25,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useSeason } from '@/hooks/use-media';
+import { useServerScan } from '@/hooks/use-meta';
 import { PROVIDERS, getProvider, getEmbedUrl } from '@/lib/providers';
 import { useCinedeckStore } from '@/lib/store';
 import { formatRuntime, yearOf, type MediaDetails, type MediaType, type TvDetails } from '@/lib/tmdb';
 
 export function PlayerSection({
   tmdbId,
+  imdbId,
   mediaType,
   season,
   episode,
@@ -37,7 +40,10 @@ export function PlayerSection({
   detailsLoading,
   hasKey,
 }: {
-  tmdbId: number;
+  /** TMDB watch mode — omit when using imdbId. */
+  tmdbId?: number;
+  /** IMDB watch mode (keyless) — omit when using tmdbId. */
+  imdbId?: string;
   mediaType: MediaType;
   season: number;
   episode: number;
@@ -52,29 +58,74 @@ export function PlayerSection({
 
   const tvDetails = details && details.mediaType === 'tv' ? (details as TvDetails) : undefined;
   const isTv = mediaType === 'tv';
+  const watchId: number | string = imdbId ?? tmdbId ?? 0;
 
-  const seasonQuery = useSeason(tmdbId, season, language, hasKey && isTv);
+  const seasonQuery = useSeason(tmdbId ?? 0, season, language, hasKey && isTv && !imdbId);
   const episodes = useMemo(() => seasonQuery.data?.episodes ?? [], [seasonQuery.data]);
 
   const [nonce, setNonce] = useState(0);
   const [loaded, setLoaded] = useState<{ url: string; nonce: number } | null>(null);
 
+  // ---------------------------------------------------------------------------
+  // Source scan — probe every provider for this title and auto-play the best
+  // healthy one. A manual server pick always wins over the auto-selection.
+  // ---------------------------------------------------------------------------
+  const scanQuery = useServerScan(
+    { imdb: imdbId ?? null, tmdb: tmdbId ?? null, mediaType, season, episode },
+    watchId !== 0,
+  );
+  const manualPickRef = useRef(false);
+
+  useEffect(() => {
+    manualPickRef.current = false;
+  }, [imdbId, tmdbId, season, episode]);
+
+  const healthMap = useMemo(() => {
+    // true = responded ok, 'unknown' = 403 (Cloudflare may still let browsers
+    // through — probe is bot-blocked), false = clearly unreachable/error page.
+    const map = new Map<string, boolean | 'unknown'>();
+    for (const r of scanQuery.data ?? []) map.set(r.providerId, r.ok ? true : r.status === 403 ? 'unknown' : false);
+    return map;
+  }, [scanQuery.data]);
+  const healthyIds = useMemo(
+    () => (scanQuery.data ?? []).filter((r) => r.ok).map((r) => r.providerId),
+    [scanQuery.data],
+  );
+
+  useEffect(() => {
+    const results = scanQuery.data;
+    if (!results || manualPickRef.current) return;
+    if (healthyIds.length === 0) return;
+    const currentHealth = healthMap.get(server);
+    // Only auto-switch away from a clearly dead source — keep unknowns.
+    if (currentHealth === false) {
+      setServer(healthyIds[0]);
+    }
+  }, [scanQuery.data, healthyIds, healthMap, server, setServer]);
+
+  const scanSummary = useMemo(() => {
+    if (!scanQuery.data) return null;
+    const online = healthyIds.length;
+    return `${online}/${scanQuery.data.length} sources online`;
+  }, [scanQuery.data, healthyIds]);
+
   const provider = getProvider(server);
-  const embedUrl = getEmbedUrl(server, mediaType, tmdbId, isTv ? season : undefined, isTv ? episode : undefined);
+  const embedUrl = getEmbedUrl(server, mediaType, watchId, isTv ? season : undefined, isTv ? episode : undefined);
   // The overlay shows until the iframe for the *current* URL + refresh nonce reports onLoad.
   const iframeReady = loaded?.url === embedUrl && loaded?.nonce === nonce;
 
   const navigateTo = (nextSeason: number, nextEpisode: number) => {
     const params = new URLSearchParams({
-      id: String(tmdbId),
       type: mediaType,
       s: String(Math.max(1, nextSeason)),
       e: String(Math.max(1, nextEpisode)),
     });
+    if (imdbId) params.set('imdb', imdbId);
+    else params.set('id', String(tmdbId));
     router.replace(`/?${params.toString()}`, { scroll: false });
   };
 
-  const title = details?.title ?? (hasKey && detailsLoading ? '' : `TMDB #${tmdbId}`);
+  const title = details?.title ?? (hasKey && detailsLoading ? '' : imdbId ?? `TMDB #${tmdbId}`);
   const year = details ? yearOf(details.releaseDate) : '';
 
   const maxEpisode = episodes.length > 0 ? episodes[episodes.length - 1].episodeNumber : null;
@@ -89,7 +140,7 @@ export function PlayerSection({
 
       {/* Heading + badges */}
       <div className="mb-4">
-        {hasKey && detailsLoading ? (
+        {(hasKey || !imdbId) && detailsLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-8 w-72 rounded-lg bg-zinc-200 dark:bg-zinc-900" />
             <Skeleton className="h-5 w-44 rounded-md bg-zinc-200 dark:bg-zinc-900" />
@@ -125,7 +176,7 @@ export function PlayerSection({
                   {genre}
                 </Badge>
               ))}
-              {!hasKey && (
+              {!hasKey && !imdbId && (
                 <span className="text-xs text-zinc-500 dark:text-zinc-600">
                   Connect a TMDB key to see titles, ratings and genres here.
                 </span>
@@ -144,20 +195,46 @@ export function PlayerSection({
         >
           {PROVIDERS.map((p) => {
             const active = p.id === server;
+            const health = healthMap.get(p.id);
             return (
               <button
                 key={p.id}
                 type="button"
                 role="tab"
                 aria-selected={active}
-                onClick={() => setServer(p.id)}
+                onClick={() => {
+                  manualPickRef.current = true;
+                  setServer(p.id);
+                }}
                 className={
-                  'h-8 rounded-lg px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ' +
+                  'flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ' +
                   (active
                     ? 'bg-amber-400 text-zinc-950'
                     : 'text-zinc-600 hover:bg-zinc-200/80 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100')
                 }
               >
+                <span
+                  aria-hidden
+                  title={
+                    health === undefined
+                      ? 'Source not scanned yet'
+                      : health === true
+                        ? 'Source responded'
+                        : health === 'unknown'
+                          ? 'Source blocked the scan (may still work)'
+                          : 'Source did not respond'
+                  }
+                  className={
+                    'size-1.5 shrink-0 rounded-full ' +
+                    (health === undefined
+                      ? 'bg-zinc-400/60 dark:bg-zinc-600'
+                      : health === true
+                        ? 'bg-emerald-500'
+                        : health === 'unknown'
+                          ? 'bg-amber-400'
+                          : 'bg-red-500')
+                  }
+                />
                 {p.name}
               </button>
             );
@@ -165,6 +242,36 @@ export function PlayerSection({
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
+          {/* Source scan status + rescan */}
+          <span
+            role="status"
+            aria-live="polite"
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white/70 px-3 text-xs text-zinc-600 dark:border-zinc-800/60 dark:bg-zinc-900/60 dark:text-zinc-400"
+          >
+            <Radar
+              className={'size-3.5 text-amber-500 dark:text-amber-400' + (scanQuery.isFetching && !scanQuery.data ? ' animate-pulse' : '')}
+              aria-hidden
+            />
+            {scanQuery.isFetching && !scanQuery.data
+              ? 'Scanning sources…'
+              : scanSummary
+                ? healthyIds.length > 0
+                  ? `${scanSummary} — green dot = online`
+                  : `${scanSummary} — none responded`
+                : 'Source scan'}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Rescan sources"
+            title="Rescan sources"
+            onClick={() => scanQuery.refetch()}
+            className="h-9 gap-1.5 rounded-lg px-3 text-xs text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+          >
+            <RotateCw className={'size-3.5' + (scanQuery.isFetching ? ' animate-spin' : '')} aria-hidden />
+            <span className="hidden sm:inline">Rescan</span>
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -330,7 +437,9 @@ export function PlayerSection({
               <Loader2 className="size-6 animate-spin text-amber-500 dark:text-amber-400" aria-hidden />
             </span>
             <p className="text-sm text-zinc-700 dark:text-zinc-300">Connecting to {provider.name}…</p>
-            <p className="font-mono text-xs text-zinc-500 dark:text-zinc-600">TMDB {tmdbId}</p>
+            <p className="font-mono text-xs text-zinc-500 dark:text-zinc-600">
+              {imdbId ?? `TMDB ${tmdbId}`}
+            </p>
           </div>
         )}
       </div>
@@ -338,9 +447,9 @@ export function PlayerSection({
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-600">
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
-          Streams come from third-party servers — if one shows an error page or won&rsquo;t play, switch
-          to another server above or hit Reload; servers go down from time to time. For subtitles,
-          audio tracks &amp; quality, use the ⚙ / CC menus inside the player.
+          CineDeck scans all stream sources for this title and auto-plays the healthiest one. If a
+          source still shows an error page, switch to another server (green dot = online) or hit
+          Reload. For subtitles, audio tracks &amp; quality, use the ⚙ / CC menus inside the player.
         </span>
       </p>
     </section>
