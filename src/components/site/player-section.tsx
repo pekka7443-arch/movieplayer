@@ -1,0 +1,342 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  Info,
+  Loader2,
+  RotateCw,
+  Star,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useSeason } from '@/hooks/use-media';
+import { PROVIDERS, getProvider, getEmbedUrl } from '@/lib/providers';
+import { useCinedeckStore } from '@/lib/store';
+import { formatRuntime, yearOf, type MediaDetails, type MediaType, type TvDetails } from '@/lib/tmdb';
+
+export function PlayerSection({
+  tmdbId,
+  mediaType,
+  season,
+  episode,
+  details,
+  detailsLoading,
+  hasKey,
+}: {
+  tmdbId: number;
+  mediaType: MediaType;
+  season: number;
+  episode: number;
+  details: MediaDetails | undefined;
+  detailsLoading: boolean;
+  hasKey: boolean;
+}) {
+  const router = useRouter();
+  const server = useCinedeckStore((s) => s.server);
+  const setServer = useCinedeckStore((s) => s.setServer);
+  const language = useCinedeckStore((s) => s.language);
+
+  const tvDetails = details && details.mediaType === 'tv' ? (details as TvDetails) : undefined;
+  const isTv = mediaType === 'tv';
+
+  const seasonQuery = useSeason(tmdbId, season, language, hasKey && isTv);
+  const episodes = useMemo(() => seasonQuery.data?.episodes ?? [], [seasonQuery.data]);
+
+  const [nonce, setNonce] = useState(0);
+  const [loaded, setLoaded] = useState<{ url: string; nonce: number } | null>(null);
+
+  const provider = getProvider(server);
+  const embedUrl = getEmbedUrl(server, mediaType, tmdbId, isTv ? season : undefined, isTv ? episode : undefined);
+  // The overlay shows until the iframe for the *current* URL + refresh nonce reports onLoad.
+  const iframeReady = loaded?.url === embedUrl && loaded?.nonce === nonce;
+
+  const navigateTo = (nextSeason: number, nextEpisode: number) => {
+    const params = new URLSearchParams({
+      id: String(tmdbId),
+      type: mediaType,
+      s: String(Math.max(1, nextSeason)),
+      e: String(Math.max(1, nextEpisode)),
+    });
+    router.replace(`/?${params.toString()}`, { scroll: false });
+  };
+
+  const title = details?.title ?? (hasKey && detailsLoading ? '' : `TMDB #${tmdbId}`);
+  const year = details ? yearOf(details.releaseDate) : '';
+
+  const maxEpisode = episodes.length > 0 ? episodes[episodes.length - 1].episodeNumber : null;
+
+  return (
+    <section aria-label="Player" className="relative">
+      {/* Ambient amber glow behind the player */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-10 left-1/2 -z-10 h-48 w-[42rem] max-w-full -translate-x-1/2 rounded-full bg-amber-400/10 blur-3xl"
+      />
+
+      {/* Heading + badges */}
+      <div className="mb-4">
+        {hasKey && detailsLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-72 rounded-lg bg-zinc-900" />
+            <Skeleton className="h-5 w-44 rounded-md bg-zinc-900" />
+          </div>
+        ) : (
+          <>
+            <h1 className="flex flex-wrap items-baseline gap-x-3 text-2xl font-bold tracking-tight text-zinc-100 sm:text-3xl">
+              {title || <span className="inline-block h-8 w-56 animate-pulse rounded bg-zinc-900" />}
+              {year && <span className="text-lg font-normal text-zinc-500">{year}</span>}
+            </h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {details && details.voteAverage > 0 && (
+                <Badge className="gap-1 border-amber-400/30 bg-amber-400/10 text-amber-300 hover:bg-amber-400/10">
+                  <Star className="size-3 fill-amber-400 text-amber-400" aria-hidden />
+                  {details.voteAverage.toFixed(1)}
+                </Badge>
+              )}
+              {details?.runtime ? (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-zinc-700 bg-transparent text-zinc-300"
+                >
+                  <Clock className="size-3" aria-hidden />
+                  {formatRuntime(details.runtime)}
+                </Badge>
+              ) : null}
+              {details?.genres.slice(0, 3).map((genre) => (
+                <Badge
+                  key={genre}
+                  variant="outline"
+                  className="border-zinc-700 bg-transparent text-zinc-400"
+                >
+                  {genre}
+                </Badge>
+              ))}
+              {!hasKey && (
+                <span className="text-xs text-zinc-600">
+                  Connect a TMDB key to see titles, ratings and genres here.
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Server tabs + tools */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div
+          role="tablist"
+          aria-label="Streaming servers"
+          className="flex flex-wrap items-center gap-1.5 rounded-xl border border-zinc-800/60 bg-zinc-900/60 p-1.5"
+        >
+          {PROVIDERS.map((p) => {
+            const active = p.id === server;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setServer(p.id)}
+                className={
+                  'h-8 rounded-lg px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ' +
+                  (active
+                    ? 'bg-amber-400 text-zinc-950'
+                    : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100')
+                }
+              >
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Open ${provider.name} in a new tab`}
+            title={`Open ${provider.name} in a new tab`}
+            onClick={() => window.open(embedUrl, '_blank', 'noopener,noreferrer')}
+            className="h-9 gap-1.5 rounded-lg px-3 text-xs text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100"
+          >
+            <ExternalLink className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">New tab</span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Reload the player"
+            title="Reload the player"
+            onClick={() => setNonce((n) => n + 1)}
+            className="h-9 gap-1.5 rounded-lg px-3 text-xs text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100"
+          >
+            <RotateCw className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">Reload</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* TV season / episode controls */}
+      {isTv && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {hasKey && tvDetails ? (
+            <Select
+              value={String(season)}
+              onValueChange={(v) => navigateTo(Number(v), 1)}
+              aria-label="Select season"
+            >
+              <SelectTrigger className="h-10 w-36 rounded-lg border-zinc-800 bg-zinc-900/70 text-sm text-zinc-200 focus-visible:ring-amber-400/20">
+                <SelectValue placeholder="Season" />
+              </SelectTrigger>
+              <SelectContent className="z-[60] max-h-72 border-zinc-800 bg-zinc-900/95 backdrop-blur">
+                {tvDetails.seasons
+                  .filter((s) => s.seasonNumber >= 1)
+                  .map((s) => (
+                    <SelectItem
+                      key={s.seasonNumber}
+                      value={String(s.seasonNumber)}
+                      className="focus:bg-zinc-800/80 focus:text-zinc-100"
+                    >
+                      {s.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <label className="flex items-center gap-2 text-xs text-zinc-500">
+              Season
+              <Input
+                inputMode="numeric"
+                value={String(season)}
+                onChange={(e) => {
+                  const v = Number(e.target.value.replace(/[^\d]/g, ''));
+                  if (v > 0) navigateTo(v, episode);
+                }}
+                className="h-10 w-16 rounded-lg border-zinc-800 bg-zinc-900/70 text-center font-mono text-sm text-zinc-200 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20"
+                aria-label="Season number"
+              />
+            </label>
+          )}
+
+          {hasKey && episodes.length > 0 ? (
+            <Select
+              value={String(episode)}
+              onValueChange={(v) => navigateTo(season, Number(v))}
+              aria-label="Select episode"
+            >
+              <SelectTrigger className="h-10 w-56 rounded-lg border-zinc-800 bg-zinc-900/70 text-sm text-zinc-200 focus-visible:ring-amber-400/20 sm:w-72">
+                <SelectValue placeholder="Episode" />
+              </SelectTrigger>
+              <SelectContent className="z-[60] max-h-72 border-zinc-800 bg-zinc-900/95 backdrop-blur">
+                {episodes.map((ep) => (
+                  <SelectItem
+                    key={ep.episodeNumber}
+                    value={String(ep.episodeNumber)}
+                    className="focus:bg-zinc-800/80 focus:text-zinc-100"
+                  >
+                    <span className="line-clamp-1">
+                      E{ep.episodeNumber} · {ep.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <label className="flex items-center gap-2 text-xs text-zinc-500">
+              Episode
+              <Input
+                inputMode="numeric"
+                value={String(episode)}
+                onChange={(e) => {
+                  const v = Number(e.target.value.replace(/[^\d]/g, ''));
+                  if (v > 0) navigateTo(season, v);
+                }}
+                className="h-10 w-16 rounded-lg border-zinc-800 bg-zinc-900/70 text-center font-mono text-sm text-zinc-200 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20"
+                aria-label="Episode number"
+              />
+            </label>
+          )}
+
+          {hasKey && episodes.length === 0 && seasonQuery.isFetching && (
+            <Loader2 className="size-4 animate-spin text-zinc-600" aria-label="Loading episodes" />
+          )}
+
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Previous episode"
+              disabled={episode <= 1}
+              onClick={() => navigateTo(season, Math.max(1, episode - 1))}
+              className="size-9 rounded-lg border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              <ChevronLeft className="size-4" aria-hidden />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="Next episode"
+              disabled={maxEpisode !== null && episode >= maxEpisode}
+              onClick={() => navigateTo(season, episode + 1)}
+              className="h-9 gap-1 rounded-lg border-zinc-800 bg-zinc-900/60 px-3 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              Next
+              <ChevronRight className="size-4" aria-hidden />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Player iframe */}
+      <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-zinc-800 bg-black">
+        <iframe
+          key={`${embedUrl}#${nonce}`}
+          src={embedUrl}
+          title={`${title || `TMDB #${tmdbId}`} — ${provider.name} player`}
+          allowFullScreen
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          scrolling="no"
+          onLoad={() => setLoaded({ url: embedUrl, nonce })}
+          className="absolute inset-0 size-full border-0"
+        />
+        {!iframeReady && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950/85 backdrop-blur-sm"
+          >
+            <span className="flex size-14 items-center justify-center rounded-full bg-amber-400/10">
+              <Loader2 className="size-6 animate-spin text-amber-400" aria-hidden />
+            </span>
+            <p className="text-sm text-zinc-300">Connecting to {provider.name}…</p>
+            <p className="font-mono text-xs text-zinc-600">TMDB {tmdbId}</p>
+          </div>
+        )}
+      </div>
+
+      <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-zinc-600">
+        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        Streams come from third-party servers. For subtitles, audio tracks &amp; quality, use the ⚙ /
+        CC menus inside the player.
+      </p>
+    </section>
+  );
+}

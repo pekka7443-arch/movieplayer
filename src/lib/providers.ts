@@ -1,0 +1,68 @@
+export type ProviderId =
+  | 'vidsrc'
+  | 'twoembed'
+  | 'vidsrcxyz'
+  | 'superembed'
+  | 'embedsu';
+
+export interface Provider {
+  id: ProviderId;
+  name: string;
+  movie: (id: number) => string;
+  tv: (id: number, season: number, episode: number) => string;
+}
+
+export const PROVIDERS: Provider[] = [
+  {
+    id: 'vidsrc',
+    name: 'VidSrc',
+    movie: (id) => `https://vidsrc.to/embed/movie/${id}`,
+    tv: (id, s, e) => `https://vidsrc.to/embed/tv/${id}/${s}/${e}`,
+  },
+  {
+    id: 'twoembed',
+    name: '2Embed',
+    movie: (id) => `https://www.2embed.cc/embed/${id}`,
+    tv: (id, s, e) => `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`,
+  },
+  {
+    id: 'vidsrcxyz',
+    name: 'VidSrc XYZ',
+    movie: (id) => `https://vidsrc.xyz/embed/movie?tmdb=${id}`,
+    tv: (id, s, e) => `https://vidsrc.xyz/embed/tv?tmdb=${id}&season=${s}&episode=${e}`,
+  },
+  {
+    id: 'superembed',
+    name: 'SuperEmbed',
+    movie: (id) => `https://superembed.cc/${id}`,
+    tv: (id, s, e) => `https://superembed.cc/${id}?s=${s}&e=${e}`,
+  },
+  {
+    id: 'embedsu',
+    name: 'EmbedSU',
+    movie: (id) => `https://embed.su/embed/movie/${id}`,
+    tv: (id, s, e) => `https://embed.su/embed/tv/${id}/${s}/${e}`,
+  },
+];
+
+export const DEFAULT_PROVIDER: ProviderId = 'vidsrc';
+
+export function getProvider(providerId: string): Provider {
+  return PROVIDERS.find((p) => p.id === providerId) ?? PROVIDERS[0];
+}
+
+export function getEmbedUrl(
+  providerId: string,
+  mediaType: 'movie' | 'tv',
+  tmdbId: number,
+  season?: number,
+  episode?: number
+): string {
+  const provider = getProvider(providerId);
+  if (mediaType === 'tv') {
+    const s = season && season >= 1 ? season : 1;
+    const e = episode && episode >= 1 ? episode : 1;
+    return provider.tv(tmdbId, s, e);
+  }
+  return provider.movie(tmdbId);
+}

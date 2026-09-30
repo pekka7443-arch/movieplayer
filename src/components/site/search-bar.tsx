@@ -1,0 +1,222 @@
+'use client';
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
+import { useRouter } from 'next/navigation';
+import { KeyRound, Loader2, Search, SearchX } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { useSearch } from '@/hooks/use-media';
+import { tmdbImg } from '@/lib/languages';
+import { useCinedeckStore } from '@/lib/store';
+import { useHasTmdbKey } from '@/lib/settings';
+import { yearOf, type SearchItem } from '@/lib/tmdb';
+
+function useDebounced<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+function ResultRow({ item, onSelect }: { item: SearchItem; onSelect: (item: SearchItem) => void }) {
+  const poster = tmdbImg(item.posterPath, 'w185');
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item)}
+      className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-zinc-800/70 focus-visible:bg-zinc-800/70 focus-visible:outline-none"
+    >
+      <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
+        {poster ? (
+          <img src={poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-[10px] text-zinc-700">
+            TMDB
+          </span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-zinc-100">{item.title}</span>
+          {item.releaseDate && (
+            <span className="shrink-0 text-xs text-zinc-500">{yearOf(item.releaseDate)}</span>
+          )}
+        </span>
+        <span className="mt-1 flex items-center gap-2">
+          <span
+            className={
+              'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ' +
+              (item.mediaType === 'tv'
+                ? 'bg-amber-400/15 text-amber-300'
+                : 'bg-zinc-800 text-zinc-400')
+            }
+          >
+            {item.mediaType}
+          </span>
+          <span className="font-mono text-[11px] text-amber-400/90">ID {item.id}</span>
+          {item.voteAverage > 0 && (
+            <span className="text-[11px] text-zinc-500">★ {item.voteAverage.toFixed(1)}</span>
+          )}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+export function SearchBar() {
+  const router = useRouter();
+  const language = useCinedeckStore((s) => s.language);
+  const openSettings = useCinedeckStore((s) => s.openSettings);
+  const hasKey = useHasTmdbKey();
+
+  const [text, setText] = useState('');
+  const [open, setOpen] = useState(false);
+  const debounced = useDebounced(text.trim(), 400);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const trimmed = debounced.trim();
+  const enabled = hasKey && trimmed.length >= 2;
+  const { data, isFetching } = useSearch(trimmed, language, enabled);
+
+  const results = useMemo(() => data ?? [], [data]);
+
+  // Close on outside click.
+  useEffect(() => {
+    function onPointerDown(event: PointerEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, []);
+
+  // "/" focuses search, Esc closes the dropdown.
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable;
+      if (event.key === '/' && !typing) {
+        event.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
+      } else if (event.key === 'Escape' && document.activeElement === inputRef.current) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const select = useCallback(
+    (item: SearchItem) => {
+      setOpen(false);
+      setText('');
+      router.push(`/?id=${item.id}&type=${item.mediaType}`, { scroll: false });
+    },
+    [router]
+  );
+
+  const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      setOpen(false);
+      event.currentTarget.blur();
+    }
+  };
+
+  const showDropdown = open && text.trim().length > 0;
+
+  let body: React.ReactNode;
+  if (!hasKey) {
+    body = (
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(false);
+          openSettings();
+        }}
+        className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-zinc-800/70 focus-visible:bg-zinc-800/70 focus-visible:outline-none"
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 text-amber-400">
+          <KeyRound className="size-4" aria-hidden />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-zinc-100">Connect TMDB to search</span>
+          <span className="block text-xs text-zinc-500">Add your free API key in Settings</span>
+        </span>
+      </button>
+    );
+  } else if (isFetching) {
+    body = (
+      <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-400">
+        <Loader2 className="size-4 animate-spin text-amber-400" aria-hidden />
+        Searching TMDB…
+      </div>
+    );
+  } else if (trimmed.length < 2) {
+    body = (
+      <div className="px-3 py-6 text-sm text-zinc-500">
+        Keep typing — results appear after 2 characters.
+      </div>
+    );
+  } else if (results.length === 0) {
+    body = (
+      <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-400">
+        <SearchX className="size-4 text-zinc-600" aria-hidden />
+        No results for “{trimmed}”
+      </div>
+    );
+  } else {
+    body = (
+      <div className="p-1">
+        {results.map((item) => (
+          <ResultRow key={`${item.mediaType}-${item.id}`} item={item} onSelect={select} />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={wrapRef} className="relative w-full md:w-72 lg:w-80">
+      <Search
+        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"
+        aria-hidden
+      />
+      <Input
+        ref={inputRef}
+        type="search"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onInputKeyDown}
+        placeholder="Search movies & shows…  /"
+        aria-label="Search movies and shows by title"
+        className="h-10 rounded-lg border-zinc-800 bg-zinc-900/70 pl-9 pr-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 [&::-webkit-search-cancel-button]:hidden"
+      />
+      {showDropdown && (
+        <div
+          role="listbox"
+          aria-label="Search results"
+          className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/95 p-1 shadow-xl shadow-black/40 backdrop-blur [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700"
+        >
+          {body}
+        </div>
+      )}
+    </div>
+  );
+}

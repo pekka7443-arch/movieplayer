@@ -1,0 +1,211 @@
+'use client';
+
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+} from '@tanstack/react-query';
+import {
+  addToWatchlist,
+  ApiError,
+  clearHistory,
+  clearWatchlist,
+  fetchDetails,
+  fetchHistory,
+  fetchSeason,
+  fetchTrending,
+  fetchWatchlist,
+  removeHistory,
+  removeWatchlist,
+  saveHistory,
+  searchTmdb,
+  type HistoryItem,
+  type MediaType,
+  type MediaDetails,
+  type SearchItem,
+  type SeasonInfo,
+  type WatchlistItem,
+} from '@/lib/tmdb';
+
+// ---------------------------------------------------------------------------
+// TMDB (library mode)
+// ---------------------------------------------------------------------------
+
+export function useTrending(language: string, enabled: boolean) {
+  return useQuery<SearchItem[], ApiError>({
+    queryKey: ['tmdb', 'trending', language],
+    queryFn: () => fetchTrending(language),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.code === 'tmdb_key') return false;
+      return failureCount < 2;
+    },
+  });
+}
+
+export function useSearch(query: string, language: string, enabled: boolean) {
+  return useQuery<SearchItem[], ApiError>({
+    queryKey: ['tmdb', 'search', query, language],
+    queryFn: () => searchTmdb(query, language),
+    enabled: enabled && query.trim().length >= 2,
+    staleTime: 60 * 1000,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.code === 'tmdb_key') return false;
+      return failureCount < 1;
+    },
+  });
+}
+
+export function useMediaDetails(
+  id: number | null,
+  mediaType: MediaType,
+  language: string,
+  enabled: boolean
+) {
+  return useQuery<MediaDetails, ApiError>({
+    queryKey: ['tmdb', 'details', mediaType, id, language],
+    queryFn: () => fetchDetails(id as number, mediaType, language),
+    enabled: enabled && id !== null && id > 0,
+    staleTime: 10 * 60 * 1000,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.code === 'tmdb_key') return false;
+      return failureCount < 2;
+    },
+  });
+}
+
+export function useSeason(
+  id: number | null,
+  seasonNumber: number,
+  language: string,
+  enabled: boolean
+) {
+  return useQuery<SeasonInfo, ApiError>({
+    queryKey: ['tmdb', 'season', id, seasonNumber, language],
+    queryFn: () => fetchSeason(id as number, seasonNumber, language),
+    enabled: enabled && id !== null && id > 0 && seasonNumber >= 1,
+    staleTime: 10 * 60 * 1000,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.code === 'tmdb_key') return false;
+      return failureCount < 2;
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// History
+// ---------------------------------------------------------------------------
+
+export function useHistory() {
+  return useQuery<HistoryItem[], ApiError>({
+    queryKey: ['history'],
+    queryFn: fetchHistory,
+    staleTime: 30 * 1000,
+    retry: 1,
+  });
+}
+
+export interface SaveHistoryInput {
+  tmdbId: number;
+  mediaType: MediaType;
+  title: string;
+  posterPath: string | null;
+  backdropPath: string | null;
+  season?: number | null;
+  episode?: number | null;
+}
+
+export function useSaveHistory(): UseMutationResult<HistoryItem, ApiError, SaveHistoryInput> {
+  const queryClient = useQueryClient();
+  return useMutation<HistoryItem, ApiError, SaveHistoryInput>({
+    mutationFn: saveHistory,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['history'] });
+    },
+  });
+}
+
+export function useRemoveHistory(): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, string>({
+    mutationFn: removeHistory,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['history'] });
+    },
+  });
+}
+
+export function useClearHistory(): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, void>({
+    mutationFn: clearHistory,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['history'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Watchlist
+// ---------------------------------------------------------------------------
+
+export function useWatchlist() {
+  return useQuery<WatchlistItem[], ApiError>({
+    queryKey: ['watchlist'],
+    queryFn: fetchWatchlist,
+    staleTime: 30 * 1000,
+    retry: 1,
+  });
+}
+
+export interface WatchlistToggleInput {
+  tmdbId: number;
+  mediaType: MediaType;
+  title: string;
+  posterPath: string | null;
+  backdropPath: string | null;
+  existingRowId?: string;
+}
+
+export function useToggleWatchlist(): UseMutationResult<
+  { added: boolean },
+  ApiError,
+  WatchlistToggleInput
+> {
+  const queryClient = useQueryClient();
+  return useMutation<{ added: boolean }, ApiError, WatchlistToggleInput>({
+    mutationFn: async (input) => {
+      if (input.existingRowId) {
+        await removeWatchlist(input.existingRowId);
+        return { added: false };
+      }
+      await addToWatchlist(input);
+      return { added: true };
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
+}
+
+export function useRemoveWatchlist(): UseMutationResult<void, ApiError, string> {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, string>({
+    mutationFn: removeWatchlist,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
+}
+
+export function useClearWatchlist(): UseMutationResult<void, ApiError, void> {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, void>({
+    mutationFn: clearWatchlist,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
+}
