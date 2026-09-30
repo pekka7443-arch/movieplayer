@@ -35,11 +35,11 @@ function SectionHeading({
 }) {
   return (
     <div className="mb-3 flex items-baseline gap-2.5">
-      <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-100">
-        <Icon className="size-4.5 text-amber-400" aria-hidden />
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+        <Icon className="size-4.5 text-amber-500 dark:text-amber-400" aria-hidden />
         {title}
       </h2>
-      {hint && <span className="text-xs text-zinc-600">{hint}</span>}
+      {hint && <span className="text-xs text-zinc-500 dark:text-zinc-600">{hint}</span>}
     </div>
   );
 }
@@ -66,7 +66,7 @@ function HistoryCard({ item }: { item: HistoryItem }) {
         aria-label={`Continue ${item.title}${item.season && item.episode ? ` S${item.season}E${item.episode}` : ''}`}
         className="block w-full text-left focus-visible:outline-none"
       >
-        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/60 transition-all duration-200 group-hover:border-amber-400/50">
+        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-white/70 transition-all duration-200 group-hover:border-amber-400/50 dark:border-zinc-800/80 dark:bg-zinc-900/60">
           {poster ? (
             <img
               src={poster}
@@ -75,7 +75,7 @@ function HistoryCard({ item }: { item: HistoryItem }) {
               className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             />
           ) : (
-            <span className="flex size-full items-center justify-center font-mono text-xs text-zinc-700">
+            <span className="flex size-full items-center justify-center font-mono text-xs text-zinc-500 dark:text-zinc-700">
               #{item.tmdbId}
             </span>
           )}
@@ -91,10 +91,10 @@ function HistoryCard({ item }: { item: HistoryItem }) {
             </span>
           )}
         </span>
-        <span className="mt-2 block truncate text-sm font-medium text-zinc-200 transition-colors group-hover:text-amber-300">
+        <span className="mt-2 block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-amber-600 dark:text-zinc-200 dark:group-hover:text-amber-300">
           {item.title}
         </span>
-        <span className="mt-0.5 block text-xs text-zinc-600">Continue watching</span>
+        <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-600">Continue watching</span>
       </button>
       <button
         type="button"
@@ -127,7 +127,7 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
         aria-label={`Open ${item.title}`}
         className="block w-full text-left focus-visible:outline-none"
       >
-        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/60 transition-all duration-200 group-hover:border-amber-400/50">
+        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-white/70 transition-all duration-200 group-hover:border-amber-400/50 dark:border-zinc-800/80 dark:bg-zinc-900/60">
           {poster ? (
             <img
               src={poster}
@@ -136,7 +136,7 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
               className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             />
           ) : (
-            <span className="flex size-full items-center justify-center font-mono text-xs text-zinc-700">
+            <span className="flex size-full items-center justify-center font-mono text-xs text-zinc-500 dark:text-zinc-700">
               #{item.tmdbId}
             </span>
           )}
@@ -144,10 +144,10 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
             {item.mediaType}
           </span>
         </span>
-        <span className="mt-2 block truncate text-sm font-medium text-zinc-200 transition-colors group-hover:text-amber-300">
+        <span className="mt-2 block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-amber-600 dark:text-zinc-200 dark:group-hover:text-amber-300">
           {item.title}
         </span>
-        <span className="mt-0.5 block text-xs text-zinc-600">In My List</span>
+        <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-600">In My List</span>
       </button>
       <button
         type="button"
@@ -169,7 +169,7 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
 
 function RowEmptyState({ text }: { text: string }) {
   return (
-    <div className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-zinc-800/80 bg-zinc-900/30 text-sm text-zinc-600">
+    <div className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/30 text-sm text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:text-zinc-600">
       {text}
     </div>
   );
@@ -211,7 +211,7 @@ export function HomeView() {
           <div className="flex gap-3 overflow-hidden sm:gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="w-32 shrink-0 sm:w-36">
-                <Skeleton className="aspect-[2/3] w-full rounded-xl bg-zinc-900" />
+                <Skeleton className="aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
               </div>
             ))}
           </div>
@@ -235,7 +235,7 @@ export function HomeView() {
           <div className="flex gap-3 overflow-hidden sm:gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="w-32 shrink-0 sm:w-36">
-                <Skeleton className="aspect-[2/3] w-full rounded-xl bg-zinc-900" />
+                <Skeleton className="aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
               </div>
             ))}
           </div>
@@ -268,15 +268,15 @@ export function HomeView() {
             ))}
           </div>
         ) : trendingQuery.isError ? (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-10 text-center">
-            <AlertCircle className="size-6 text-red-400" aria-hidden />
-            <p className="text-sm text-zinc-400">{trendingQuery.error.message}</p>
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-zinc-200 bg-zinc-200/30 px-6 py-10 text-center dark:border-zinc-800 dark:bg-zinc-900/30">
+            <AlertCircle className="size-6 text-red-600 dark:text-red-400" aria-hidden />
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">{trendingQuery.error.message}</p>
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => trendingQuery.refetch()}
-              className="h-9 rounded-lg border-zinc-800 bg-transparent text-xs text-zinc-300 hover:bg-zinc-800/60"
+              className="h-9 rounded-lg border-zinc-200 bg-transparent text-xs text-zinc-700 hover:bg-zinc-200/70 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800/60"
             >
               <RefreshCw className="size-3.5" aria-hidden />
               Try again

@@ -23,16 +23,16 @@ export function TrailerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="z-[70] max-w-3xl gap-0 border-zinc-800 bg-zinc-950 p-3 sm:p-4">
+      <DialogContent className="z-[70] max-w-3xl gap-0 border-zinc-200 bg-white p-3 sm:p-4 dark:border-zinc-800 dark:bg-zinc-950">
         <DialogHeader className="px-1 pb-3">
-          <DialogTitle className="text-base text-zinc-100">
+          <DialogTitle className="text-base text-zinc-900 dark:text-zinc-100">
             {title} — Official trailer
           </DialogTitle>
           <DialogDescription className="sr-only">
             Plays the official trailer from YouTube.
           </DialogDescription>
         </DialogHeader>
-        <div className="aspect-video w-full overflow-hidden rounded-xl border border-zinc-800 bg-black">
+        <div className="aspect-video w-full overflow-hidden rounded-xl border border-zinc-200 bg-black dark:border-zinc-800">
           <iframe
             key={trailerKey}
             src={`https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1`}

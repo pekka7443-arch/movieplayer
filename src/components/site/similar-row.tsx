@@ -25,7 +25,7 @@ export function SimilarRow({
 
   return (
     <section aria-labelledby="similar-heading" className="mt-10">
-      <h2 id="similar-heading" className="mb-3 text-lg font-semibold text-zinc-100">
+      <h2 id="similar-heading" className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
         More like this
       </h2>
       {loading ? (
@@ -37,7 +37,7 @@ export function SimilarRow({
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-zinc-800/80 bg-zinc-900/30 text-sm text-zinc-600">
+        <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/30 text-sm text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:text-zinc-600">
           <Film className="mr-2 size-4" aria-hidden />
           No recommendations available.
         </div>

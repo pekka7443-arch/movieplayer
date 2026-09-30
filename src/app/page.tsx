@@ -26,7 +26,7 @@ function App() {
 
   return (
     <AppProviders>
-      <div className="flex min-h-svh flex-col bg-zinc-950 text-zinc-100">
+      <div className="flex min-h-svh flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
         <Header />
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
           {id !== null ? (

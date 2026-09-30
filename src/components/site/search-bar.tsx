@@ -32,20 +32,20 @@ function ResultRow({ item, onSelect }: { item: SearchItem; onSelect: (item: Sear
     <button
       type="button"
       onClick={() => onSelect(item)}
-      className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-zinc-800/70 focus-visible:bg-zinc-800/70 focus-visible:outline-none"
+      className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 focus-visible:outline-none dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70"
     >
-      <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
+      <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950">
         {poster ? (
           <img src={poster} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center text-[10px] text-zinc-700">
+          <span className="flex h-full w-full items-center justify-center text-[10px] text-zinc-500 dark:text-zinc-700">
             TMDB
           </span>
         )}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-zinc-100">{item.title}</span>
+          <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</span>
           {item.releaseDate && (
             <span className="shrink-0 text-xs text-zinc-500">{yearOf(item.releaseDate)}</span>
           )}
@@ -55,13 +55,13 @@ function ResultRow({ item, onSelect }: { item: SearchItem; onSelect: (item: Sear
             className={
               'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ' +
               (item.mediaType === 'tv'
-                ? 'bg-amber-400/15 text-amber-300'
-                : 'bg-zinc-800 text-zinc-400')
+                ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300'
+                : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400')
             }
           >
             {item.mediaType}
           </span>
-          <span className="font-mono text-[11px] text-amber-400/90">ID {item.id}</span>
+          <span className="font-mono text-[11px] text-amber-600/90 dark:text-amber-400/90">ID {item.id}</span>
           {item.voteAverage > 0 && (
             <span className="text-[11px] text-zinc-500">★ {item.voteAverage.toFixed(1)}</span>
           )}
@@ -147,21 +147,21 @@ export function SearchBar() {
           setOpen(false);
           openSettings();
         }}
-        className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-zinc-800/70 focus-visible:bg-zinc-800/70 focus-visible:outline-none"
+        className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 focus-visible:outline-none dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70"
       >
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 text-amber-400">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 text-amber-500 dark:text-amber-400">
           <KeyRound className="size-4" aria-hidden />
         </span>
         <span className="min-w-0">
-          <span className="block text-sm font-medium text-zinc-100">Connect TMDB to search</span>
+          <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">Connect TMDB to search</span>
           <span className="block text-xs text-zinc-500">Add your free API key in Settings</span>
         </span>
       </button>
     );
   } else if (isFetching) {
     body = (
-      <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-400">
-        <Loader2 className="size-4 animate-spin text-amber-400" aria-hidden />
+      <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
+        <Loader2 className="size-4 animate-spin text-amber-500 dark:text-amber-400" aria-hidden />
         Searching TMDB…
       </div>
     );
@@ -173,8 +173,8 @@ export function SearchBar() {
     );
   } else if (results.length === 0) {
     body = (
-      <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-400">
-        <SearchX className="size-4 text-zinc-600" aria-hidden />
+      <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
+        <SearchX className="size-4 text-zinc-500 dark:text-zinc-600" aria-hidden />
         No results for “{trimmed}”
       </div>
     );
@@ -191,7 +191,7 @@ export function SearchBar() {
   return (
     <div ref={wrapRef} className="relative w-full md:w-72 lg:w-80">
       <Search
-        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"
+        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500 dark:text-zinc-600"
         aria-hidden
       />
       <Input
@@ -206,13 +206,13 @@ export function SearchBar() {
         onKeyDown={onInputKeyDown}
         placeholder="Search movies & shows…  /"
         aria-label="Search movies and shows by title"
-        className="h-10 rounded-lg border-zinc-800 bg-zinc-900/70 pl-9 pr-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 [&::-webkit-search-cancel-button]:hidden"
+        className="h-10 rounded-lg border-zinc-200 bg-white/80 pl-9 pr-3 text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 [&::-webkit-search-cancel-button]:hidden dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:placeholder:text-zinc-600"
       />
       {showDropdown && (
         <div
           role="listbox"
           aria-label="Search results"
-          className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/95 p-1 shadow-xl shadow-black/40 backdrop-blur [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700"
+          className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-1 shadow-xl shadow-black/10 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/40 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-700"
         >
           {body}
         </div>

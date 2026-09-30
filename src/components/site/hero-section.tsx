@@ -88,25 +88,25 @@ export function HeroSection({
 
       <div className="relative grid items-center gap-8 py-10 sm:py-14 lg:grid-cols-2 lg:gap-12">
         <div>
-          <motion.h1 {...fadeUp(0)} className="text-3xl font-bold tracking-tight text-zinc-100 sm:text-4xl lg:text-5xl">
+          <motion.h1 {...fadeUp(0)} className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl lg:text-5xl dark:text-zinc-100">
             Play anything with a{' '}
-            <span className="text-amber-400">TMDB ID</span>.
+            <span className="text-amber-600 dark:text-amber-400">TMDB ID</span>.
           </motion.h1>
-          <motion.p {...fadeUp(0.06)} className="mt-3 max-w-md text-sm leading-relaxed text-zinc-400 sm:text-base">
+          <motion.p {...fadeUp(0.06)} className="mt-3 max-w-md text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-400">
             No sign-ups, no browsing walls. Paste an ID, pick a server, press play — or connect a
             free TMDB key to unlock search, trending and metadata in 12 languages.
           </motion.p>
 
           <motion.div
             {...fadeUp(0.12)}
-            className="mt-6 rounded-xl border border-zinc-800/60 bg-zinc-900/60 p-4 sm:p-5"
+            className="mt-6 rounded-xl border border-zinc-200 bg-white/70 p-4 sm:p-5 dark:border-zinc-800/60 dark:bg-zinc-900/60"
           >
             <Tabs
               value={mediaType}
               onValueChange={(v) => setMediaType(v as MediaType)}
               aria-label="Media type"
             >
-              <TabsList className="h-9 rounded-lg border border-zinc-800 bg-zinc-950/60 p-1">
+              <TabsList className="h-9 rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-950/60">
                 <TabsTrigger
                   value="movie"
                   className="h-7 rounded-md px-4 text-xs font-medium data-[state=active]:bg-amber-400 data-[state=active]:text-zinc-950"
@@ -134,7 +134,7 @@ export function HeroSection({
                   onChange={(e) => setIdText(e.target.value.replace(/[^\d]/g, ''))}
                   onKeyDown={(e) => e.key === 'Enter' && play()}
                   placeholder="e.g. 550"
-                  className="h-11 rounded-lg border-zinc-800 bg-zinc-950/60 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20"
+                  className="h-11 rounded-lg border-zinc-200 bg-white/80 font-mono text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-100 dark:placeholder:text-zinc-600"
                 />
               </div>
               {mediaType === 'tv' && (
@@ -149,7 +149,7 @@ export function HeroSection({
                       value={seasonText}
                       onChange={(e) => setSeasonText(e.target.value.replace(/[^\d]/g, ''))}
                       onKeyDown={(e) => e.key === 'Enter' && play()}
-                      className="h-11 rounded-lg border-zinc-800 bg-zinc-950/60 text-center font-mono text-sm text-zinc-100 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20"
+                      className="h-11 rounded-lg border-zinc-200 bg-white/80 text-center font-mono text-sm text-zinc-900 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-100"
                     />
                   </div>
                   <div className="w-20 space-y-1.5">
@@ -162,7 +162,7 @@ export function HeroSection({
                       value={episodeText}
                       onChange={(e) => setEpisodeText(e.target.value.replace(/[^\d]/g, ''))}
                       onKeyDown={(e) => e.key === 'Enter' && play()}
-                      className="h-11 rounded-lg border-zinc-800 bg-zinc-950/60 text-center font-mono text-sm text-zinc-100 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20"
+                      className="h-11 rounded-lg border-zinc-200 bg-white/80 text-center font-mono text-sm text-zinc-900 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-100"
                     />
                   </div>
                 </>
@@ -182,12 +182,12 @@ export function HeroSection({
                 type="button"
                 variant="outline"
                 onClick={surprise}
-                className="h-11 rounded-lg border-zinc-800 bg-transparent px-5 text-sm font-medium text-zinc-300 hover:bg-zinc-800/60 hover:text-zinc-100"
+                className="h-11 rounded-lg border-zinc-200 bg-transparent px-5 text-sm font-medium text-zinc-700 hover:bg-zinc-200/70 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
               >
-                <Dices className="size-4 text-amber-400" aria-hidden />
+                <Dices className="size-4 text-amber-500 dark:text-amber-400" aria-hidden />
                 Surprise me
               </Button>
-              <span className="text-[11px] text-zinc-600">
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-600">
                 Works instantly — no API key needed for playback.
               </span>
             </div>
@@ -199,11 +199,11 @@ export function HeroSection({
           {!hasKey ? (
             <ConnectCard />
           ) : trendingLoading ? (
-            <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-zinc-800/60">
-              <Skeleton className="size-full rounded-none bg-zinc-900" />
+            <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800/60">
+              <Skeleton className="size-full rounded-none bg-zinc-200 dark:bg-zinc-900" />
             </div>
           ) : featured && featuredBackdrop ? (
-            <div className="group relative overflow-hidden rounded-xl border border-zinc-800/60">
+            <div className="group relative overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800/60">
               <img
                 src={featuredBackdrop}
                 alt={`${featured.title} backdrop`}
@@ -212,21 +212,21 @@ export function HeroSection({
               {/* gradient masks */}
               <div
                 aria-hidden
-                className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/35 to-transparent"
+                className="absolute inset-0 bg-gradient-to-t from-zinc-50 via-zinc-50/35 to-transparent dark:from-zinc-950 dark:via-zinc-950/35"
               />
               <div
                 aria-hidden
-                className="absolute inset-0 bg-gradient-to-r from-zinc-950/70 via-transparent to-transparent"
+                className="absolute inset-0 bg-gradient-to-r from-zinc-50/70 via-transparent to-transparent dark:from-zinc-950/70"
               />
               <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 p-4 sm:p-5">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-400">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400">
                     Trending #1 this week
                   </p>
-                  <p className="mt-1 truncate text-lg font-semibold text-zinc-50 sm:text-xl">
+                  <p className="mt-1 truncate text-lg font-semibold text-zinc-900 sm:text-xl dark:text-zinc-50">
                     {featured.title}
                   </p>
-                  <p className="mt-1 flex items-center gap-2 text-xs text-zinc-400">
+                  <p className="mt-1 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
                     {yearOf(featured.releaseDate) && <span>{yearOf(featured.releaseDate)}</span>}
                     {featured.voteAverage > 0 && (
                       <span className="inline-flex items-center gap-1">
@@ -249,7 +249,7 @@ export function HeroSection({
               </div>
             </div>
           ) : (
-            <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 text-sm text-zinc-600">
+            <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/40 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-600">
               Trending is unavailable right now.
             </div>
           )}

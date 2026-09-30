@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 
 /** Custom thin scrollbar styling for vertical overflow lists. */
 export const THIN_SCROLLBAR_Y =
-  'overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700';
+  'overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-700';
 
 /**
  * Horizontal snap-scroller with desktop-only arrow buttons and hidden scrollbar.
@@ -47,7 +47,7 @@ export function MediaRow({ children, label }: { children: ReactNode; label: stri
           aria-label={`Scroll ${label} left`}
           disabled={atStart}
           onClick={() => scrollBy(-1)}
-          className="pointer-events-auto size-9 rounded-full border border-zinc-800 bg-zinc-900/90 text-zinc-300 shadow-lg shadow-black/40 backdrop-blur hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-0"
+          className="pointer-events-auto size-9 rounded-full border border-zinc-200 bg-white/90 text-zinc-700 shadow-lg shadow-black/10 backdrop-blur hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-0 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-300 dark:shadow-black/40 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
         >
           <ChevronLeft className="size-5" aria-hidden />
         </Button>
@@ -60,7 +60,7 @@ export function MediaRow({ children, label }: { children: ReactNode; label: stri
           aria-label={`Scroll ${label} right`}
           disabled={atEnd}
           onClick={() => scrollBy(1)}
-          className="pointer-events-auto size-9 rounded-full border border-zinc-800 bg-zinc-900/90 text-zinc-300 shadow-lg shadow-black/40 backdrop-blur hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-0"
+          className="pointer-events-auto size-9 rounded-full border border-zinc-200 bg-white/90 text-zinc-700 shadow-lg shadow-black/10 backdrop-blur hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-0 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-300 dark:shadow-black/40 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
         >
           <ChevronRight className="size-5" aria-hidden />
         </Button>

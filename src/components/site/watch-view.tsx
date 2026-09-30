@@ -71,7 +71,7 @@ export function WatchView({
         variant="ghost"
         size="sm"
         onClick={() => router.push('/', { scroll: false })}
-        className="mb-5 h-9 gap-1.5 rounded-lg px-2.5 text-sm text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100"
+        className="mb-5 h-9 gap-1.5 rounded-lg px-2.5 text-sm text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
       >
         <ChevronLeft className="size-4" aria-hidden />
         Back to browse

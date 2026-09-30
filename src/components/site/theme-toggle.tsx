@@ -13,7 +13,7 @@ export function ThemeToggle() {
       size="icon"
       aria-label="Toggle light/dark theme"
       title="Toggle theme"
-      className="size-10 shrink-0 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60"
+      className="size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
       onClick={() => {
         // Read the live class so it works before next-themes hydrates.
         const isDark = document.documentElement.classList.contains('dark');

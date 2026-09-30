@@ -100,10 +100,10 @@ function SettingsBody() {
   };
 
   return (
-    <DialogContent className="z-[70] max-w-md gap-5 border-zinc-800 bg-zinc-950 p-6 text-zinc-100">
+    <DialogContent className="z-[70] max-w-md gap-5 border-zinc-200 bg-white p-6 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2 text-lg">
-          <Settings2 className="size-5 text-amber-400" aria-hidden />
+          <Settings2 className="size-5 text-amber-500 dark:text-amber-400" aria-hidden />
           Settings
         </DialogTitle>
         <DialogDescription className="text-sm text-zinc-500">
@@ -115,13 +115,15 @@ function SettingsBody() {
       <section aria-labelledby="settings-tmdb-key" className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="tmdb-key-input" className="flex items-center gap-2 text-sm font-medium">
-            <KeyRound className="size-4 text-amber-400" aria-hidden />
+            <KeyRound className="size-4 text-amber-500 dark:text-amber-400" aria-hidden />
             TMDB API key
           </Label>
           <span
             className={
               'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ' +
-              (hasKey ? 'bg-emerald-400/10 text-emerald-400' : 'bg-amber-400/10 text-amber-400')
+              (hasKey
+                ? 'bg-emerald-400/10 text-emerald-600 dark:text-emerald-400'
+                : 'bg-amber-400/10 text-amber-600 dark:text-amber-400')
             }
           >
             <span
@@ -145,13 +147,13 @@ function SettingsBody() {
               placeholder="Paste your v3 API key"
               autoComplete="off"
               spellCheck={false}
-              className="h-10 rounded-lg border-zinc-800 bg-zinc-900/70 pr-10 font-mono text-sm text-zinc-200 placeholder:text-zinc-600 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20"
+              className="h-10 rounded-lg border-zinc-200 bg-white/80 pr-10 font-mono text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:placeholder:text-zinc-600"
             />
             <button
               type="button"
               aria-label={showKey ? 'Hide API key' : 'Show API key'}
               onClick={() => setShowKey((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-zinc-500 transition-colors hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-zinc-500 transition-colors hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 dark:hover:text-zinc-200"
             >
               {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
@@ -166,13 +168,13 @@ function SettingsBody() {
           </Button>
         </div>
 
-        <p className="text-xs leading-relaxed text-zinc-600">
+        <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-600">
           Free at{' '}
           <a
             href="https://www.themoviedb.org/settings/api"
             target="_blank"
             rel="noreferrer"
-            className="text-amber-400/90 underline-offset-2 hover:underline"
+            className="text-amber-600/90 underline-offset-2 hover:underline dark:text-amber-400/90"
           >
             themoviedb.org
           </a>{' '}
@@ -185,7 +187,7 @@ function SettingsBody() {
             variant="outline"
             size="sm"
             onClick={removeKey}
-            className="h-8 rounded-lg border-zinc-800 bg-transparent text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+            className="h-8 rounded-lg border-zinc-200 bg-transparent text-xs text-red-600 hover:bg-red-500/10 hover:text-red-500 dark:border-zinc-800 dark:text-red-400 dark:hover:text-red-300"
           >
             <Trash2 className="size-3.5" aria-hidden />
             Remove key
@@ -193,7 +195,7 @@ function SettingsBody() {
         )}
       </section>
 
-      <Separator className="bg-zinc-800/80" />
+      <Separator className="bg-zinc-200 dark:bg-zinc-800/80" />
 
       {/* Language */}
       <section aria-labelledby="settings-language" className="space-y-2.5">
@@ -203,23 +205,23 @@ function SettingsBody() {
         <Select value={language} onValueChange={setLanguage}>
           <SelectTrigger
             id="language-select"
-            className="h-10 w-full rounded-lg border-zinc-800 bg-zinc-900/70 text-sm text-zinc-200 focus-visible:ring-amber-400/20"
+            className="h-10 w-full rounded-lg border-zinc-200 bg-white/80 text-sm text-zinc-800 focus-visible:ring-amber-400/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
           >
             <SelectValue placeholder="Language" />
           </SelectTrigger>
-          <SelectContent className="z-[70] max-h-72 border-zinc-800 bg-zinc-900/95 backdrop-blur">
+          <SelectContent className="z-[70] max-h-72 border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
             {LANGUAGES.map((lang) => (
               <SelectItem
                 key={lang.code}
                 value={lang.code}
-                className="focus:bg-zinc-800/80 focus:text-zinc-100"
+                className="focus:bg-zinc-200/80 focus:text-zinc-900 dark:focus:bg-zinc-800/80 dark:focus:text-zinc-100"
               >
                 {lang.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-zinc-600">
+        <p className="text-xs text-zinc-500 dark:text-zinc-600">
           Applies to titles, overviews and other TMDB metadata.
         </p>
       </section>
@@ -238,16 +240,16 @@ function SettingsBody() {
             className="data-[state=checked]:bg-amber-400"
           />
         </div>
-        <p className="text-xs text-zinc-600">
+        <p className="text-xs text-zinc-500 dark:text-zinc-600">
           Tracks what you watch so you can continue where you left off.
         </p>
       </section>
 
-      <Separator className="bg-zinc-800/80" />
+      <Separator className="bg-zinc-200 dark:bg-zinc-800/80" />
 
       {/* Danger zone */}
       <section aria-labelledby="settings-danger" className="space-y-2.5">
-        <p id="settings-danger" className="text-sm font-medium text-red-400">
+        <p id="settings-danger" className="text-sm font-medium text-red-600 dark:text-red-400">
           Danger zone
         </p>
         <div className="flex flex-wrap gap-2">
@@ -257,21 +259,21 @@ function SettingsBody() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-9 rounded-lg border-zinc-800 bg-transparent text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                className="h-9 rounded-lg border-zinc-200 bg-transparent text-xs text-red-600 hover:bg-red-500/10 hover:text-red-500 dark:border-zinc-800 dark:text-red-400 dark:hover:text-red-300"
               >
                 <Trash2 className="size-3.5" aria-hidden />
                 Clear history
               </Button>
             </AlertDialogTrigger>
-            <AlertDialogContent className="z-[70] max-w-sm border-zinc-800 bg-zinc-950 text-zinc-100">
+            <AlertDialogContent className="z-[70] max-w-sm border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
               <AlertDialogHeader>
                 <AlertDialogTitle>Clear watch history?</AlertDialogTitle>
-                <AlertDialogDescription className="text-zinc-500">
+                <AlertDialogDescription className="text-zinc-500 dark:text-zinc-500">
                   This removes every entry from “Continue watching”. This cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel className="rounded-lg border-zinc-800 bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
+                <AlertDialogCancel className="rounded-lg border-zinc-200 bg-transparent text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                   Cancel
                 </AlertDialogCancel>
                 <AlertDialogAction
@@ -290,21 +292,21 @@ function SettingsBody() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-9 rounded-lg border-zinc-800 bg-transparent text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                className="h-9 rounded-lg border-zinc-200 bg-transparent text-xs text-red-600 hover:bg-red-500/10 hover:text-red-500 dark:border-zinc-800 dark:text-red-400 dark:hover:text-red-300"
               >
                 <Trash2 className="size-3.5" aria-hidden />
                 Clear My List
               </Button>
             </AlertDialogTrigger>
-            <AlertDialogContent className="z-[70] max-w-sm border-zinc-800 bg-zinc-950 text-zinc-100">
+            <AlertDialogContent className="z-[70] max-w-sm border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
               <AlertDialogHeader>
                 <AlertDialogTitle>Clear your watchlist?</AlertDialogTitle>
-                <AlertDialogDescription className="text-zinc-500">
+                <AlertDialogDescription className="text-zinc-500 dark:text-zinc-500">
                   This removes every saved title from “My List”. This cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel className="rounded-lg border-zinc-800 bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
+                <AlertDialogCancel className="rounded-lg border-zinc-200 bg-transparent text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                   Cancel
                 </AlertDialogCancel>
                 <AlertDialogAction
