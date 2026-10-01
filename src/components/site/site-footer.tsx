@@ -8,11 +8,11 @@ export function SiteFooter() {
       <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-3">
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-amber-400 text-zinc-950">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-brand text-brand-foreground">
               <Clapperboard className="size-4.5" aria-hidden />
             </span>
             <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-              Cine<span className="text-amber-600 dark:text-amber-400">Deck</span>
+              Cine<span className="text-brand">Deck</span>
             </span>
           </div>
           <p className="mt-3 max-w-xs text-xs leading-relaxed text-zinc-500">

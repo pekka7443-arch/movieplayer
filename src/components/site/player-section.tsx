@@ -12,6 +12,7 @@ import {
   Loader2,
   Radar,
   RotateCw,
+  SkipForward,
   Star,
   Unplug,
 } from 'lucide-react';
@@ -26,9 +27,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Fragment } from 'react';
 import { useSeason } from '@/hooks/use-media';
-import { useServerScan } from '@/hooks/use-meta';
-import { PROVIDERS, getProvider, getEmbedUrl } from '@/lib/providers';
+import { useServerScan, useTvmazeShow } from '@/hooks/use-meta';
+import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl } from '@/lib/providers';
 import { useCinedeckStore } from '@/lib/store';
 import { formatRuntime, yearOf, type MediaDetails, type MediaType, type TvDetails } from '@/lib/tmdb';
 
@@ -79,6 +81,20 @@ export function PlayerSection({
 
   const seasonQuery = useSeason(tmdbId ?? 0, season, language, hasKey && isTv && !imdbId);
   const episodes = useMemo(() => seasonQuery.data?.episodes ?? [], [seasonQuery.data]);
+
+  // TVmaze — the second keyless source. In IMDB watch mode it powers real
+  // season/episode menus (episode names!) without any TMDB key.
+  const tvmazeQuery = useTvmazeShow(isTv && imdbId ? imdbId : null, isTv && imdbId !== undefined);
+  const tvmazeEpisodes = useMemo(() => tvmazeQuery.data?.episodes ?? [], [tvmazeQuery.data]);
+  const tvmazeSeasons = useMemo(() => {
+    const set = new Set<number>();
+    for (const e of tvmazeEpisodes) if (e.season >= 1) set.add(e.season);
+    return [...set].sort((a, b) => a - b);
+  }, [tvmazeEpisodes]);
+  const tvmazeSeasonEpisodes = useMemo(
+    () => tvmazeEpisodes.filter((e) => e.season === season),
+    [tvmazeEpisodes, season],
+  );
 
   const [nonce, setNonce] = useState(0);
   const [loaded, setLoaded] = useState<{ url: string; nonce: number } | null>(null);
@@ -136,8 +152,40 @@ export function PlayerSection({
 
   const provider = getProvider(server);
   const embedUrl = getEmbedUrl(server, mediaType, watchId, isTv ? season : undefined, isTv ? episode : undefined);
+  // The player iframe is loaded via /api/player-proxy — a wrapper page that
+  // contains the real provider iframe WITHOUT sandbox. The OUTER iframe
+  // (this one) is sandboxed, which blocks pop-ups and top-level redirects
+  // (random ad pages) while letting 2Embed and friends play normally —
+  // providers detect iframe[sandbox] on window.frameElement, and since the
+  // proxy's inner iframe is cross-origin with the proxy page itself,
+  // window.frameElement is null in the provider's window, so the check
+  // passes. The inner iframe inherits the outer sandbox's navigation /
+  // pop-up restrictions.
+  const proxyUrl = `/api/player-proxy?u=${encodeURIComponent(embedUrl)}`;
   // The overlay shows until the iframe for the *current* URL + refresh nonce reports onLoad.
   const iframeReady = loaded?.url === embedUrl && loaded?.nonce === nonce;
+
+  // Listen for the inner provider iframe's onload postMessage — the outer
+  // iframe's onLoad fires as soon as the proxy HTML loads (which is fast
+  // since it's just a tiny wrapper), so it can't be trusted as the real
+  // "player is playing" signal. The postMessage arrives when the inner
+  // provider iframe actually finishes loading.
+  useEffect(() => {
+    if (watchId === 0) return;
+    const handler = (event: MessageEvent) => {
+      // Only accept messages from CineDeck's own origin — the proxy page
+      // is served from /api/player-proxy (same origin) and inherits our
+      // origin thanks to allow-same-origin on the outer sandbox.
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: string; url?: string } | null;
+      if (data?.type !== 'cinedeck:player-loaded') return;
+      if (data.url && decodeURIComponent(data.url) !== embedUrl) return;
+      setLoaded({ url: embedUrl, nonce });
+      setFailover(null);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [embedUrl, nonce, watchId]);
 
   // ---------------------------------------------------------------------------
   // Auto-failover watchdog — if the iframe for the active URL never reports
@@ -193,14 +241,20 @@ export function PlayerSection({
   const title = details?.title ?? (hasKey && detailsLoading ? '' : imdbId ?? `TMDB #${tmdbId}`);
   const year = details ? yearOf(details.releaseDate) : '';
 
-  const maxEpisode = episodes.length > 0 ? episodes[episodes.length - 1].episodeNumber : null;
+  // Max episode for the Next button — TMDB data when present, TVmaze otherwise.
+  const maxEpisode =
+    episodes.length > 0
+      ? episodes[episodes.length - 1].episodeNumber
+      : tvmazeSeasonEpisodes.length > 0
+        ? tvmazeSeasonEpisodes[tvmazeSeasonEpisodes.length - 1].number
+        : null;
 
   return (
     <section aria-label="Player" className="relative">
       {/* Ambient amber glow behind the player */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-10 left-1/2 -z-10 h-48 w-[42rem] max-w-full -translate-x-1/2 rounded-full bg-amber-400/10 blur-3xl"
+        className="pointer-events-none absolute -top-10 left-1/2 -z-10 h-48 w-[42rem] max-w-full -translate-x-1/2 rounded-full bg-brand-soft blur-3xl"
       />
 
       {/* Heading + badges */}
@@ -218,8 +272,8 @@ export function PlayerSection({
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {details && details.voteAverage > 0 && (
-                <Badge className="gap-1 border-amber-400/30 bg-amber-400/10 text-amber-600 hover:bg-amber-400/10 dark:text-amber-300">
-                  <Star className="size-3 fill-amber-400 text-amber-400" aria-hidden />
+                <Badge className="gap-1 border-brand/30 bg-brand-soft text-brand hover:bg-brand-soft dark:text-brand">
+                  <Star className="size-3 fill-brand text-brand" aria-hidden />
                   {details.voteAverage.toFixed(1)}
                 </Badge>
               )}
@@ -251,57 +305,81 @@ export function PlayerSection({
         )}
       </div>
 
-      {/* Server tabs + tools */}
+      {/* Server tabs + tools — 13 providers grouped into 2Embed / VidSrc / Other clusters */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div
           role="tablist"
           aria-label="Streaming servers"
-          className="flex flex-wrap items-center gap-1.5 rounded-xl border border-zinc-200 bg-white/70 p-1.5 dark:border-zinc-800/60 dark:bg-zinc-900/60"
+          className="flex flex-wrap items-center gap-0.5 gap-y-1 rounded-xl border border-zinc-200 bg-white/70 p-1.5 dark:border-zinc-800/60 dark:bg-zinc-900/60"
         >
-          {PROVIDERS.map((p) => {
-            const active = p.id === server;
-            const health = healthMap.get(p.id);
+          {PROVIDER_GROUPS.map((group) => {
+            const providers = PROVIDERS.filter((p) => p.group === group.id);
+            if (providers.length === 0) return null;
             return (
-              <button
-                key={p.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => {
-                  manualPickRef.current = true;
-                  setServer(p.id);
-                }}
-                className={
-                  'flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 ' +
-                  (active
-                    ? 'bg-amber-400 text-zinc-950'
-                    : 'text-zinc-600 hover:bg-zinc-200/80 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100')
-                }
-              >
+              <Fragment key={group.id}>
                 <span
                   aria-hidden
-                  title={
-                    health === undefined
-                      ? 'Source not scanned yet'
-                      : health === true
-                        ? 'Source responded'
-                        : health === 'unknown'
-                          ? 'Source blocked the scan (may still work)'
-                          : 'Source did not respond'
-                  }
-                  className={
-                    'size-1.5 shrink-0 rounded-full ' +
-                    (health === undefined
-                      ? 'bg-zinc-400/60 dark:bg-zinc-600'
-                      : health === true
-                        ? 'bg-emerald-500'
-                        : health === 'unknown'
-                          ? 'bg-amber-400'
-                          : 'bg-red-500')
-                  }
-                />
-                {p.name}
-              </button>
+                  className="px-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-600"
+                >
+                  {group.label}
+                </span>
+                {providers.map((p) => {
+                  const active = p.id === server;
+                  const health = healthMap.get(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      aria-label={`${p.name} — ${
+                        health === undefined
+                          ? 'not scanned yet'
+                          : health === true
+                            ? 'responded'
+                            : health === 'unknown'
+                              ? 'blocked scan, may still work'
+                              : 'did not respond'
+                      }`}
+                      title={p.name}
+                      onClick={() => {
+                        manualPickRef.current = true;
+                        setServer(p.id);
+                      }}
+                      className={
+                        'flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ' +
+                        (active
+                          ? 'bg-brand text-brand-foreground'
+                          : 'text-zinc-600 hover:bg-zinc-200/80 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100')
+                      }
+                    >
+                      <span
+                        aria-hidden
+                        title={
+                          health === undefined
+                            ? 'Source not scanned yet'
+                            : health === true
+                              ? 'Source responded'
+                              : health === 'unknown'
+                                ? 'Source blocked the scan (may still work)'
+                                : 'Source did not respond'
+                        }
+                        className={
+                          'size-1.5 shrink-0 rounded-full ' +
+                          (health === undefined
+                            ? 'bg-zinc-400/60 dark:bg-zinc-600'
+                            : health === true
+                              ? 'bg-emerald-500'
+                              : health === 'unknown'
+                                ? 'bg-brand'
+                                : 'bg-red-500')
+                        }
+                      />
+                      {p.short}
+                    </button>
+                  );
+                })}
+              </Fragment>
             );
           })}
         </div>
@@ -314,15 +392,15 @@ export function PlayerSection({
             className="flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white/70 px-3 text-xs text-zinc-600 dark:border-zinc-800/60 dark:bg-zinc-900/60 dark:text-zinc-400"
           >
             <Radar
-              className={'size-3.5 text-amber-500 dark:text-amber-400' + (scanQuery.isFetching && !scanQuery.data ? ' animate-pulse' : '')}
+              className={'size-3.5 text-brand' + (scanQuery.isFetching && !scanQuery.data ? ' animate-pulse' : '')}
               aria-hidden
             />
             {scanQuery.isFetching && !scanQuery.data
-              ? 'Scanning sources…'
+              ? 'Scanning 13 sources…'
               : scanQuery.data
                 ? onlineCount > 0
-                  ? `${onlineCount}/${scanQuery.data.length} online — auto-picked ${provider.name}`
-                  : 'No source responded yet'
+                  ? `${onlineCount}/${scanQuery.data.length} online — auto ${provider.name}`
+                  : 'No mirror responded yet'
                 : 'Source scan'}
           </span>
           <Button
@@ -361,6 +439,51 @@ export function PlayerSection({
             <RotateCw className="size-3.5" aria-hidden />
             <span className="hidden sm:inline">Reload</span>
           </Button>
+          {/* Skip — switch to the next online source. Use this when the
+              current player shows "Playback failed" or any internal
+              provider error: CineDeck can't detect those states inside a
+              cross-origin iframe, so the user has to ask for a switch. */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Skip to next online source"
+            title="Skip to next online source"
+            onClick={() => {
+              // Prefer online sources (scan-complete case). Fall back to
+              // cycling through PROVIDERS in order if scan isn't done yet
+              // — better to let the user try ANY mirror than to show a
+              // dead-end "no source" toast while the scan is still running.
+              const onlineRows = (scanQuery.data ?? []).filter((r) => r.ok);
+              const candidateIds =
+                onlineRows.length > 0
+                  ? onlineRows.map((r) => r.providerId)
+                  : PROVIDERS.map((p) => p.id);
+              const currentIdx = candidateIds.indexOf(server);
+              const nextId =
+                candidateIds[(currentIdx + 1) % candidateIds.length] ??
+                candidateIds[0];
+              if (!nextId || nextId === server) {
+                toast(`${provider.name} is the only option`, {
+                  description: "Hit Rescan to re-probe all sources.",
+                });
+                return;
+              }
+              // Don't set manualPickRef — keep auto-failover enabled so
+              // if this new source ALSO fails to load, the watchdog still
+              // cycles to the next candidate automatically.
+              setServerTransient(nextId);
+              setLoaded(null);
+              setFailover(null);
+              toast(`Switched to ${getProvider(nextId).name}`, {
+                description: "If it still shows an error, hit Skip again.",
+              });
+            }}
+            className="h-9 gap-1.5 rounded-lg border border-brand/40 bg-brand-soft px-3 text-xs font-medium text-brand hover:bg-brand-soft-strong hover:text-brand dark:text-brand dark:hover:bg-brand-soft-strong dark:hover:text-brand"
+          >
+            <SkipForward className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">Skip</span>
+          </Button>
         </div>
       </div>
 
@@ -373,7 +496,7 @@ export function PlayerSection({
               onValueChange={(v) => navigateTo(Number(v), 1)}
               aria-label="Select season"
             >
-              <SelectTrigger className="h-10 w-36 rounded-lg border-zinc-200 bg-white/80 text-sm text-zinc-800 focus-visible:ring-amber-400/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200">
+              <SelectTrigger className="h-10 w-36 rounded-lg border-zinc-200 bg-white/80 text-sm text-zinc-800 focus-visible:ring-brand/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200">
                 <SelectValue placeholder="Season" />
               </SelectTrigger>
               <SelectContent className="z-[60] max-h-72 border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
@@ -390,6 +513,27 @@ export function PlayerSection({
                   ))}
               </SelectContent>
             </Select>
+          ) : !hasKey && tvmazeSeasons.length > 0 ? (
+            <Select
+              value={String(season)}
+              onValueChange={(v) => navigateTo(Number(v), 1)}
+              aria-label="Select season"
+            >
+              <SelectTrigger className="h-10 w-36 rounded-lg border-zinc-200 bg-white/80 text-sm text-zinc-800 focus-visible:ring-brand/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200">
+                <SelectValue placeholder="Season" />
+              </SelectTrigger>
+              <SelectContent className="z-[60] max-h-72 border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
+                {tvmazeSeasons.map((s) => (
+                  <SelectItem
+                    key={s}
+                    value={String(s)}
+                    className="focus:bg-zinc-200/80 focus:text-zinc-900 dark:focus:bg-zinc-800/80 dark:focus:text-zinc-100"
+                  >
+                    Season {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <label className="flex items-center gap-2 text-xs text-zinc-500">
               Season
@@ -400,7 +544,7 @@ export function PlayerSection({
                   const v = Number(e.target.value.replace(/[^\d]/g, ''));
                   if (v > 0) navigateTo(v, episode);
                 }}
-                className="h-10 w-16 rounded-lg border-zinc-200 bg-white/80 text-center font-mono text-sm text-zinc-800 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
+                className="h-10 w-16 rounded-lg border-zinc-200 bg-white/80 text-center font-mono text-sm text-zinc-800 focus-visible:border-brand/60 focus-visible:ring-brand/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
                 aria-label="Season number"
               />
             </label>
@@ -412,7 +556,7 @@ export function PlayerSection({
               onValueChange={(v) => navigateTo(season, Number(v))}
               aria-label="Select episode"
             >
-              <SelectTrigger className="h-10 w-56 rounded-lg border-zinc-200 bg-white/80 text-sm text-zinc-800 focus-visible:ring-amber-400/20 sm:w-72 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200">
+              <SelectTrigger className="h-10 w-56 rounded-lg border-zinc-200 bg-white/80 text-sm text-zinc-800 focus-visible:ring-brand/20 sm:w-72 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200">
                 <SelectValue placeholder="Episode" />
               </SelectTrigger>
               <SelectContent className="z-[60] max-h-72 border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
@@ -429,6 +573,29 @@ export function PlayerSection({
                 ))}
               </SelectContent>
             </Select>
+          ) : !hasKey && tvmazeSeasonEpisodes.length > 0 ? (
+            <Select
+              value={String(episode)}
+              onValueChange={(v) => navigateTo(season, Number(v))}
+              aria-label="Select episode"
+            >
+              <SelectTrigger className="h-10 w-56 rounded-lg border-zinc-200 bg-white/80 text-sm text-zinc-800 focus-visible:ring-brand/20 sm:w-72 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200">
+                <SelectValue placeholder="Episode" />
+              </SelectTrigger>
+              <SelectContent className="z-[60] max-h-72 border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
+                {tvmazeSeasonEpisodes.map((ep) => (
+                  <SelectItem
+                    key={ep.number}
+                    value={String(ep.number)}
+                    className="focus:bg-zinc-200/80 focus:text-zinc-900 dark:focus:bg-zinc-800/80 dark:focus:text-zinc-100"
+                  >
+                    <span className="line-clamp-1">
+                      E{ep.number} · {ep.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <label className="flex items-center gap-2 text-xs text-zinc-500">
               Episode
@@ -439,13 +606,13 @@ export function PlayerSection({
                   const v = Number(e.target.value.replace(/[^\d]/g, ''));
                   if (v > 0) navigateTo(season, v);
                 }}
-                className="h-10 w-16 rounded-lg border-zinc-200 bg-white/80 text-center font-mono text-sm text-zinc-800 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
+                className="h-10 w-16 rounded-lg border-zinc-200 bg-white/80 text-center font-mono text-sm text-zinc-800 focus-visible:border-brand/60 focus-visible:ring-brand/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
                 aria-label="Episode number"
               />
             </label>
           )}
 
-          {hasKey && episodes.length === 0 && seasonQuery.isFetching && (
+          {(hasKey ? episodes.length === 0 && seasonQuery.isFetching : tvmazeQuery.isPending) && (
             <Loader2 className="size-4 animate-spin text-zinc-500 dark:text-zinc-600" aria-label="Loading episodes" />
           )}
 
@@ -481,15 +648,26 @@ export function PlayerSection({
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-zinc-200 bg-black dark:border-zinc-800">
         <iframe
           key={`${embedUrl}#${nonce}`}
-          src={embedUrl}
+          src={proxyUrl}
           title={`${title || `TMDB #${tmdbId}`} — ${provider.name} player`}
           allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          // Sandbox keeps the provider functional (scripts, storage, forms) while
-          // blocking pop-up ads and top-level redirects to random ad pages.
-          sandbox="allow-scripts allow-same-origin allow-forms"
+          // NO sandbox attribute on the outer iframe. The double-iframe
+          // proxy trick (with outer sandbox) was the right idea but
+          // 2Embed's isReallySandboxed() check still detects the inherited
+          // sandbox restrictions even when window.frameElement is null —
+          // so the user still saw "Sandbox not allowed". The pragmatic fix
+          // is to ship without sandbox: browsers' built-in pop-up blockers
+          // handle most ad hijacks; the proxy page still isolates the
+          // provider from CineDeck's main window via cross-origin.
+          referrerPolicy="no-referrer"
           scrolling="no"
           onLoad={() => {
+            // Outer onLoad fires when the proxy HTML loads (fast). The
+            // real "player actually playing" signal comes from the
+            // postMessage listener above; we still set loaded here as
+            // a fallback so the watchdog doesn't fire prematurely when
+            // the proxy HTML is up but the inner iframe is still loading.
             setLoaded({ url: embedUrl, nonce });
             setFailover(null);
           }}
@@ -506,16 +684,16 @@ export function PlayerSection({
                 <span className="flex size-14 items-center justify-center rounded-full bg-red-400/10">
                   <Unplug className="size-6 text-red-500 dark:text-red-400" aria-hidden />
                 </span>
-                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">No source responded</p>
+                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">No mirror responded</p>
                 <p className="max-w-sm text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
-                  All {failover.total} stream sources timed out for this title. Hit Reload to retry,
-                  or pick a server above — some sources block datacenter scans but work in browsers.
+                  All {failover.total} mirrors timed out for this title. Hit Reload to retry,
+                  or pick a server above — some sources block datacenter scans but still play in browsers.
                 </p>
               </>
             ) : (
               <>
-                <span className="flex size-14 items-center justify-center rounded-full bg-amber-400/10">
-                  <Loader2 className="size-6 animate-spin text-amber-500 dark:text-amber-400" aria-hidden />
+                <span className="flex size-14 items-center justify-center rounded-full bg-brand-soft">
+                  <Loader2 className="size-6 animate-spin text-brand" aria-hidden />
                 </span>
                 <p className="text-sm text-zinc-700 dark:text-zinc-300">
                   {failover?.forUrl === embedUrl && failover.toId
@@ -540,8 +718,12 @@ export function PlayerSection({
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-600">
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
-          CineDeck scans every source, plays the healthiest one and auto-switches if a source
-          stalls. Subtitles, audio &amp; quality live in the player's own ⚙ / CC menu.
+          CineDeck scans all 13 mirrors (7× 2Embed + 4× VidSrc + 2 others), plays the healthiest one
+          and auto-switches if a source stalls. If the player shows{' '}
+          <span className="font-mono text-zinc-600 dark:text-zinc-400">Playback failed</span> or
+          a blank screen, hit the <strong className="font-semibold text-brand">Skip</strong>{' '}
+          button above to try the next online mirror. Subtitles, audio &amp; quality live in the
+          player's own ⚙ / CC menu. If a stray ad tab opens, just close it — the movie keeps playing here.
         </span>
       </p>
     </section>

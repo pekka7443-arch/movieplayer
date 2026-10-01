@@ -13,6 +13,8 @@ import {
   clearWatchlist,
   fetchDetails,
   fetchHistory,
+  fetchPopular,
+  fetchPopularMeta,
   fetchSeason,
   fetchTrending,
   fetchWatchlist,
@@ -27,17 +29,54 @@ import {
   type SeasonInfo,
   type WatchlistItem,
 } from '@/lib/tmdb';
+import type { MetaSearchItem } from '@/lib/meta';
+import { useHasTmdbKey } from '@/lib/settings';
 
 // ---------------------------------------------------------------------------
 // TMDB (library mode)
 // ---------------------------------------------------------------------------
 
 export function useTrending(language: string, enabled: boolean) {
-  return useQuery<SearchItem[], ApiError>({
-    queryKey: ['tmdb', 'trending', language],
-    queryFn: () => fetchTrending(language),
+  const hasKey = useHasTmdbKey();
+  return useQuery<SearchItem[] | MetaSearchItem[], ApiError>({
+    // When a TMDB key is present, query TMDB trending; otherwise fall back to
+    // Cinemeta's popular-mixed catalog so the home view shows real content
+    // even when the user hasn't added a key. The query key includes `hasKey`
+    // so refetch triggers when the key state changes (Settings → save key).
+    queryKey: ['tmdb', 'trending', language, hasKey ? 'key' : 'keyless'],
+    queryFn: () => (hasKey ? fetchTrending(language) : fetchPopularMeta('all')),
     enabled,
     staleTime: 5 * 60 * 1000,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.code === 'tmdb_key') return false;
+      return failureCount < 2;
+    },
+  });
+}
+
+/** All-time popular movies (separate from this-week trending). */
+export function usePopularMovies(language: string, enabled: boolean) {
+  const hasKey = useHasTmdbKey();
+  return useQuery<SearchItem[] | MetaSearchItem[], ApiError>({
+    queryKey: ['popular', 'movie', language, hasKey ? 'key' : 'keyless'],
+    queryFn: () => (hasKey ? fetchPopular('movie', language) : fetchPopularMeta('movie')),
+    enabled,
+    staleTime: 10 * 60 * 1000,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.code === 'tmdb_key') return false;
+      return failureCount < 2;
+    },
+  });
+}
+
+/** All-time popular TV shows (separate from this-week trending). */
+export function usePopularTV(language: string, enabled: boolean) {
+  const hasKey = useHasTmdbKey();
+  return useQuery<SearchItem[] | MetaSearchItem[], ApiError>({
+    queryKey: ['popular', 'tv', language, hasKey ? 'key' : 'keyless'],
+    queryFn: () => (hasKey ? fetchPopular('tv', language) : fetchPopularMeta('tv')),
+    enabled,
+    staleTime: 10 * 60 * 1000,
     retry: (failureCount, error) => {
       if (error instanceof ApiError && error.code === 'tmdb_key') return false;
       return failureCount < 2;

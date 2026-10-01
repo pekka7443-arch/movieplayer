@@ -66,6 +66,173 @@ function normalizeType(cinemetaType: string): 'movie' | 'tv' {
   return cinemetaType === 'series' ? 'tv' : 'movie';
 }
 
+// ---------------------------------------------------------------------------
+// Popular — /catalog/{type}/top.json
+// Keyless alternative to TMDB's /movie/popular + /tv/popular + /trending/all/week.
+// Returns up to N top-rated / most-popular titles (Cinemeta blends IMDB + TMDB
+// + Stremio + Trakt popularity signals). Each meta carries `moviedb_id` (TMDB ID)
+// so the existing watch view (?id=…&type=…) plays it back without any API key.
+// ---------------------------------------------------------------------------
+
+interface CinemetaPopularMeta {
+  id: string;
+  imdb_id?: string;
+  moviedb_id?: number;
+  tvdb_id?: number;
+  name: string;
+  type: string;
+  poster?: string | null;
+  background?: string | null;
+  description?: string;
+  releaseInfo?: string;
+  released?: string;
+  year?: string;
+  imdbRating?: string;
+  genre?: string[] | string;
+  genres?: string[];
+  runtime?: string;
+  cast?: string[];
+  director?: string | string[];
+}
+
+interface CinemetaPopularResponse {
+  metas?: CinemetaPopularMeta[];
+}
+
+/**
+ * Fetch the Cinemeta "top" catalog (popular movies or TV series).
+ * Caches 30 minutes — these lists change slowly.
+ *
+ * @param mediaType 'movie' or 'tv' (Cinemeta's 'series' is normalized)
+ * @param limit max items to return (default 20)
+ */
+export async function cinemetaPopular(
+  mediaType: 'movie' | 'tv',
+  limit = 20,
+): Promise<MetaSearchItem[]> {
+  const key = `popular:${mediaType}`;
+  const cached = cacheGet<MetaSearchItem[]>(key);
+  if (cached) return cached;
+
+  const cinemetaType = mediaType === 'tv' ? 'series' : 'movie';
+  const data = await cinemetaFetch<CinemetaPopularResponse>(
+    `/catalog/${cinemetaType}/top.json`,
+  );
+
+  const items = (data.metas ?? [])
+    .filter((m) => typeof m.id === 'string' && /^tt\d+$/.test(m.id))
+    .slice(0, limit)
+    .map((m) => {
+      // Genres — Cinemeta returns either `genres` (array) or `genre` (array
+      // or comma string). Normalize to first label only — we only show one
+      // in the card's bottom row.
+      const genreArray = Array.isArray(m.genres)
+        ? m.genres
+        : Array.isArray(m.genre)
+          ? m.genre
+          : typeof m.genre === 'string'
+            ? [m.genre]
+            : [];
+      return {
+        imdbId: m.id,
+        title: m.name,
+        year: (m.releaseInfo ?? m.year ?? '').match(/\d{4}/)?.[0] ?? '',
+        poster: m.poster ?? null,
+        backdrop: m.background ?? null,
+        mediaType: normalizeType(m.type),
+        voteAverage: Number.parseFloat(m.imdbRating ?? '') || 0,
+        // Cinemeta carries `moviedb_id` (TMDB) for most popular catalog
+        // items — include it so cards can build the watch URL in TMDB
+        // mode (?id=…&type=…) rather than the IMDB-mode fallback.
+        tmdbId: typeof m.moviedb_id === 'number' ? m.moviedb_id : undefined,
+        genre: genreArray[0] ?? undefined,
+      };
+    });
+
+  cacheSet(key, items, 30 * 60 * 1000);
+  return items;
+}
+
+/**
+ * Fetch popular movies AND popular TV series, interleaved (movies first) so
+ * the "Trending Now" row shows a mixed catalog the same way TMDB's
+ * /trending/all/week would. Used as the keyless fallback for useTrending.
+ */
+export async function cinemetaPopularMixed(limit = 20): Promise<MetaSearchItem[]> {
+  const [movies, series] = await Promise.allSettled([
+    cinemetaPopular('movie', limit),
+    cinemetaPopular('tv', limit),
+  ]);
+  const m = movies.status === 'fulfilled' ? movies.value : [];
+  const s = series.status === 'fulfilled' ? series.value : [];
+  // Interleave movies and series (movies first, alternating) — same shape as
+  // cinemetaSearchMulti, gives the home page a mixed catalog feed.
+  const out: MetaSearchItem[] = [];
+  const max = Math.max(m.length, s.length);
+  for (let i = 0; i < max; i++) {
+    if (m[i]) out.push(m[i]);
+    if (s[i]) out.push(s[i]);
+  }
+  return out.slice(0, limit);
+}
+
+/**
+ * Keyless "More like this": the Cinemeta top catalog filtered by genre,
+ * minus the title we're currently watching. Falls back to the unfiltered top
+ * catalog when the genre is unknown, empty or yields too few results.
+ * Caches 30 minutes per (type, genre).
+ */
+export async function cinemetaSimilar(
+  mediaType: 'movie' | 'tv',
+  excludeImdbId: string,
+  genre: string | null,
+  limit = 16,
+): Promise<MetaSearchItem[]> {
+  const fetchGenre = async (g: string | null): Promise<MetaSearchItem[]> => {
+    const key = `similar:${mediaType}:${g ?? '_all'}`;
+    const cached = cacheGet<MetaSearchItem[]>(key);
+    if (cached) return cached;
+
+    const cinemetaType = mediaType === 'tv' ? 'series' : 'movie';
+    const path = g
+      ? `/catalog/${cinemetaType}/top/genre=${encodeURIComponent(g)}.json`
+      : `/catalog/${cinemetaType}/top.json`;
+    const data = await cinemetaFetch<CinemetaPopularResponse>(path);
+
+    const items = (data.metas ?? [])
+      .filter((m) => typeof m.id === 'string' && /^tt\d+$/.test(m.id))
+      .slice(0, limit)
+      .map((m) => ({
+        imdbId: m.id,
+        title: m.name,
+        year: (m.releaseInfo ?? '').match(/\d{4}/)?.[0] ?? '',
+        poster: m.poster ?? null,
+        backdrop: m.background ?? null,
+        mediaType: normalizeType(m.type),
+        voteAverage: Number.parseFloat(m.imdbRating ?? '') || 0,
+        tmdbId: typeof m.moviedb_id === 'number' ? m.moviedb_id : undefined,
+      }));
+    cacheSet(key, items, 30 * 60 * 1000);
+    return items;
+  };
+
+  const run = async () => {
+    if (genre) {
+      try {
+        const byGenre = await fetchGenre(genre);
+        const filtered = byGenre.filter((m) => m.imdbId !== excludeImdbId);
+        if (filtered.length >= 4) return filtered.slice(0, limit);
+      } catch {
+        // Unknown genre name → fall through to the unfiltered catalog.
+      }
+    }
+    const all = await fetchGenre(null);
+    return all.filter((m) => m.imdbId !== excludeImdbId).slice(0, limit);
+  };
+
+  return run();
+}
+
 export async function cinemetaSearch(
   mediaType: 'movie' | 'tv',
   query: string,

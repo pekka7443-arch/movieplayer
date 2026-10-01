@@ -7,19 +7,46 @@ import { tmdbImg } from '@/lib/languages';
 import { yearOf, type MediaType } from '@/lib/tmdb';
 
 export interface MediaCardItem {
+  /** TMDB ID — used to build the watch URL (?id=…&type=…). */
   id: number;
+  /** IMDB ID — optional; when present, the watch URL falls back to
+   * ?imdb=…&type=… (keyless Cinemeta-mode playback). */
+  imdbId?: string;
   mediaType: MediaType;
   title: string;
+  /** TMDB poster path (e.g. "/abc.jpg"). Mutually exclusive with `posterUrl`. */
   posterPath: string | null;
+  /** Full poster URL (used by Cinemeta — points at images.metahub.space).
+   * When present, takes precedence over `posterPath` + tmdbImg(). */
+  posterUrl?: string | null;
   releaseDate: string;
   voteAverage: number;
+  /** Optional genre label shown next to the year. Optional because not every
+   * upstream source returns genres — we just hide it when missing. */
+  genre?: string;
 }
 
+/**
+ * Poster card styled like Zoryva's media rows: fixed width per breakpoint,
+ * aspect-[2/3] poster, rounded-xl, gradient overlay from the bottom, and
+ * the title + year + genre rendered as an overlay (white text on the dark
+ * gradient) so the visual stays clean even on busy posters.
+ */
 export function MediaCard({ item, priority = false }: { item: MediaCardItem; priority?: boolean }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
-  const poster = tmdbImg(item.posterPath, 'w500');
+  // Prefer posterUrl (full URL, used by Cinemeta). Fall back to TMDB path →
+  // image.tmdb.org URL via tmdbImg().
+  const poster = item.posterUrl ?? tmdbImg(item.posterPath, 'w500');
   const year = yearOf(item.releaseDate);
+
+  // Build the watch URL — prefer TMDB id (more providers support it
+  // natively), fall back to IMDB id for Cinemeta-only items.
+  const watchTarget = item.id
+    ? `/?id=${item.id}&type=${item.mediaType}`
+    : item.imdbId
+      ? `/?imdb=${item.imdbId}&type=${item.mediaType}`
+      : null;
 
   return (
     <motion.button
@@ -28,47 +55,66 @@ export function MediaCard({ item, priority = false }: { item: MediaCardItem; pri
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28 }}
       whileHover={reduceMotion ? undefined : { y: -4 }}
-      onClick={() => router.push(`/?id=${item.id}&type=${item.mediaType}`, { scroll: false })}
+      disabled={!watchTarget}
+      onClick={() => watchTarget && router.push(watchTarget, { scroll: false })}
       aria-label={`${item.title}${year ? ` (${year})` : ''} — open`}
-      className="group block w-full text-left focus-visible:outline-none"
+      className="group relative block w-[130px] shrink-0 text-left focus-visible:outline-none disabled:cursor-not-allowed sm:w-[160px] md:w-[180px]"
     >
-      <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-white/70 transition-all duration-200 group-hover:border-amber-400/50 group-hover:shadow-[0_8px_30px_rgba(251,191,36,0.08)] group-focus-visible:border-amber-400/50 dark:border-zinc-800/80 dark:bg-zinc-900/60">
+      <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 transition-all duration-300 group-hover:border-brand/40 group-hover:shadow-[0_8px_30px_color-mix(in_srgb,var(--cinedeck-accent)_15%,transparent)] group-focus-visible:border-brand/60 dark:border-zinc-800/80 dark:bg-zinc-900/60">
         {poster ? (
+           
           <img
             src={poster}
             alt={`${item.title} poster`}
             loading={priority ? 'eager' : 'lazy'}
-            className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
           />
         ) : (
-          <span className="flex size-full flex-col items-center justify-center gap-2 text-zinc-400 dark:text-zinc-700">
+          <span className="flex size-full flex-col items-center justify-center gap-2 bg-zinc-200/40 dark:bg-zinc-900/40">
             {item.mediaType === 'tv' ? (
-              <Tv className="size-8" aria-hidden />
+              <Tv className="size-8 text-zinc-400 dark:text-zinc-700" aria-hidden />
             ) : (
-              <Film className="size-8" aria-hidden />
+              <Film className="size-8 text-zinc-400 dark:text-zinc-700" aria-hidden />
             )}
-            <span className="px-3 text-center text-[11px] leading-tight text-zinc-500 dark:text-zinc-600">
+            <span className="px-2 text-center text-[11px] leading-tight text-zinc-500 dark:text-zinc-600">
               {item.title}
             </span>
           </span>
         )}
-        {item.mediaType === 'tv' && (
-          <span className="absolute left-2 top-2 rounded bg-zinc-950/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300 backdrop-blur">
-            TV
-          </span>
-        )}
+
+        {/* Top-left media-type badge — small pill with the icon + label, like Zoryva. */}
+        <span className="absolute left-2 top-2 inline-flex h-5 items-center gap-1 rounded-md border border-transparent bg-zinc-950/70 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
+          {item.mediaType === 'tv' ? (
+            <Tv className="size-2.5" aria-hidden />
+          ) : (
+            <Film className="size-2.5" aria-hidden />
+          )}
+          {item.mediaType === 'tv' ? 'TV' : 'Movie'}
+        </span>
+
+        {/* Rating chip top-right — shown only when vote > 0. */}
         {item.voteAverage > 0 && (
-          <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-zinc-950/80 px-1.5 py-0.5 text-[11px] font-medium text-amber-300 backdrop-blur">
-            <Star className="size-3 fill-amber-400 text-amber-400" aria-hidden />
+          <span className="absolute right-2 top-2 inline-flex h-5 items-center gap-0.5 rounded-md bg-zinc-950/70 px-1.5 text-[10px] font-semibold text-amber-300 backdrop-blur-sm">
+            <Star className="size-2.5 fill-amber-400 text-amber-400" aria-hidden />
             {item.voteAverage.toFixed(1)}
           </span>
         )}
-      </span>
-      <span className="mt-2 block">
-        <span className="block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-amber-600 dark:text-zinc-200 dark:group-hover:text-amber-300">
-          {item.title}
+
+        {/* Bottom gradient + title overlay — same shape as Zoryva cards so
+            the title reads cleanly over busy poster artwork. */}
+        <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-80 transition-opacity duration-300 group-hover:opacity-95" />
+        <span className="absolute inset-x-0 bottom-0 p-2.5 md:p-3">
+          <span className="block line-clamp-2 text-xs font-semibold text-white drop-shadow md:text-sm">
+            {item.title}
+          </span>
+          <span className="mt-1 flex items-center gap-1.5 text-[10px] text-zinc-200">
+            {year && <span>{year}</span>}
+            {year && item.genre && (
+              <span className="size-1 rounded-full bg-zinc-400" aria-hidden />
+            )}
+            {item.genre && <span className="truncate">{item.genre}</span>}
+          </span>
         </span>
-        {year && <span className="mt-0.5 block text-xs text-zinc-500">{year}</span>}
       </span>
     </motion.button>
   );
@@ -76,10 +122,8 @@ export function MediaCard({ item, priority = false }: { item: MediaCardItem; pri
 
 export function MediaCardSkeleton() {
   return (
-    <div aria-hidden className="w-full">
-      <div className="aspect-[2/3] w-full rounded-xl border border-zinc-200 bg-white/70 dark:border-zinc-800/80 dark:bg-zinc-900/60" />
-      <div className="mt-2 h-4 w-3/4 rounded bg-zinc-200 dark:bg-zinc-900" />
-      <div className="mt-1.5 h-3 w-1/3 rounded bg-zinc-200/80 dark:bg-zinc-900/80" />
+    <div aria-hidden className="w-[130px] shrink-0 sm:w-[160px] md:w-[180px]">
+      <div className="aspect-[2/3] w-full animate-pulse rounded-xl border border-zinc-200 bg-zinc-200 dark:border-zinc-800/80 dark:bg-zinc-900" />
     </div>
   );
 }

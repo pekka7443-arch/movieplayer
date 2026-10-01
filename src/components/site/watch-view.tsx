@@ -7,10 +7,10 @@ import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PlayerSection } from '@/components/site/player-section';
 import { InfoSection } from '@/components/site/info-section';
-import { SimilarRow } from '@/components/site/similar-row';
+import { SimilarRow, MetaSimilarRow } from '@/components/site/similar-row';
 import { MetaInfo } from '@/components/site/meta-info';
 import { useMediaDetails, useSaveHistory } from '@/hooks/use-media';
-import { useMetaDetails } from '@/hooks/use-meta';
+import { useMetaDetails, useMetaSimilar, useTvmazeShow } from '@/hooks/use-meta';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey, useSettings } from '@/lib/settings';
 import type { MediaDetails, MediaType } from '@/lib/tmdb';
@@ -65,6 +65,19 @@ export function WatchView({
 
   const detailsQuery = useMediaDetails(tmdbId ?? null, mediaType, language, hasKey && !isImdbMode);
   const metaQuery = useMetaDetails(isImdbMode ? (imdbId ?? null) : null, mediaType, isImdbMode);
+
+  // Second keyless source (TVmaze): show facts + episode names for IMDB-mode TV.
+  const tvmazeQuery = useTvmazeShow(
+    isImdbMode && mediaType === 'tv' ? (imdbId ?? null) : null,
+    isImdbMode && mediaType === 'tv',
+  );
+  // Keyless "More like this" via Cinemeta's genre catalog (IMDB mode only).
+  const metaSimilarQuery = useMetaSimilar(
+    mediaType,
+    isImdbMode ? (imdbId ?? null) : null,
+    metaQuery.data?.genres[0] ?? null,
+    isImdbMode && Boolean(metaQuery.data),
+  );
 
   const details = isImdbMode
     ? metaQuery.data
@@ -127,7 +140,11 @@ export function WatchView({
 
       {isImdbMode ? (
         metaQuery.data ? (
-          <MetaInfo details={metaQuery.data} />
+          <MetaInfo
+            details={metaQuery.data}
+            tvmaze={tvmazeQuery.data?.show ?? null}
+            episodeCount={tvmazeQuery.data?.episodes.length}
+          />
         ) : metaQuery.isError ? (
           <p className="mt-8 text-sm text-zinc-500 dark:text-zinc-600">
             Details are unavailable right now — the player above should still work.
@@ -152,6 +169,10 @@ export function WatchView({
             )}
           </>
         )
+      )}
+
+      {isImdbMode && (
+        <MetaSimilarRow items={metaSimilarQuery.data} loading={metaSimilarQuery.isPending} />
       )}
     </motion.div>
   );

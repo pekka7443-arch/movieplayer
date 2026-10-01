@@ -11,6 +11,48 @@ export interface MetaSearchItem {
   /** 'movie' | 'tv' (Cinemeta 'series' is normalized to 'tv'). */
   mediaType: 'movie' | 'tv';
   voteAverage: number;
+  /** Optional TMDB id — Cinemeta includes `moviedb_id` for popular catalog
+   * items, which lets the card build the watch URL as ?id=…&type=… (TMDB
+   * mode, more providers supported) instead of falling back to ?imdb=…
+   * (keyless IMDB mode). */
+  tmdbId?: number;
+  /** Optional genre label (first of Cinemeta's genre[] array). Used by the
+   * MediaCard component for the bottom meta row. */
+  genre?: string;
+  /** Optional full backdrop URL (Cinemeta `background`) — used by the hero. */
+  backdrop?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// TVmaze (second keyless source — zero signup, rich TV data)
+// ---------------------------------------------------------------------------
+
+/** Normalized TVmaze show facts (HTML stripped, only what CineDeck renders). */
+export interface TvmazeShow {
+  tvmazeId: number;
+  name: string;
+  status: string | null;
+  /** Broadcast network or web channel ("AMC", "Netflix"). */
+  network: string | null;
+  premiered: string | null;
+  ended: string | null;
+  runtime: number | null;
+  rating: number | null;
+  genres: string[];
+  officialSite: string | null;
+  scheduleDays: string[];
+  summary: string;
+  imageUrl: string | null;
+}
+
+/** One TVmaze episode — real names, so keyless TV gets a proper episode menu. */
+export interface TvmazeEpisode {
+  season: number;
+  number: number;
+  name: string;
+  airdate: string | null;
+  runtime: number | null;
+  summary: string;
 }
 
 export interface MetaDetails {

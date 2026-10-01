@@ -14,13 +14,37 @@ export interface CinedeckSettings {
   saveHistory: boolean;
   /** Preferred provider id (null → default server) */
   preferredServer: string | null;
+  /** Hex accent color (e.g. "#fbbf24"). Applied to :root as --cinedeck-accent. */
+  accentColor: string;
 }
 
 export const DEFAULT_SETTINGS: CinedeckSettings = {
   language: DEFAULT_LANGUAGE,
   saveHistory: true,
   preferredServer: null,
+  accentColor: '#fbbf24',
 };
+
+/**
+ * Apply the saved accent color to document.documentElement so all
+ * `bg-brand` / `text-brand` / `border-brand` classes repaint live.
+ * Idempotent — safe to call on every settings change.
+ */
+export function applyAccentColor(color: string | null | undefined): void {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  const value = color && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color) ? color : '#fbbf24';
+  root.style.setProperty('--cinedeck-accent', value);
+  // Auto-pick foreground based on luminance: dark text on bright accents,
+  // white text on dark accents. Keeps button text readable for any color.
+  const hex = value.replace('#', '');
+  const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+  const r = parseInt(full.slice(0, 2), 16) / 255;
+  const g = parseInt(full.slice(2, 4), 16) / 255;
+  const b = parseInt(full.slice(4, 6), 16) / 255;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  root.style.setProperty('--cinedeck-accent-foreground', luminance > 0.55 ? '#09090b' : '#ffffff');
+}
 
 // ---------------------------------------------------------------------------
 // Tiny pub/sub so React components can react to localStorage changes.
@@ -49,6 +73,9 @@ function subscribe(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+
+/** Public alias of `subscribe` for non-hook consumers (e.g. AppProviders useEffect). */
+export const subscribeToSettings = subscribe;
 
 // ---------------------------------------------------------------------------
 // TMDB key
@@ -109,6 +136,11 @@ export function getSettings(): CinedeckSettings {
               : parsed.preferredServer === null
                 ? null
                 : DEFAULT_PROVIDER,
+          accentColor:
+            typeof parsed.accentColor === 'string' &&
+            /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(parsed.accentColor)
+              ? parsed.accentColor
+              : '#fbbf24',
         };
       }
     } catch {

@@ -1,7 +1,13 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import type { MetaDetails, MetaSearchItem, ScanResult } from '@/lib/meta';
+import type {
+  MetaDetails,
+  MetaSearchItem,
+  ScanResult,
+  TvmazeEpisode,
+  TvmazeShow,
+} from '@/lib/meta';
 
 // ---------------------------------------------------------------------------
 // Keyless metadata hooks (Cinemeta proxy) + provider health scan
@@ -78,6 +84,55 @@ export function useServerScan(params: ScanParams, enabled: boolean) {
     enabled,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
+    retry: 0,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// TVmaze — CineDeck's second keyless source (zero signup): show facts +
+// full episode lists with real names for the keyless TV watch mode.
+// ---------------------------------------------------------------------------
+
+export interface TvmazeFull {
+  show: TvmazeShow;
+  episodes: TvmazeEpisode[];
+}
+
+export function useTvmazeShow(imdbId: string | null, enabled: boolean) {
+  return useQuery<TvmazeFull, MetaError>({
+    queryKey: ['meta', 'tvmaze', imdbId],
+    queryFn: async () => {
+      const data = await getJson<TvmazeFull>(`/api/meta/tvmaze?imdb=${imdbId}`);
+      return data;
+    },
+    enabled: enabled && imdbId !== null,
+    staleTime: 60 * 60 * 1000,
+    retry: 0,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Cinemeta genre catalog — keyless "More like this" for the IMDB watch mode.
+// ---------------------------------------------------------------------------
+
+export function useMetaSimilar(
+  mediaType: 'movie' | 'tv',
+  imdbId: string | null,
+  genre: string | null,
+  enabled: boolean,
+) {
+  return useQuery<MetaSearchItem[], MetaError>({
+    queryKey: ['meta', 'similar', mediaType, imdbId, genre],
+    queryFn: async () => {
+      const search = new URLSearchParams({ type: mediaType, imdb: imdbId ?? '' });
+      if (genre) search.set('genre', genre);
+      const data = await getJson<{ results: MetaSearchItem[] }>(
+        `/api/meta/similar?${search.toString()}`,
+      );
+      return data.results;
+    },
+    enabled: enabled && imdbId !== null,
+    staleTime: 30 * 60 * 1000,
     retry: 0,
   });
 }

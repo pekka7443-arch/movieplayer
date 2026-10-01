@@ -1,4 +1,5 @@
 import { getTmdbKey } from '@/lib/settings';
+import type { MetaSearchItem } from '@/lib/meta';
 
 // ---------------------------------------------------------------------------
 // Shared types (API contract v1)
@@ -221,6 +222,40 @@ export async function fetchTrending(language: string): Promise<SearchItem[]> {
   const data = await apiFetch<{ results: SearchItem[] }>(
     withLang(`/api/tmdb/trending?window=week`, language),
     { headers: tmdbHeaders(language) }
+  );
+  return data.results ?? [];
+}
+
+/** Fetch all-time popular movies or TV shows (distinct from weekly trending). */
+export async function fetchPopular(
+  type: 'movie' | 'tv',
+  language: string
+): Promise<SearchItem[]> {
+  const data = await apiFetch<{ results: SearchItem[] }>(
+    withLang(`/api/tmdb/popular?type=${type}`, language),
+    { headers: tmdbHeaders(language) }
+  );
+  return data.results ?? [];
+}
+
+/**
+ * KEYLESS FALLBACK — fetch popular movies/TV from Cinemeta (Stremio public
+ * catalog). Used when the user has NOT added a TMDB API key, so the home
+ * page's "Trending Now" / "Popular Movies" / "Popular TV Shows" rows still
+ * show real content instead of "Connect TMDB" prompts.
+ *
+ * Cinemeta returns MetaSearchItem[] (imdbId, title, poster, year, rating,
+ * mediaType). The MediaCard component accepts both shapes via the optional
+ * `posterUrl` field — Cinemeta items use the full metahub.space poster URL.
+ *
+ * @param type 'movie' | 'tv' | 'all' (mixed movies+TV interleaved)
+ */
+export async function fetchPopularMeta(
+  type: 'movie' | 'tv' | 'all'
+): Promise<MetaSearchItem[]> {
+  const data = await apiFetch<{ results: MetaSearchItem[] }>(
+    `/api/meta/popular?type=${type}`,
+    { headers: { accept: 'application/json' } }
   );
   return data.results ?? [];
 }
