@@ -74,9 +74,19 @@ function openStream(url: string, depth = 0): Promise<{ res: IncomingMessage; url
 function readBody(res: IncomingMessage): Promise<string> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
+    let settled = false;
+    const finish = (text: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      res.destroy();
+      resolve(text);
+    };
+    // Absolute cap — a trickling upstream must not hold the playlist hostage.
+    const deadline = setTimeout(() => finish(''), 10_000);
     res.on('data', (c: Buffer) => chunks.push(c));
-    res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    res.on('error', () => resolve(''));
+    res.on('end', () => finish(Buffer.concat(chunks).toString('utf8')));
+    res.on('error', () => finish(''));
   });
 }
 

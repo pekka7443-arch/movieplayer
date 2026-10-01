@@ -87,6 +87,15 @@ const SPORT_LABELS: Record<string, string> = {
 const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
 const dayFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
+/**
+ * Hard client-side cap on every sports API call. A hung response must NEVER
+ * leave the UI spinning — the fetch aborts, React Query settles, and the
+ * failover / fallback UI takes over within seconds.
+ */
+function fetchCapped(url: string, ms = 12_000): Promise<Response> {
+  return fetch(url, { signal: AbortSignal.timeout(ms) });
+}
+
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -119,7 +128,7 @@ function useSportsEvents(date: string, sport: string) {
     queryFn: async () => {
       const params = new URLSearchParams({ date });
       if (sport !== 'All') params.set('sport', sport);
-      const res = await fetch(`/api/sports/events?${params.toString()}`);
+      const res = await fetchCapped(`/api/sports/events?${params.toString()}`);
       if (!res.ok) throw new Error('sports_unreachable');
       const json = (await res.json()) as { events: SportsEvent[] };
       return json.events;
@@ -127,6 +136,7 @@ function useSportsEvents(date: string, sport: string) {
     staleTime: 30_000,
     // Live scores change — keep polling while the user is on the sports view.
     refetchInterval: 60_000,
+    retry: 1,
   });
 }
 
@@ -134,13 +144,14 @@ function useUpcomingEvents(enabled: boolean) {
   return useQuery<SportsEvent[]>({
     queryKey: ['sports-upcoming'],
     queryFn: async () => {
-      const res = await fetch('/api/sports/events?upcoming=1');
+      const res = await fetchCapped('/api/sports/events?upcoming=1');
       if (!res.ok) throw new Error('sports_unreachable');
       const json = (await res.json()) as { upcoming: SportsEvent[] };
       return json.upcoming;
     },
     enabled,
     staleTime: 5 * 60_000,
+    retry: 1,
   });
 }
 
@@ -148,12 +159,13 @@ function useSportsChannels() {
   return useQuery<SportsChannel[]>({
     queryKey: ['sports-channels'],
     queryFn: async () => {
-      const res = await fetch('/api/sports/channels');
+      const res = await fetchCapped('/api/sports/channels');
       if (!res.ok) throw new Error('iptv_unreachable');
       const json = (await res.json()) as { channels: SportsChannel[] };
       return json.channels;
     },
     staleTime: 30 * 60_000,
+    retry: 1,
   });
 }
 
@@ -173,7 +185,9 @@ function useMatchCandidates(event: SportsEvent | null) {
         home: event!.home,
         away: event!.away,
       });
-      const res = await fetch(`/api/sports/match?${p.toString()}`);
+      // 10s cap × 1 retry ⇒ the scan always resolves within ~20s — the
+      // "Scanning live feeds…" phase can never stick around for minutes.
+      const res = await fetchCapped(`/api/sports/match?${p.toString()}`, 10_000);
       if (!res.ok) throw new Error('match_unreachable');
       const json = (await res.json()) as { candidates: SportsChannel[] };
       return json.candidates;
@@ -190,7 +204,7 @@ function useSportsEvent(id: string | null, enabled: boolean) {
     queryKey: ['sports-event', id],
     enabled: enabled && !!id,
     queryFn: async () => {
-      const res = await fetch(`/api/sports/events?id=${id}`);
+      const res = await fetchCapped(`/api/sports/events?id=${id}`);
       if (!res.ok) throw new Error('event_unreachable');
       const json = (await res.json()) as { event: SportsEvent | null };
       return json.event;
@@ -757,11 +771,13 @@ function LivePlayer({
   candidates,
   loading,
   onBrowseChannels,
+  onRetryScan,
 }: {
   event: SportsEvent;
   candidates: SportsChannel[];
   loading: boolean;
   onBrowseChannels: () => void;
+  onRetryScan: () => void;
 }) {
   const { autoFailover, failoverSeconds } = useSettings();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -852,6 +868,13 @@ function LivePlayer({
     setIdx(i);
   };
 
+  /** Re-run the scan from the best feed — also used by the exhausted panel. */
+  const retryScan = () => {
+    setLiveUrl(null);
+    setIdx(0);
+    onRetryScan();
+  };
+
   return (
     <>
       <motion.section
@@ -928,6 +951,16 @@ function LivePlayer({
                 always-on sports channel.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={retryScan}
+                  className="h-8 gap-1.5 rounded-lg border-zinc-700 bg-transparent text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white"
+                >
+                  <RefreshCw className="size-3" aria-hidden />
+                  Retry scan
+                </Button>
                 {WATCH_LINKS(event).slice(0, 3).map((link) => (
                   <Button
                     key={link.label}
@@ -1129,6 +1162,7 @@ function WatchPage({
   loading,
   onBack,
   onBrowseChannels,
+  onRetryScan,
   upNext,
   onSelectEvent,
 }: {
@@ -1137,6 +1171,7 @@ function WatchPage({
   loading: boolean;
   onBack: () => void;
   onBrowseChannels: () => void;
+  onRetryScan: () => void;
   upNext: SportsEvent[];
   onSelectEvent: (event: SportsEvent) => void;
 }) {
@@ -1273,6 +1308,7 @@ function WatchPage({
             candidates={candidates}
             loading={loading}
             onBrowseChannels={onBrowseChannels}
+            onRetryScan={onRetryScan}
           />
 
           <LinksRow event={event} />
@@ -1346,9 +1382,13 @@ export function SportsView() {
     () => allKnown.find((e) => e.id === watchId) ?? null,
     [allKnown, watchId],
   );
-  const lookupQuery = useSportsEvent(watchId, watchId !== null && localWatch === null);
-  const watchEvent = localWatch ?? (lookupQuery.data ?? null);
-  const watchLoading = watchId !== null && localWatch === null && lookupQuery.isPending;
+  // The per-event lookup always runs (not just when the event is missing from
+  // the lists): TheSportsDB's day-list mirrors can lag minutes behind — they
+  // kept reporting a finished match as live — while lookupevent is the
+  // authoritative row. The list copy only serves as the instant placeholder.
+  const lookupQuery = useSportsEvent(watchId, watchId !== null);
+  const watchEvent = lookupQuery.data ?? localWatch;
+  const watchLoading = watchId !== null && lookupQuery.isPending && lookupQuery.data === undefined;
 
   const matchQuery = useMatchCandidates(watchEvent);
 
@@ -1411,9 +1451,15 @@ export function SportsView() {
           <WatchPage
             event={watchEvent}
             candidates={matchQuery.data ?? []}
-            loading={matchQuery.isPending}
+            // isLoading (not isPending): a disabled query (e.g. a finished
+            // event) stays isPending forever in React Query v5 — that used to
+            // pin the player on "Scanning live feeds…" for minutes.
+            loading={matchQuery.isLoading}
             onBack={closeWatch}
             onBrowseChannels={browseChannels}
+            onRetryScan={() => {
+              void matchQuery.refetch();
+            }}
             upNext={upNext}
             onSelectEvent={openWatch}
           />

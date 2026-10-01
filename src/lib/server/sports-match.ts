@@ -14,6 +14,10 @@ import http from 'node:http';
 import { sportsChannels, type SportsChannel } from '@/lib/server/iptv';
 
 const PROBE_TIMEOUT_MS = 2_500;
+/** Absolute per-probe deadline (covers DNS + connect + first bytes). */
+const PROBE_DEADLINE_MS = 4_000;
+/** Hard ceiling for the whole probe round — the match API must always answer fast. */
+const PROBE_ROUND_DEADLINE_MS = 8_000;
 const PROBE_TOP_N = 20;
 const MAX_CANDIDATES = 16;
 const FALLBACK_UNPROBED = 8;
@@ -38,11 +42,12 @@ function isPrivateHost(hostname: string): boolean {
 
 /**
  * Check that a stream URL answers with a real HLS playlist (or a raw .ts
- * segment stream) within the timeout. Follows up to 2 redirects.
+ * segment stream) within the timeout. Follows up to 2 redirects. Carries an
+ * absolute deadline across redirects — a probe can never outlive it.
  */
-function probePlaylist(url: string, depth = 0): Promise<boolean> {
+function probePlaylist(url: string, deadlineAt: number, depth = 0): Promise<boolean> {
   return new Promise((resolve) => {
-    if (depth > 2) {
+    if (depth > 2 || Date.now() >= deadlineAt) {
       resolve(false);
       return;
     }
@@ -58,6 +63,14 @@ function probePlaylist(url: string, depth = 0): Promise<boolean> {
       return;
     }
     const mod = u.protocol === 'https:' ? https : http;
+    let settled = false;
+    let deadline: ReturnType<typeof setTimeout> | null = null;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (deadline) clearTimeout(deadline);
+      resolve(ok);
+    };
     const req = mod.get(
       u,
       {
@@ -69,25 +82,21 @@ function probePlaylist(url: string, depth = 0): Promise<boolean> {
         const status = res.statusCode ?? 0;
         const location = res.headers.location;
         if (status >= 300 && status < 400 && location) {
+          const next = new URL(location, u).toString();
           res.resume();
-          resolve(probePlaylist(new URL(location, u).toString(), depth + 1));
+          settled = true;
+          if (deadline) clearTimeout(deadline);
+          probePlaylist(next, deadlineAt, depth + 1).then(resolve);
           return;
         }
         if (status < 200 || status >= 300) {
           res.resume();
-          resolve(false);
+          finish(false);
           return;
         }
         const path = u.pathname.toLowerCase();
         const rawTs = path.endsWith('.ts') || path.endsWith('.mpegts');
         let got = '';
-        let settled = false;
-        const finish = (ok: boolean) => {
-          if (settled) return;
-          settled = true;
-          res.destroy();
-          resolve(ok);
-        };
         res.on('data', (c: Buffer) => {
           if (settled) return;
           got += c.toString('utf8');
@@ -98,11 +107,15 @@ function probePlaylist(url: string, depth = 0): Promise<boolean> {
           else if (got.length > 2048) finish(false);
         });
         res.on('error', () => finish(false));
-        // If the server sends nothing at all, the request timeout fires.
+        // If the server sends nothing at all, the deadline fires.
       },
     );
     req.on('timeout', () => req.destroy(new Error('probe_timeout')));
-    req.on('error', () => resolve(false));
+    req.on('error', () => finish(false));
+    deadline = setTimeout(() => {
+      req.destroy();
+      finish(false);
+    }, Math.max(250, deadlineAt - Date.now()));
   });
 }
 
@@ -173,6 +186,10 @@ function cacheKey(event: EventSeed): string {
  * what the player should try: probed-OK first (relevance order), then a
  * small unprobed tail as a safety net (the client watchdog skips dead ones).
  * Returns null when the channel list itself is unavailable.
+ *
+ * The probe round runs under a hard race deadline: if probing stalls (hung
+ * sockets, slow DNS…), the API still answers within a few seconds with the
+ * top-ranked unprobed channels and lets the player's watchdog sort them out.
  */
 export async function matchChannelsForEvent(event: EventSeed): Promise<SportsChannel[] | null> {
   const key = cacheKey(event);
@@ -184,20 +201,33 @@ export async function matchChannelsForEvent(event: EventSeed): Promise<SportsCha
 
   const ranked = rankChannelsForEvent(event, all);
   const top = ranked.slice(0, PROBE_TOP_N);
-  const probed = await Promise.all(
-    top.map(async (c) => ({ c, ok: await probePlaylist(c.url) })),
-  );
-  const alive = probed.filter((p) => p.ok).map((p) => p.c).slice(0, MAX_CANDIDATES);
+  const deadlineAt = Date.now() + PROBE_DEADLINE_MS;
+
+  let roundTimer: ReturnType<typeof setTimeout> | undefined;
+  const probed = await Promise.race([
+    Promise.all(top.map(async (c) => ({ c, ok: await probePlaylist(c.url, deadlineAt) }))),
+    new Promise<null>((resolve) => {
+      roundTimer = setTimeout(() => resolve(null), PROBE_ROUND_DEADLINE_MS);
+    }),
+  ]).finally(() => {
+    if (roundTimer) clearTimeout(roundTimer);
+  });
 
   let candidates: SportsChannel[];
-  if (alive.length >= 3) {
-    candidates = alive;
+  if (!probed) {
+    // Probe round blew the deadline — ship the top-ranked feeds unprobed.
+    candidates = ranked.slice(0, FALLBACK_UNPROBED);
   } else {
-    // Almost nothing responded (maybe a network blip) — fall back to the
-    // top-ranked channels unprobed and let the player's watchdog decide.
-    const aliveUrls = new Set(alive.map((c) => c.url));
-    const tail = ranked.filter((c) => !aliveUrls.has(c.url)).slice(0, FALLBACK_UNPROBED);
-    candidates = [...alive, ...tail];
+    const alive = probed.filter((p) => p.ok).map((p) => p.c).slice(0, MAX_CANDIDATES);
+    if (alive.length >= 3) {
+      candidates = alive;
+    } else {
+      // Almost nothing responded (maybe a network blip) — fall back to the
+      // top-ranked channels unprobed and let the player's watchdog decide.
+      const aliveUrls = new Set(alive.map((c) => c.url));
+      const tail = ranked.filter((c) => !aliveUrls.has(c.url)).slice(0, FALLBACK_UNPROBED);
+      candidates = [...alive, ...tail];
+    }
   }
 
   if (matchCache.size > 120) {

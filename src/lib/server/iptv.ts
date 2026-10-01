@@ -25,25 +25,45 @@ function httpsText(url: string, depth = 0): Promise<string | null> {
       resolve(null);
       return;
     }
-    const req = https.get(
+    // Absolute deadline for the WHOLE request (DNS + connect + body). Node's
+    // socket `timeout` option only fires on inactivity once a socket exists —
+    // a hung DNS lookup or a half-open socket would otherwise dangle forever
+    // and pin the sports player on "Scanning live feeds…".
+    let settled = false;
+    let deadline: ReturnType<typeof setTimeout> | null = null;
+    let req: ReturnType<typeof https.get> | null = null;
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      if (deadline) clearTimeout(deadline);
+      resolve(value);
+    };
+    req = https.get(
       url,
       { family: 4, headers: { accept: '*/*' }, timeout: TIMEOUT_MS },
       (res) => {
         const status = res.statusCode ?? 0;
         const location = res.headers.location;
         if (status >= 300 && status < 400 && location) {
+          const next = new URL(location, url).toString();
           res.resume();
-          resolve(httpsText(new URL(location, url).toString(), depth + 1));
+          settled = true; // hand the deadline over to the recursive call
+          if (deadline) clearTimeout(deadline);
+          httpsText(next, depth + 1).then(resolve);
           return;
         }
         const chunks: Buffer[] = [];
         res.on('data', (c: Buffer) => chunks.push(c));
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-        res.on('error', () => resolve(null));
+        res.on('end', () => finish(Buffer.concat(chunks).toString('utf8')));
+        res.on('error', () => finish(null));
       },
     );
-    req.on('timeout', () => req.destroy(new Error('iptv_timeout')));
-    req.on('error', () => resolve(null));
+    req.on('timeout', () => req?.destroy(new Error('iptv_timeout')));
+    req.on('error', () => finish(null));
+    deadline = setTimeout(() => {
+      req?.destroy();
+      finish(null);
+    }, TIMEOUT_MS);
   });
 }
 
@@ -82,17 +102,40 @@ export function parseM3U(text: string): SportsChannel[] {
 
 const globalForIptv = globalThis as unknown as {
   __cinedeckIptvCache?: { channels: SportsChannel[]; expiresAt: number } | null;
+  __cinedeckIptvInflight?: Promise<SportsChannel[] | null>;
 };
 
-/** All parsed sports channels (cached 6h — the playlist updates daily). */
+/**
+ * All parsed sports channels (cached 6h — the playlist updates daily).
+ * Concurrent callers share one in-flight fetch so a cold cache can't
+ * stampede the upstream with parallel playlist downloads.
+ */
 export async function sportsChannels(): Promise<SportsChannel[] | null> {
   const cached = globalForIptv.__cinedeckIptvCache;
   if (cached && cached.expiresAt > Date.now()) return cached.channels;
 
-  const text = await httpsText(PLAYLIST_URL);
-  if (!text || !text.startsWith('#EXTM3U')) return null;
+  if (!globalForIptv.__cinedeckIptvInflight) {
+    const fetchPromise = httpsText(PLAYLIST_URL).then((text) => {
+      const channels =
+        text && text.startsWith('#EXTM3U')
+          ? parseM3U(text).sort((a, b) => a.name.localeCompare(b.name))
+          : null;
+      if (channels) {
+        globalForIptv.__cinedeckIptvCache = {
+          channels,
+          expiresAt: Date.now() + 6 * 60 * 60 * 1000,
+        };
+      }
+      return channels;
+    });
+    globalForIptv.__cinedeckIptvInflight = fetchPromise;
+    // Clear the in-flight slot once settled (keep the value out of memory).
+    void fetchPromise.catch(() => undefined).finally(() => {
+      if (globalForIptv.__cinedeckIptvInflight === fetchPromise) {
+        globalForIptv.__cinedeckIptvInflight = undefined;
+      }
+    });
+  }
 
-  const channels = parseM3U(text).sort((a, b) => a.name.localeCompare(b.name));
-  globalForIptv.__cinedeckIptvCache = { channels, expiresAt: Date.now() + 6 * 60 * 60 * 1000 };
-  return channels;
+  return globalForIptv.__cinedeckIptvInflight;
 }
