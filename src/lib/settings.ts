@@ -16,6 +16,22 @@ export interface CinedeckSettings {
   preferredServer: string | null;
   /** Hex accent color (e.g. "#fbbf24"). Applied to :root as --cinedeck-accent. */
   accentColor: string;
+  /** After the source scan, auto-jump to the healthiest mirror (off = stay on your preferred server). */
+  autoPickSource: boolean;
+  /** Watchdog that auto-switches sources when the player stalls. */
+  autoFailover: boolean;
+  /** How long to wait for a source to load before failing over (6–30s). */
+  failoverSeconds: number;
+}
+
+export const FAILOVER_SECONDS_MIN = 6;
+export const FAILOVER_SECONDS_MAX = 30;
+export const FAILOVER_SECONDS_DEFAULT = 12;
+
+function clampFailoverSeconds(value: unknown): number {
+  const n = typeof value === 'number' ? Math.round(value) : Number.parseInt(String(value), 10);
+  if (!Number.isFinite(n)) return FAILOVER_SECONDS_DEFAULT;
+  return Math.min(FAILOVER_SECONDS_MAX, Math.max(FAILOVER_SECONDS_MIN, n));
 }
 
 export const DEFAULT_SETTINGS: CinedeckSettings = {
@@ -23,6 +39,9 @@ export const DEFAULT_SETTINGS: CinedeckSettings = {
   saveHistory: true,
   preferredServer: null,
   accentColor: '#fbbf24',
+  autoPickSource: true,
+  autoFailover: true,
+  failoverSeconds: FAILOVER_SECONDS_DEFAULT,
 };
 
 /**
@@ -141,6 +160,9 @@ export function getSettings(): CinedeckSettings {
             /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(parsed.accentColor)
               ? parsed.accentColor
               : '#fbbf24',
+          autoPickSource: typeof parsed.autoPickSource === 'boolean' ? parsed.autoPickSource : true,
+          autoFailover: typeof parsed.autoFailover === 'boolean' ? parsed.autoFailover : true,
+          failoverSeconds: clampFailoverSeconds(parsed.failoverSeconds),
         };
       }
     } catch {

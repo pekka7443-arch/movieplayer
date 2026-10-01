@@ -6,6 +6,7 @@ import { AppProviders } from '@/components/site/app-providers';
 import { Header } from '@/components/site/header';
 import { HomeView } from '@/components/site/home-view';
 import { WatchView } from '@/components/site/watch-view';
+import { SportsView } from '@/components/site/sports-view';
 import { SettingsDialog } from '@/components/site/settings-dialog';
 import { ArcadeDialog } from '@/components/site/arcade-dialog';
 import { AuthDialog } from '@/components/site/auth-dialog';
@@ -40,6 +41,8 @@ function App() {
             <WatchView tmdbId={id} mediaType={type} season={season} episode={episode} />
           ) : imdbId !== null ? (
             <WatchView imdbId={imdbId} mediaType={type} season={season} episode={episode} />
+          ) : params.get('view') === 'sports' ? (
+            <SportsView />
           ) : (
             <HomeView />
           )}

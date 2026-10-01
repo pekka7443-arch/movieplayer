@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Bookmark, Clapperboard, Gamepad2, History, Home, Settings2 } from 'lucide-react';
+import { Bookmark, Clapperboard, Gamepad2, History, Home, Settings2, Trophy } from 'lucide-react';
 
 import { useCinedeckStore } from '@/lib/store';
 import { useHomeSectionNav } from '@/hooks/use-section-nav';
@@ -16,6 +16,7 @@ export function SiteFooter() {
     { icon: Home, label: 'Home', action: () => router.push('/', { scroll: false }) },
     { icon: Bookmark, label: 'My List', action: () => goSection('my-list') },
     { icon: History, label: 'Continue watching', action: () => goSection('continue-watching') },
+    { icon: Trophy, label: 'Live Sports', action: () => router.push('/?view=sports', { scroll: false }) },
     { icon: Gamepad2, label: 'Arcade', action: openArcade },
     { icon: Settings2, label: 'Settings', action: openSettings },
   ];
@@ -71,6 +72,14 @@ export function SiteFooter() {
               <li>
                 <span className="font-medium text-zinc-600 dark:text-zinc-400">TVmaze</span> — TV episodes
                 &amp; show facts (no key)
+              </li>
+              <li>
+                <span className="font-medium text-zinc-600 dark:text-zinc-400">TheSportsDB</span> — live
+                sports scores &amp; schedules (no key)
+              </li>
+              <li>
+                <span className="font-medium text-zinc-600 dark:text-zinc-400">iptv-org</span> — free sports
+                TV channels (no key)
               </li>
               <li>
                 <span className="font-medium text-zinc-600 dark:text-zinc-400">TMDB</span> — optional

@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   AlertCircle,
+  ArrowRight,
   Bookmark,
   Clapperboard,
   Compass,
@@ -338,6 +339,7 @@ const EXPLORE_GENRES = [
 ] as const;
 
 export function HomeView() {
+  const router = useRouter();
   const language = useCinedeckStore((s) => s.language);
   const openSettings = useCinedeckStore((s) => s.openSettings);
   const hasKey = useHasTmdbKey();
@@ -379,6 +381,36 @@ export function HomeView() {
         trendingLoading={trendingQuery.isPending}
         hasKey={hasKey}
       />
+
+      {/* Live Sports teaser band */}
+      <motion.section {...fadeIn} aria-labelledby="sports-teaser">
+        <button
+          type="button"
+          id="sports-teaser"
+          onClick={() => router.push('/?view=sports', { scroll: false })}
+          className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 px-5 py-4 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-800 dark:bg-zinc-900/60"
+        >
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -right-10 -top-16 h-44 w-72 rounded-full bg-brand-soft blur-3xl"
+          />
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft">
+            <Trophy className="size-5 text-brand" aria-hidden />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+              Live Sports
+            </span>
+            <span className="block truncate text-xs text-zinc-500 dark:text-zinc-500">
+              Live scores, schedules &amp; 280+ free sports TV channels — keyless.
+            </span>
+          </span>
+          <ArrowRight
+            className="ml-auto size-5 shrink-0 text-zinc-400 transition-transform group-hover:translate-x-1 group-hover:text-brand"
+            aria-hidden
+          />
+        </button>
+      </motion.section>
 
       {/* Continue watching */}
       <motion.section {...fadeIn} aria-labelledby="continue-watching">

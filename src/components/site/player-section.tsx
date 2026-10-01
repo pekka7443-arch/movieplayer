@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -10,6 +10,8 @@ import {
   ExternalLink,
   Info,
   Loader2,
+  Maximize2,
+  Minimize2,
   Radar,
   RotateCw,
   SkipForward,
@@ -32,10 +34,9 @@ import { useSeason } from '@/hooks/use-media';
 import { useServerScan, useTvmazeShow } from '@/hooks/use-meta';
 import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl } from '@/lib/providers';
 import { useCinedeckStore } from '@/lib/store';
+import { useSettings } from '@/lib/settings';
+import { PlayerSettingsMenu } from '@/components/site/player-settings';
 import { formatRuntime, yearOf, type MediaDetails, type MediaType, type TvDetails } from '@/lib/tmdb';
-
-/** If the active iframe hasn't fired onLoad within this window, we auto-switch. */
-const FAILOVER_TIMEOUT_MS = 12_000;
 
 /** Auto-failover bookkeeping, tied to the embed URL it applies to. */
 interface FailoverState {
@@ -74,6 +75,9 @@ export function PlayerSection({
   const setServer = useCinedeckStore((s) => s.setServer);
   const setServerTransient = useCinedeckStore((s) => s.setServerTransient);
   const language = useCinedeckStore((s) => s.language);
+  // Playback preferences (auto-pick / auto-failover / stall timeout).
+  const settings = useSettings();
+  const [theater, setTheater] = useState(false);
 
   const tvDetails = details && details.mediaType === 'tv' ? (details as TvDetails) : undefined;
   const isTv = mediaType === 'tv';
@@ -142,13 +146,15 @@ export function PlayerSection({
     return [...ok, ...unknown, ...rest];
   }, [scanQuery.data]);
 
-  // The scan outranked the current server → move on (unless the user picked manually).
+  // The scan outranked the current server → move on (unless the user picked
+  // manually or disabled auto-pick in playback settings).
   useEffect(() => {
+    if (!settings.autoPickSource) return;
     if (!scanQuery.data || manualPickRef.current) return;
     if (healthMap.get(server) !== false) return;
     const best = candidates[0];
     if (best && best !== server) setServerTransient(best);
-  }, [scanQuery.data, healthMap, candidates, server, setServerTransient]);
+  }, [settings.autoPickSource, scanQuery.data, healthMap, candidates, server, setServerTransient]);
 
   const provider = getProvider(server);
   const embedUrl = getEmbedUrl(server, mediaType, watchId, isTv ? season : undefined, isTv ? episode : undefined);
@@ -191,9 +197,11 @@ export function PlayerSection({
   // Auto-failover watchdog — if the iframe for the active URL never reports
   // onLoad, that source is dead for this browser: silently move to the next
   // scan-ranked candidate until something plays or every source is tried.
+  // Can be disabled + tuned (stall timeout) in playback settings.
   // ---------------------------------------------------------------------------
+  const failoverTimeoutMs = settings.failoverSeconds * 1000;
   useEffect(() => {
-    if (watchId === 0) return;
+    if (watchId === 0 || !settings.autoFailover) return;
     const timer = setTimeout(() => {
       if (manualPickRef.current) return;
       if (loaded?.url === embedUrl && loaded?.nonce === nonce) return; // playing fine
@@ -223,9 +231,9 @@ export function PlayerSection({
           description: 'Every stream source timed out. Hit Reload to retry or pick a server manually.',
         });
       }
-    }, FAILOVER_TIMEOUT_MS);
+    }, failoverTimeoutMs);
     return () => clearTimeout(timer);
-  }, [embedUrl, nonce, loaded, scanQuery.data, candidates, server, provider.name, watchId, setServerTransient]);
+  }, [embedUrl, nonce, loaded, scanQuery.data, candidates, server, provider.name, watchId, setServerTransient, settings.autoFailover, failoverTimeoutMs]);
 
   const navigateTo = (nextSeason: number, nextEpisode: number) => {
     const params = new URLSearchParams({
@@ -248,6 +256,75 @@ export function PlayerSection({
       : tvmazeSeasonEpisodes.length > 0
         ? tvmazeSeasonEpisodes[tvmazeSeasonEpisodes.length - 1].number
         : null;
+
+  /** Jump to the next candidate source — shared by the Skip button + "S" key. */
+  const skipSource = useCallback(() => {
+    // Prefer online sources (scan-complete case). Fall back to cycling through
+    // PROVIDERS in order if scan isn't done yet — better to let the user try
+    // ANY mirror than to show a dead-end toast while the scan is still running.
+    const onlineRows = (scanQuery.data ?? []).filter((r) => r.ok);
+    const candidateIds =
+      onlineRows.length > 0
+        ? onlineRows.map((r) => r.providerId)
+        : PROVIDERS.map((p) => p.id);
+    const currentIdx = candidateIds.indexOf(server);
+    const nextId = candidateIds[(currentIdx + 1) % candidateIds.length] ?? candidateIds[0];
+    if (!nextId || nextId === server) {
+      toast(`${provider.name} is the only option`, {
+        description: 'Hit Rescan to re-probe all sources.',
+      });
+      return;
+    }
+    // Don't set manualPickRef — keep auto-failover enabled so if this new
+    // source ALSO fails to load, the watchdog still cycles automatically.
+    setServerTransient(nextId);
+    setLoaded(null);
+    setFailover(null);
+    toast(`Switched to ${getProvider(nextId).name}`, {
+      description: 'If it still shows an error, hit Skip again.',
+    });
+  }, [scanQuery.data, server, provider.name, setServerTransient]);
+
+  // ---------------------------------------------------------------------------
+  // Keyboard shortcuts — R reload · S skip source · T theater · N/P episodes.
+  // Ignored while typing in inputs or when a dialog/popover has focus capture.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (watchId === 0) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (document.querySelector('[role="dialog"]')) return; // a dialog is open
+      const key = event.key.toLowerCase();
+      if (key === 'r') {
+        event.preventDefault();
+        setNonce((n) => n + 1);
+      } else if (key === 's') {
+        event.preventDefault();
+        skipSource();
+      } else if (key === 't') {
+        event.preventDefault();
+        setTheater((v) => !v);
+      } else if (key === 'n' && isTv) {
+        if (maxEpisode === null || episode < maxEpisode) navigateTo(season, episode + 1);
+      } else if (key === 'p' && isTv) {
+        if (episode > 1) navigateTo(season, episode - 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // navigateTo closes over season/episode/mediaType + router — recreated each render.
+     
+  }, [watchId, isTv, season, episode, maxEpisode, skipSource]);
 
   return (
     <section aria-label="Player" className="relative">
@@ -431,8 +508,21 @@ export function PlayerSection({
             type="button"
             variant="ghost"
             size="sm"
+            aria-label={theater ? 'Exit theater mode' : 'Theater mode — wider player (T)'}
+            title={theater ? 'Exit theater mode (T)' : 'Theater mode (T)'}
+            onClick={() => setTheater((v) => !v)}
+            className="h-9 gap-1.5 rounded-lg px-3 text-xs text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+          >
+            {theater ? <Minimize2 className="size-3.5" aria-hidden /> : <Maximize2 className="size-3.5" aria-hidden />}
+            <span className="hidden sm:inline">Theater</span>
+          </Button>
+          <PlayerSettingsMenu />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             aria-label="Reload the player"
-            title="Reload the player"
+            title="Reload the player (R)"
             onClick={() => setNonce((n) => n + 1)}
             className="h-9 gap-1.5 rounded-lg px-3 text-xs text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
           >
@@ -448,37 +538,8 @@ export function PlayerSection({
             variant="ghost"
             size="sm"
             aria-label="Skip to next online source"
-            title="Skip to next online source"
-            onClick={() => {
-              // Prefer online sources (scan-complete case). Fall back to
-              // cycling through PROVIDERS in order if scan isn't done yet
-              // — better to let the user try ANY mirror than to show a
-              // dead-end "no source" toast while the scan is still running.
-              const onlineRows = (scanQuery.data ?? []).filter((r) => r.ok);
-              const candidateIds =
-                onlineRows.length > 0
-                  ? onlineRows.map((r) => r.providerId)
-                  : PROVIDERS.map((p) => p.id);
-              const currentIdx = candidateIds.indexOf(server);
-              const nextId =
-                candidateIds[(currentIdx + 1) % candidateIds.length] ??
-                candidateIds[0];
-              if (!nextId || nextId === server) {
-                toast(`${provider.name} is the only option`, {
-                  description: "Hit Rescan to re-probe all sources.",
-                });
-                return;
-              }
-              // Don't set manualPickRef — keep auto-failover enabled so
-              // if this new source ALSO fails to load, the watchdog still
-              // cycles to the next candidate automatically.
-              setServerTransient(nextId);
-              setLoaded(null);
-              setFailover(null);
-              toast(`Switched to ${getProvider(nextId).name}`, {
-                description: "If it still shows an error, hit Skip again.",
-              });
-            }}
+            title="Skip to next online source (S)"
+            onClick={skipSource}
             className="h-9 gap-1.5 rounded-lg border border-brand/40 bg-brand-soft px-3 text-xs font-medium text-brand hover:bg-brand-soft-strong hover:text-brand dark:text-brand dark:hover:bg-brand-soft-strong dark:hover:text-brand"
           >
             <SkipForward className="size-3.5" aria-hidden />
@@ -644,74 +705,88 @@ export function PlayerSection({
         </div>
       )}
 
-      {/* Player iframe */}
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-zinc-200 bg-black dark:border-zinc-800">
-        <iframe
-          key={`${embedUrl}#${nonce}`}
-          src={proxyUrl}
-          title={`${title || `TMDB #${tmdbId}`} — ${provider.name} player`}
-          allowFullScreen
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          // NO sandbox attribute on the outer iframe. The double-iframe
-          // proxy trick (with outer sandbox) was the right idea but
-          // 2Embed's isReallySandboxed() check still detects the inherited
-          // sandbox restrictions even when window.frameElement is null —
-          // so the user still saw "Sandbox not allowed". The pragmatic fix
-          // is to ship without sandbox: browsers' built-in pop-up blockers
-          // handle most ad hijacks; the proxy page still isolates the
-          // provider from CineDeck's main window via cross-origin.
-          referrerPolicy="no-referrer"
-          scrolling="no"
-          onLoad={() => {
-            // Outer onLoad fires when the proxy HTML loads (fast). The
-            // real "player actually playing" signal comes from the
-            // postMessage listener above; we still set loaded here as
-            // a fallback so the watchdog doesn't fire prematurely when
-            // the proxy HTML is up but the inner iframe is still loading.
-            setLoaded({ url: embedUrl, nonce });
-            setFailover(null);
-          }}
-          className="absolute inset-0 size-full border-0"
-        />
-        {!iframeReady && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-50/85 px-6 text-center backdrop-blur-sm dark:bg-zinc-950/85"
-          >
-            {failover?.forUrl === embedUrl && failover.toId === null ? (
-              <>
-                <span className="flex size-14 items-center justify-center rounded-full bg-red-400/10">
-                  <Unplug className="size-6 text-red-500 dark:text-red-400" aria-hidden />
-                </span>
-                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">No mirror responded</p>
-                <p className="max-w-sm text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
-                  All {failover.total} mirrors timed out for this title. Hit Reload to retry,
-                  or pick a server above — some sources block datacenter scans but still play in browsers.
-                </p>
-              </>
-            ) : (
-              <>
-                <span className="flex size-14 items-center justify-center rounded-full bg-brand-soft">
-                  <Loader2 className="size-6 animate-spin text-brand" aria-hidden />
-                </span>
-                <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                  {failover?.forUrl === embedUrl && failover.toId
-                    ? `Auto-switched to ${getProvider(failover.toId).name}…`
-                    : `Connecting to ${provider.name}…`}
-                </p>
-                {failover?.forUrl === embedUrl && failover.toId ? (
-                  <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-600">
-                    {failover.fromName} timed out · attempt {failover.tried + 1}/{failover.total}
+      {/* Player iframe — theater mode breaks out to full viewport width */}
+      <div className={theater ? 'relative left-1/2 w-screen -translate-x-1/2' : undefined}>
+        <div
+          className={
+            'relative w-full overflow-hidden border border-zinc-200 bg-black dark:border-zinc-800 ' +
+            (theater ? 'rounded-none border-x-0' : 'aspect-video rounded-xl')
+          }
+          style={theater ? { height: 'min(56.25vw, calc(100svh - 9rem))' } : undefined}
+        >
+          <iframe
+            key={`${embedUrl}#${nonce}`}
+            src={proxyUrl}
+            title={`${title || `TMDB #${tmdbId}`} — ${provider.name} player`}
+            allowFullScreen
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            // NO sandbox attribute on the outer iframe. The double-iframe
+            // proxy trick (with outer sandbox) was the right idea but
+            // 2Embed's isReallySandboxed() check still detects the inherited
+            // sandbox restrictions even when window.frameElement is null —
+            // so the user still saw "Sandbox not allowed". The pragmatic fix
+            // is to ship without sandbox: browsers' built-in pop-up blockers
+            // handle most ad hijacks; the proxy page still isolates the
+            // provider from CineDeck's main window via cross-origin.
+            referrerPolicy="no-referrer"
+            scrolling="no"
+            onLoad={() => {
+              // Outer onLoad fires when the proxy HTML loads (fast). The
+              // real "player actually playing" signal comes from the
+              // postMessage listener above; we still set loaded here as
+              // a fallback so the watchdog doesn't fire prematurely when
+              // the proxy HTML is up but the inner iframe is still loading.
+              setLoaded({ url: embedUrl, nonce });
+              setFailover(null);
+            }}
+            className="absolute inset-0 size-full border-0"
+          />
+          {!iframeReady && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-50/85 px-6 text-center backdrop-blur-sm dark:bg-zinc-950/85"
+            >
+              {failover?.forUrl === embedUrl && failover.toId === null ? (
+                <>
+                  <span className="flex size-14 items-center justify-center rounded-full bg-red-400/10">
+                    <Unplug className="size-6 text-red-500 dark:text-red-400" aria-hidden />
+                  </span>
+                  <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">No mirror responded</p>
+                  <p className="max-w-sm text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
+                    All {failover.total} mirrors timed out for this title. Hit Reload to retry,
+                    or pick a server above — some sources block datacenter scans but still play in browsers.
                   </p>
-                ) : (
-                  <p className="font-mono text-xs text-zinc-500 dark:text-zinc-600">
-                    {imdbId ?? `TMDB ${tmdbId}`}
+                </>
+              ) : (
+                <>
+                  <span className="flex size-14 items-center justify-center rounded-full bg-brand-soft">
+                    <Loader2 className="size-6 animate-spin text-brand" aria-hidden />
+                  </span>
+                  <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                    {failover?.forUrl === embedUrl && failover.toId
+                      ? `Auto-switched to ${getProvider(failover.toId).name}…`
+                      : `Connecting to ${provider.name}…`}
                   </p>
-                )}
-              </>
-            )}
-          </div>
+                  {failover?.forUrl === embedUrl && failover.toId ? (
+                    <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-600">
+                      {failover.fromName} timed out · attempt {failover.tried + 1}/{failover.total}
+                    </p>
+                  ) : (
+                    <p className="font-mono text-xs text-zinc-500 dark:text-zinc-600">
+                      {imdbId ?? `TMDB ${tmdbId}`}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        {theater && (
+          <p className="mt-2 text-center text-[11px] text-zinc-500 dark:text-zinc-600">
+            Theater mode — press <kbd className="font-mono font-semibold">T</kbd> or hit the
+            Theater button to go back
+          </p>
         )}
       </div>
 
@@ -719,11 +794,14 @@ export function PlayerSection({
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
           CineDeck scans all 13 mirrors (7× 2Embed + 4× VidSrc + 2 others), plays the healthiest one
-          and auto-switches if a source stalls. If the player shows{' '}
-          <span className="font-mono text-zinc-600 dark:text-zinc-400">Playback failed</span> or
-          a blank screen, hit the <strong className="font-semibold text-brand">Skip</strong>{' '}
-          button above to try the next online mirror. Subtitles, audio &amp; quality live in the
-          player's own ⚙ / CC menu. If a stray ad tab opens, just close it — the movie keeps playing here.
+          and auto-switches if a source stalls — tune it all under{' '}
+          <strong className="font-semibold text-brand">Settings</strong> above. Shortcuts:{' '}
+          <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">R</kbd> reload ·{' '}
+          <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">S</kbd> skip ·{' '}
+          <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">T</kbd> theater ·{' '}
+          <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">N</kbd>/<kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">P</kbd> episode.
+          Subtitles, audio &amp; quality live in the player's own ⚙ / CC menu. If a stray ad tab
+          opens, just close it — the movie keeps playing here.
         </span>
       </p>
     </section>

@@ -10,6 +10,7 @@ import {
   LogIn,
   LogOut,
   Settings2,
+  Trophy,
   UserRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -90,6 +91,16 @@ export function Header() {
         <nav aria-label="Site actions" className="ml-auto flex items-center gap-1">
           <LanguageMenu />
           <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Live sports — scores, schedules and free sports TV"
+            title="Live Sports"
+            onClick={() => router.push('/?view=sports', { scroll: false })}
+            className="size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+          >
+            <Trophy className="size-4.5 text-brand" aria-hidden />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
