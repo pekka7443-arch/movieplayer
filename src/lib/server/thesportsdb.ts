@@ -273,6 +273,25 @@ export const FEATURED_LEAGUES: { id: string; name: string }[] = [
   { id: '4370', name: 'Formula 1' },
 ];
 
+/** One event by TheSportsDB id (deep-linkable watch pages). */
+export async function sportsEventById(id: string): Promise<SportsEvent | null> {
+  if (!/^\d{1,12}$/.test(id)) return null;
+  const key = `event:${id}`;
+  const cached = cacheGet<SportsEvent | null>(key);
+  if (cached !== null) return cached;
+
+  const res = await httpsJson<{ events?: RawEvent[] | null }>(
+    `${BASE}/lookupevent.php?id=${encodeURIComponent(id)}`,
+  );
+  const rows = res?.status === 200 && res.body && typeof res.body === 'object'
+    ? ((res.body as { events?: RawEvent[] | null }).events ?? [])
+    : [];
+  const event = rows.length > 0 ? normalizeEvent(rows[0]!, Date.now()) : null;
+  // A finished/known event never changes again — cache longer in that case.
+  cacheSet(key, event, event?.state === 'live' ? 60_000 : 10 * 60_000);
+  return event;
+}
+
 /** Next event for each featured league (parallel, deduped, kickoff order). */
 export async function sportsUpcomingFeatured(): Promise<SportsEvent[]> {
   const key = 'upcoming:featured';

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   SPORTS,
+  sportsEventById,
   sportsEventsAllSports,
   sportsEventsDay,
   sportsUpcomingFeatured,
@@ -9,6 +10,8 @@ import {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * GET /api/sports/events?id=<eventId>
+ *   → { event: SportsEvent | null }
  * GET /api/sports/events?date=YYYY-MM-DD&sport=Soccer
  *   → { date, sports: string[], events: SportsEvent[] }  (sport omitted = all)
  * GET /api/sports/events?upcoming=1
@@ -22,6 +25,15 @@ export async function GET(request: Request) {
   if (searchParams.get('upcoming')) {
     const upcoming = await sportsUpcomingFeatured();
     return NextResponse.json({ upcoming });
+  }
+
+  const id = searchParams.get('id');
+  if (id) {
+    const event = await sportsEventById(id);
+    return NextResponse.json(
+      { event },
+      { headers: { 'cache-control': event ? 'public, max-age=30' : 'no-store' } },
+    );
   }
 
   const date = searchParams.get('date') ?? new Date().toISOString().slice(0, 10);

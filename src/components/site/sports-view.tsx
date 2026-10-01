@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ExternalLink,
   Info,
+  ListOrdered,
   Loader2,
   MonitorPlay,
   Radio,
@@ -183,6 +184,22 @@ function useMatchCandidates(event: SportsEvent | null) {
   });
 }
 
+/** Single-event lookup — powers deep links like /?view=sports&watch=<id>. */
+function useSportsEvent(id: string | null, enabled: boolean) {
+  return useQuery<SportsEvent | null>({
+    queryKey: ['sports-event', id],
+    enabled: enabled && !!id,
+    queryFn: async () => {
+      const res = await fetch(`/api/sports/events?id=${id}`);
+      if (!res.ok) throw new Error('event_unreachable');
+      const json = (await res.json()) as { event: SportsEvent | null };
+      return json.event;
+    },
+    staleTime: 60_000,
+    retry: 1,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Small pieces
 // ---------------------------------------------------------------------------
@@ -239,125 +256,24 @@ function StatusPill({ event }: { event: SportsEvent }) {
   );
 }
 
-function EventCard({
-  event,
-  selected,
-  onWatch,
-}: {
-  event: SportsEvent;
-  selected: boolean;
-  onWatch: (event: SportsEvent) => void;
-}) {
-  return (
-    <article
-      className={cn(
-        'group relative flex min-w-0 flex-col rounded-xl border bg-white/80 p-4 transition-shadow hover:shadow-md dark:bg-zinc-900/60',
-        selected
-          ? 'border-brand/60 ring-2 ring-brand/30'
-          : 'border-zinc-200 dark:border-zinc-800/70',
-        event.state === 'live' && 'border-red-500/30 dark:border-red-500/30',
-      )}
-    >
-      <div className="mb-3 flex items-center gap-2">
-        {event.leagueBadge ? (
-           
-          <img
-            src={event.leagueBadge}
-            alt=""
-            width={22}
-            height={22}
-            loading="lazy"
-            className="size-[22px] shrink-0 rounded object-contain"
-          />
-        ) : (
-          <Trophy className="size-4 shrink-0 text-brand" aria-hidden />
-        )}
-        <span className="truncate text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
-          {event.league}
-        </span>
-        <span className="ml-auto shrink-0">
-          <StatusPill event={event} />
-        </span>
-      </div>
-
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              'truncate text-sm font-semibold',
-              event.state === 'finished' &&
-                event.homeScore !== null &&
-                event.awayScore !== null &&
-                event.homeScore < event.awayScore
-                ? 'text-zinc-500 dark:text-zinc-500'
-                : 'text-zinc-900 dark:text-zinc-100',
-            )}
-          >
-            {event.home}
-          </span>
-          {event.homeScore !== null && (
-            <span
-              className={cn(
-                'ml-auto rounded-md px-1.5 py-0.5 font-mono text-sm font-bold',
-                event.state === 'live'
-                  ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                  : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
-              )}
-            >
-              {event.homeScore}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              'truncate text-sm font-semibold',
-              event.state === 'finished' &&
-                event.awayScore !== null &&
-                event.homeScore !== null &&
-                event.awayScore < event.homeScore
-                ? 'text-zinc-500 dark:text-zinc-500'
-                : 'text-zinc-900 dark:text-zinc-100',
-            )}
-          >
-            {event.away}
-          </span>
-          {event.awayScore !== null && (
-            <span
-              className={cn(
-                'ml-auto rounded-md px-1.5 py-0.5 font-mono text-sm font-bold',
-                event.state === 'live'
-                  ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                  : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
-              )}
-            >
-              {event.awayScore}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="truncate text-[11px] text-zinc-500 dark:text-zinc-600">
-          {[SPORT_LABELS[event.sport] ?? event.sport, event.venue].filter(Boolean).join(' · ')}
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => onWatch(event)}
-          className={cn(
-            'h-8 shrink-0 gap-1.5 rounded-lg px-3 text-xs font-semibold',
-            event.state === 'live'
-              ? 'bg-red-500 text-white hover:bg-red-400'
-              : 'bg-brand text-brand-foreground hover:bg-brand/90',
-          )}
-        >
-          {event.state === 'live' ? <Radio className="size-3.5" aria-hidden /> : <MonitorPlay className="size-3.5" aria-hidden />}
-          {event.state === 'live' ? 'Watch live' : 'Watch'}
-        </Button>
-      </div>
-    </article>
-  );
+/** Compact one-column status for schedule rows. */
+function RowStatus({ event }: { event: SportsEvent }) {
+  if (event.state === 'live') return <StatusPill event={event} />;
+  if (event.state === 'finished') {
+    return (
+      <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-600">
+        FT
+      </span>
+    );
+  }
+  if (event.start) {
+    return (
+      <span className="font-mono text-xs font-semibold tabular-nums text-zinc-500 dark:text-zinc-400">
+        {timeFmt.format(new Date(event.start))}
+      </span>
+    );
+  }
+  return <span className="text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-600">TBD</span>;
 }
 
 /** Countdown ticker — ticks only while an upcoming event is selected. */
@@ -383,113 +299,305 @@ const WATCH_LINKS = (event: SportsEvent): { label: string; href: string }[] => {
   return links;
 };
 
-function WatchPanel({
+/** Row of external fallback links (finished events + "more feeds" rows). */
+function LinksRow({ event, dense }: { event: SportsEvent; dense?: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {!dense && (
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-600">
+          More places to watch
+        </span>
+      )}
+      {WATCH_LINKS(event).map((link) => (
+        <Button
+          key={link.label}
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => window.open(link.href, '_blank', 'noopener,noreferrer')}
+          className="h-8 gap-1.5 rounded-lg border-zinc-200 bg-white/70 text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+        >
+          {link.label}
+          <ExternalLink className="size-3" aria-hidden />
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Schedule — league-grouped, morningstreams-style dense list
+// ---------------------------------------------------------------------------
+
+const STATE_RANK = { live: 0, upcoming: 1, unknown: 2, finished: 3 } as const;
+
+function ScheduleRow({
   event,
-  onClose,
-  onBrowseChannels,
+  active,
+  onWatch,
 }: {
   event: SportsEvent;
-  onClose: () => void;
-  onBrowseChannels: () => void;
+  active: boolean;
+  onWatch: (event: SportsEvent) => void;
 }) {
-  const now = useNow();
-
+  const hasScore = event.homeScore !== null && event.awayScore !== null;
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      aria-label={`Watch ${event.home} vs ${event.away}`}
-      className="relative scroll-mt-24 overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-6"
+    <li
+      className={cn(
+        'border-b border-zinc-100 last:border-b-0 dark:border-zinc-800/60',
+        event.state === 'live' && 'border-l-2 border-l-red-500',
+      )}
     >
       <div
-        aria-hidden
-        className="pointer-events-none absolute -top-16 right-0 -z-10 h-48 w-96 rounded-full bg-brand-soft blur-3xl"
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        aria-label="Close watch panel"
-        onClick={onClose}
-        className="absolute right-3 top-3 size-8 rounded-lg text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
-      >
-        <X className="size-4" aria-hidden />
-      </Button>
-
-      <div className="flex flex-wrap items-center gap-3">
-        {event.leagueBadge ? (
-           
-          <img src={event.leagueBadge} alt="" width={36} height={36} className="size-9 rounded object-contain" />
-        ) : (
-          <Trophy className="size-6 text-brand" aria-hidden />
+        className={cn(
+          'flex items-center gap-2.5 px-3 py-2.5 transition-colors sm:px-4',
+          event.state === 'live'
+            ? 'bg-red-500/[0.04] hover:bg-red-500/[0.08] dark:bg-red-500/[0.06]'
+            : 'hover:bg-zinc-100/70 dark:hover:bg-zinc-800/50',
+          active && 'bg-brand-soft/70',
         )}
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
-            {event.league}
-            {event.round ? ` · Round ${event.round}` : ''}
-          </p>
-          <h2 className="truncate text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-            {event.home} <span className="font-normal text-zinc-400">vs</span> {event.away}
-          </h2>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <StatusPill event={event} />
-          {event.state === 'upcoming' && event.start && (
-            <span className="rounded-lg bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand">
-              {countdownParts(event.start, now)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {event.state === 'live' && (
-        <p className="mt-4 rounded-xl border border-red-500/25 bg-red-500/5 px-4 py-3 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-          <strong className="font-semibold text-red-600 dark:text-red-400">This match is live right now.</strong>{' '}
-          Free event streams rotate constantly — grab a working feed from the links below, or play an
-          always-on sports channel from the TV Channels tab.
-        </p>
-      )}
-      {event.state === 'upcoming' && (
-        <p className="mt-4 rounded-xl border border-brand/25 bg-brand-soft/60 px-4 py-3 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-          Not started yet. When it kicks off, grab a feed from the links below — or keep an
-          always-on sports channel playing from the TV Channels tab.
-        </p>
-      )}
-      {event.state === 'finished' && (
-        <p className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm leading-relaxed text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-          Finished. Full replays usually appear on the source sites a few hours after the final whistle.
-        </p>
-      )}
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
-          Where to watch
+      >
+        <span className="flex w-12 shrink-0 items-center sm:w-20">
+          <RowStatus event={event} />
         </span>
-        {WATCH_LINKS(event).map((link) => (
-          <Button
-            key={link.label}
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(link.href, '_blank', 'noopener,noreferrer')}
-            className="h-9 gap-1.5 rounded-lg border-zinc-200 bg-white/70 text-xs text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-          >
-            {link.label}
-            <ExternalLink className="size-3.5" aria-hidden />
-          </Button>
-        ))}
+
+        <button
+          type="button"
+          onClick={() => onWatch(event)}
+          aria-label={`Watch ${event.home} vs ${event.away}`}
+          className="flex min-w-0 flex-1 cursor-pointer items-center rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+        >
+          {/* Mobile — two stacked team lines so names stay readable */}
+          <span className="flex min-w-0 flex-col gap-0.5 sm:hidden">
+            <span className="flex min-w-0 items-center gap-1.5">
+              {event.homeBadge ? (
+                <img
+                  src={event.homeBadge}
+                  alt=""
+                  width={16}
+                  height={16}
+                  loading="lazy"
+                  className="size-4 shrink-0 object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.visibility = 'hidden';
+                  }}
+                />
+              ) : null}
+              <span
+                className={cn(
+                  'min-w-0 flex-1 truncate text-[13px] font-semibold',
+                  event.state === 'finished'
+                    ? 'text-zinc-500 dark:text-zinc-500'
+                    : 'text-zinc-900 dark:text-zinc-100',
+                )}
+              >
+                {event.home}
+              </span>
+              {event.homeScore !== null && (
+                <span
+                  className={cn(
+                    'shrink-0 font-mono text-xs font-bold tabular-nums',
+                    event.state === 'live' ? 'text-red-600 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-300',
+                  )}
+                >
+                  {event.homeScore}
+                </span>
+              )}
+            </span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              {event.awayBadge ? (
+                <img
+                  src={event.awayBadge}
+                  alt=""
+                  width={16}
+                  height={16}
+                  loading="lazy"
+                  className="size-4 shrink-0 object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.visibility = 'hidden';
+                  }}
+                />
+              ) : null}
+              <span
+                className={cn(
+                  'min-w-0 flex-1 truncate text-[13px] font-semibold',
+                  event.state === 'finished'
+                    ? 'text-zinc-500 dark:text-zinc-500'
+                    : 'text-zinc-900 dark:text-zinc-100',
+                )}
+              >
+                {event.away}
+              </span>
+              {event.awayScore !== null && (
+                <span
+                  className={cn(
+                    'shrink-0 font-mono text-xs font-bold tabular-nums',
+                    event.state === 'live' ? 'text-red-600 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-300',
+                  )}
+                >
+                  {event.awayScore}
+                </span>
+              )}
+            </span>
+          </span>
+
+          {/* sm+ — classic single line: home score away */}
+          <span className="hidden min-w-0 flex-1 items-center gap-2 sm:flex">
+            {event.homeBadge ? (
+              <img
+                src={event.homeBadge}
+                alt=""
+                width={18}
+                height={18}
+                loading="lazy"
+                className="size-[18px] shrink-0 object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.visibility = 'hidden';
+                }}
+              />
+            ) : null}
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate text-right text-sm font-semibold',
+                event.state === 'finished'
+                  ? 'text-zinc-500 dark:text-zinc-500'
+                  : 'text-zinc-900 dark:text-zinc-100',
+              )}
+            >
+              {event.home}
+            </span>
+            {hasScore ? (
+              <span
+                className={cn(
+                  'shrink-0 rounded-md px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums',
+                  event.state === 'live'
+                    ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                    : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+                )}
+              >
+                {event.homeScore}–{event.awayScore}
+              </span>
+            ) : (
+              <span className="shrink-0 text-[11px] text-zinc-400 dark:text-zinc-600">vs</span>
+            )}
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate text-sm font-semibold',
+                event.state === 'finished'
+                  ? 'text-zinc-500 dark:text-zinc-500'
+                  : 'text-zinc-900 dark:text-zinc-100',
+              )}
+            >
+              {event.away}
+            </span>
+            {event.awayBadge ? (
+              <img
+                src={event.awayBadge}
+                alt=""
+                width={18}
+                height={18}
+                loading="lazy"
+                className="size-[18px] shrink-0 object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.visibility = 'hidden';
+                }}
+              />
+            ) : null}
+          </span>
+        </button>
+
+        <span className="hidden w-40 shrink-0 truncate text-[11px] text-zinc-400 lg:block dark:text-zinc-600">
+          {event.venue ?? ''}
+        </span>
+
         <Button
           type="button"
           size="sm"
-          onClick={onBrowseChannels}
-          className="h-9 gap-1.5 rounded-lg bg-brand px-3.5 text-xs font-semibold text-brand-foreground hover:bg-brand/90"
+          onClick={() => onWatch(event)}
+          className={cn(
+            'h-8 shrink-0 gap-1 rounded-lg px-2.5 text-[11px] font-semibold sm:gap-1.5 sm:px-3 sm:text-xs',
+            event.state === 'live'
+              ? 'bg-red-500 text-white hover:bg-red-400'
+              : 'bg-brand text-brand-foreground hover:bg-brand/90',
+          )}
         >
-          <Tv className="size-4" aria-hidden />
-          Browse TV channels
+          {event.state === 'live' ? (
+            <Radio className="size-3.5" aria-hidden />
+          ) : (
+            <MonitorPlay className="size-3.5" aria-hidden />
+          )}
+          {event.state === 'live' ? 'Watch live' : event.state === 'finished' ? 'Replay' : 'Watch'}
         </Button>
       </div>
-    </motion.section>
+    </li>
+  );
+}
+
+function ScheduleList({
+  events,
+  watchId,
+  onWatch,
+}: {
+  events: SportsEvent[];
+  watchId: string | null;
+  onWatch: (event: SportsEvent) => void;
+}) {
+  const groups = useMemo(() => {
+    const map = new Map<string, SportsEvent[]>();
+    for (const e of events) {
+      const list = map.get(e.league);
+      if (list) list.push(e);
+      else map.set(e.league, [e]);
+    }
+    return [...map.entries()]
+      .map(([league, list]) => {
+        // Groups with live action first, then by earliest kickoff.
+        const top = Math.min(...list.map((e) => STATE_RANK[e.state]));
+        const anchor = list.find((e) => STATE_RANK[e.state] === top);
+        const t = anchor?.start ? Date.parse(anchor.start) : Number.MAX_SAFE_INTEGER;
+        const badge = list.find((e) => e.leagueBadge)?.leagueBadge ?? null;
+        const sport = list[0]?.sport ?? '';
+        return { league, list, top, t, badge, sport };
+      })
+      .sort((a, b) => (a.top !== b.top ? a.top - b.top : a.t - b.t));
+  }, [events]);
+
+  return (
+    <div className="space-y-5" aria-label="Schedule by league">
+      {groups.map(({ league, list, badge, sport }) => (
+        <section key={league || 'other'} aria-label={league || 'Other events'}>
+          <header className="mb-1.5 flex items-center gap-2 px-1">
+            {badge ? (
+              <img
+                src={badge}
+                alt=""
+                width={20}
+                height={20}
+                loading="lazy"
+                className="size-5 shrink-0 rounded object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.visibility = 'hidden';
+                }}
+              />
+            ) : (
+              <Trophy className="size-4 shrink-0 text-brand" aria-hidden />
+            )}
+            <h2 className="truncate text-[13px] font-bold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">
+              {league || 'Other events'}
+            </h2>
+            <span className="text-[11px] text-zinc-400 dark:text-zinc-600">
+              {SPORT_LABELS[sport] ?? sport} · {list.length}
+            </span>
+            <span aria-hidden className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800/70" />
+          </header>
+          <ul className="overflow-hidden rounded-xl border border-zinc-200 bg-white/80 shadow-sm dark:border-zinc-800/70 dark:bg-zinc-900/60">
+            {list.map((e) => (
+              <ScheduleRow key={e.id} event={e} active={watchId === e.id} onWatch={onWatch} />
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
   );
 }
 
@@ -556,7 +664,6 @@ function ChannelPlayer({ channel, onClose }: { channel: SportsChannel; onClose: 
       className="relative scroll-mt-24 overflow-hidden rounded-2xl border border-zinc-200 bg-black shadow-sm dark:border-zinc-800"
     >
       <div className="relative aspect-video w-full">
-        { }
         <video
           ref={videoRef}
           controls
@@ -605,7 +712,6 @@ function ChannelPlayer({ channel, onClose }: { channel: SportsChannel; onClose: 
       </div>
       <div className="flex items-center gap-3 border-t border-zinc-800 bg-zinc-950 px-4 py-3">
         {channel.logo ? (
-           
           <img src={channel.logo} alt="" width={28} height={28} className="size-7 rounded object-contain" />
         ) : (
           <Tv className="size-5 text-brand" aria-hidden />
@@ -650,13 +756,11 @@ function LivePlayer({
   event,
   candidates,
   loading,
-  onClose,
   onBrowseChannels,
 }: {
   event: SportsEvent;
   candidates: SportsChannel[];
   loading: boolean;
-  onClose: () => void;
   onBrowseChannels: () => void;
 }) {
   const { autoFailover, failoverSeconds } = useSettings();
@@ -741,7 +845,7 @@ function LivePlayer({
     };
   }, [current, autoFailover, failoverSeconds, advance]);
 
-  /** Manual pick from the ranked rail. */
+  /** Manual pick from the ranked feeds list. */
   const pick = (i: number) => {
     if (!candidates[i] || i === idx) return;
     setLiveUrl(null);
@@ -888,107 +992,176 @@ function LivePlayer({
         </div>
       </motion.section>
 
-      {candidates.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1" aria-label="Ranked live feeds">
-          {candidates.slice(0, 14).map((c, i) => (
-            <button
-              key={`${c.id}-${i}`}
-              type="button"
-              onClick={() => pick(i)}
-              aria-pressed={current?.id === c.id}
-              className={cn(
-                'flex h-10 shrink-0 items-center gap-2 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
-                current?.id === c.id
-                  ? 'border-brand bg-brand text-brand-foreground'
-                  : 'border-zinc-200 bg-white/70 text-zinc-600 hover:border-brand/40 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100',
-              )}
-            >
-              {c.logo ? (
-                <img
-                  src={c.logo}
-                  alt=""
-                  width={18}
-                  height={18}
-                  loading="lazy"
-                  className="size-[18px] shrink-0 rounded object-contain"
-                  onError={(e) => {
-                    e.currentTarget.style.visibility = 'hidden';
-                  }}
-                />
-              ) : (
-                <Tv className="size-3.5 shrink-0" aria-hidden />
-              )}
-              <span className="max-w-44 truncate">{c.name}</span>
-              <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] tabular-nums opacity-70 dark:bg-white/10">
-                #{i + 1}
-              </span>
-            </button>
-          ))}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onBrowseChannels}
-            className="h-10 shrink-0 gap-1.5 rounded-full px-3.5 text-xs text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
-          >
-            All channels
-            <ArrowRight className="size-3.5" aria-hidden />
-          </Button>
-        </div>
-      )}
+      <FeedList
+        candidates={candidates}
+        currentId={current?.id ?? null}
+        loading={loading}
+        onPick={pick}
+        onBrowseChannels={onBrowseChannels}
+      />
     </>
   );
 }
 
-/** Watch panel with a live feed that starts playing immediately. */
-function LiveWatchPanel({
+/** Numbered live-feeds list — pick any ranked feed with one click. */
+function FeedList({
+  candidates,
+  currentId,
+  loading,
+  onPick,
+  onBrowseChannels,
+}: {
+  candidates: SportsChannel[];
+  currentId: string | null;
+  loading: boolean;
+  onPick: (i: number) => void;
+  onBrowseChannels: () => void;
+}) {
+  return (
+    <section
+      aria-label="Live feeds"
+      className="overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80"
+    >
+      <header className="flex items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800/70">
+        <ListOrdered className="size-4 shrink-0 text-brand" aria-hidden />
+        <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Live feeds</h3>
+        <span className="hidden truncate text-[11px] text-zinc-500 sm:inline dark:text-zinc-500">
+          {loading
+            ? 'Checking which feeds are alive…'
+            : candidates.length > 0
+              ? `${candidates.length} ranked & pre-checked — click to switch`
+              : 'Ranked for this match'}
+        </span>
+      </header>
+      {candidates.length > 0 ? (
+        <ul className="grid gap-1.5 overflow-y-auto p-2 sm:grid-cols-2">
+          {candidates.map((c, i) => (
+            <li key={`${c.id}-${i}`}>
+              <button
+                type="button"
+                onClick={() => onPick(i)}
+                aria-pressed={currentId === c.id}
+                className={cn(
+                  'flex h-11 w-full items-center gap-2.5 rounded-xl border px-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
+                  currentId === c.id
+                    ? 'border-brand/60 bg-brand-soft ring-1 ring-brand/40'
+                    : 'border-zinc-200 bg-white/60 hover:border-brand/40 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:bg-zinc-800/60',
+                )}
+              >
+                <span
+                  className={cn(
+                    'flex size-6 shrink-0 items-center justify-center rounded-md font-mono text-[10px] font-bold tabular-nums',
+                    currentId === c.id
+                      ? 'bg-brand text-brand-foreground'
+                      : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+                  )}
+                >
+                  {i + 1}
+                </span>
+                {c.logo ? (
+                  <img
+                    src={c.logo}
+                    alt=""
+                    width={20}
+                    height={20}
+                    loading="lazy"
+                    className="size-5 shrink-0 rounded object-contain"
+                    onError={(e) => {
+                      e.currentTarget.style.visibility = 'hidden';
+                    }}
+                  />
+                ) : (
+                  <Tv className="size-4 shrink-0 text-brand" aria-hidden />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold text-zinc-800 dark:text-zinc-200">
+                    {c.name}
+                  </span>
+                  <span className="block truncate text-[10px] text-zinc-500 dark:text-zinc-600">
+                    {c.group}
+                  </span>
+                </span>
+                {currentId === c.id && (
+                  <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-brand">
+                    <LiveDot />
+                    playing
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="px-4 py-4 text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
+          {loading
+            ? 'Scanning every free sports channel for this match…'
+            : 'No ranked feeds available right now — browse all TV channels instead.'}
+        </p>
+      )}
+      <footer className="flex items-center justify-between gap-2 border-t border-zinc-200 px-4 py-2.5 dark:border-zinc-800/70">
+        <span className="text-[11px] text-zinc-400 dark:text-zinc-600">
+          Free-to-air channels via iptv-org · auto-failover keeps the picture alive
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onBrowseChannels}
+          className="h-8 shrink-0 gap-1.5 rounded-lg px-3 text-xs text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
+        >
+          All channels
+          <ArrowRight className="size-3.5" aria-hidden />
+        </Button>
+      </footer>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Watch page — the focused, URL-driven view for one event (like a dedicated
+// /watch page: big player on top, feeds + context below, back returns to the
+// schedule).
+// ---------------------------------------------------------------------------
+
+function WatchPage({
   event,
   candidates,
   loading,
-  onClose,
+  onBack,
   onBrowseChannels,
+  upNext,
+  onSelectEvent,
 }: {
   event: SportsEvent;
   candidates: SportsChannel[];
   loading: boolean;
-  onClose: () => void;
+  onBack: () => void;
   onBrowseChannels: () => void;
+  upNext: SportsEvent[];
+  onSelectEvent: (event: SportsEvent) => void;
 }) {
   const now = useNow();
+  const hasScore = event.homeScore !== null && event.awayScore !== null;
 
   return (
-    <div className="space-y-4" aria-label={`Watch ${event.home} vs ${event.away}`}>
+    <div id="sports-watch" className="space-y-4 scroll-mt-24">
+      {/* Header */}
       <div className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
         <div
           aria-hidden
           className="pointer-events-none absolute -top-16 right-0 -z-10 h-48 w-96 rounded-full bg-brand-soft blur-3xl"
         />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Close watch panel"
-          onClick={onClose}
-          className="absolute right-3 top-3 size-8 rounded-lg text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
-        >
-          <X className="size-4" aria-hidden />
-        </Button>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {event.leagueBadge ? (
-            <img src={event.leagueBadge} alt="" width={36} height={36} className="size-9 rounded object-contain" />
-          ) : (
-            <Trophy className="size-6 text-brand" aria-hidden />
-          )}
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
-              {event.league}
-              {event.round ? ` · Round ${event.round}` : ''}
-            </p>
-            <h2 className="truncate text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-              {event.home} <span className="font-normal text-zinc-400">vs</span> {event.away}
-            </h2>
-          </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            className="-ml-2 h-8 gap-1 rounded-lg px-2 text-xs text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+            All events
+          </Button>
           <div className="ml-auto flex items-center gap-2">
             <StatusPill event={event} />
             {event.state === 'upcoming' && event.start && (
@@ -999,49 +1172,145 @@ function LiveWatchPanel({
           </div>
         </div>
 
-        <p className="mt-4 rounded-xl border border-red-500/25 bg-red-500/5 px-4 py-3 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-          {event.state === 'live' ? (
-            <>
-              <strong className="font-semibold text-red-600 dark:text-red-400">This match is live right now.</strong>{' '}
-              CineDeck found the best free feed and started it — if it stutters, hop to another
-              channel below or hit Next feed.
-            </>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          {event.leagueBadge ? (
+            <img src={event.leagueBadge} alt="" width={36} height={36} className="size-9 rounded object-contain" />
           ) : (
-            <>
-              <strong className="font-semibold text-brand">Not kicked off yet.</strong> The top{' '}
-              {SPORT_LABELS[event.sport] ?? event.sport} channel is already playing — it usually
-              carries the match when it starts.
-            </>
+            <Trophy className="size-6 text-brand" aria-hidden />
           )}
-        </p>
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
+              {event.league}
+              {event.round ? ` · Round ${event.round}` : ''}
+            </p>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-600">
+              {[SPORT_LABELS[event.sport] ?? event.sport, event.venue, event.start ? `${dayFmt.format(new Date(event.start))} · ${timeFmt.format(new Date(event.start))}` : null]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          </div>
+        </div>
+
+        {/* Teams + score */}
+        <div className="mt-4 flex items-center justify-center gap-3 sm:gap-6">
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2.5 sm:gap-3">
+            <span className="min-w-0 truncate text-right text-base font-bold text-zinc-900 sm:text-xl dark:text-zinc-100">
+              {event.home}
+            </span>
+            {event.homeBadge ? (
+              <img
+                src={event.homeBadge}
+                alt=""
+                width={40}
+                height={40}
+                className="size-8 shrink-0 object-contain sm:size-10"
+                onError={(e) => {
+                  e.currentTarget.style.visibility = 'hidden';
+                }}
+              />
+            ) : null}
+          </div>
+          {hasScore ? (
+            <span
+              className={cn(
+                'shrink-0 rounded-xl px-3 py-1.5 font-mono text-xl font-black tabular-nums sm:text-2xl',
+                event.state === 'live'
+                  ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                  : 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200',
+              )}
+            >
+              {event.homeScore}–{event.awayScore}
+            </span>
+          ) : (
+            <span className="shrink-0 text-sm text-zinc-400 dark:text-zinc-600">vs</span>
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
+            {event.awayBadge ? (
+              <img
+                src={event.awayBadge}
+                alt=""
+                width={40}
+                height={40}
+                className="size-8 shrink-0 object-contain sm:size-10"
+                onError={(e) => {
+                  e.currentTarget.style.visibility = 'hidden';
+                }}
+              />
+            ) : null}
+            <span className="min-w-0 truncate text-base font-bold text-zinc-900 sm:text-xl dark:text-zinc-100">
+              {event.away}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <LivePlayer
-        event={event}
-        candidates={candidates}
-        loading={loading}
-        onClose={onClose}
-        onBrowseChannels={onBrowseChannels}
-      />
+      {/* Body — finished events get links, everything else plays live now */}
+      {event.state === 'finished' ? (
+        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
+          <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Match finished</p>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
+            Full replays usually appear on the source sites a few hours after the final whistle.
+          </p>
+          <div className="mt-4">
+            <LinksRow event={event} dense />
+          </div>
+          <div className="mt-3">
+            <Button
+              type="button"
+              size="sm"
+              onClick={onBrowseChannels}
+              className="h-8 gap-1.5 rounded-lg bg-brand px-3.5 text-xs font-semibold text-brand-foreground hover:bg-brand/90"
+            >
+              <Tv className="size-3.5" aria-hidden />
+              Browse sports channels
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <LivePlayer
+            event={event}
+            candidates={candidates}
+            loading={loading}
+            onBrowseChannels={onBrowseChannels}
+          />
 
-      <div className="flex flex-wrap items-center gap-2 px-1">
-        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-600">
-          More feeds
-        </span>
-        {WATCH_LINKS(event).map((link) => (
-          <Button
-            key={link.label}
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(link.href, '_blank', 'noopener,noreferrer')}
-            className="h-8 gap-1.5 rounded-lg border-zinc-200 bg-white/70 text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-          >
-            {link.label}
-            <ExternalLink className="size-3" aria-hidden />
-          </Button>
-        ))}
-      </div>
+          <LinksRow event={event} />
+
+          {upNext.length > 0 && (
+            <section
+              aria-label="Up next"
+              className="overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80"
+            >
+              <header className="flex items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800/70">
+                <CalendarDays className="size-4 shrink-0 text-brand" aria-hidden />
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  Up next in {event.league || 'this league'}
+                </h3>
+              </header>
+              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                {upNext.map((e) => (
+                  <li key={e.id}>
+                    <button
+                      type="button"
+                      onClick={() => onSelectEvent(e)}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/50 dark:hover:bg-zinc-800/50"
+                    >
+                      <span className="w-16 shrink-0">
+                        <RowStatus event={e} />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-800 dark:text-zinc-200">
+                        {e.home} <span className="font-normal text-zinc-400">vs</span> {e.away}
+                      </span>
+                      <ArrowRight className="size-3.5 shrink-0 text-zinc-400" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -1052,21 +1321,54 @@ function LiveWatchPanel({
 
 export function SportsView() {
   const router = useRouter();
+  const params = useSearchParams();
+  const watchId = params.get('watch');
   const [tab, setTab] = useState<SportsTab>('today');
   const [sport, setSport] = useState('All');
-  const [date, setDate] = useState(todayUtc);
-  const [selected, setSelected] = useState<SportsEvent | null>(null);
+  const [date, setDate] = useState(todayUtc());
   const [channel, setChannel] = useState<SportsChannel | null>(null);
   const [channelQuery, setChannelQuery] = useState('');
 
   const eventsQuery = useSportsEvents(date, tab === 'today' ? sport : 'All');
-  const upcomingQuery = useUpcomingEvents(tab === 'upcoming');
+  const upcomingQuery = useUpcomingEvents(tab === 'upcoming' || watchId !== null);
   const channelsQuery = useSportsChannels();
-  const matchQuery = useMatchCandidates(selected);
+  // Always keeps a full all-sports day list around — powers the live counts
+  // on the sport chips and the up-next rail (deduped by react-query).
+  const allDayQuery = useSportsEvents(date, 'All');
 
   const events = eventsQuery.data ?? [];
-  const liveCount = useMemo(() => events.filter((e) => e.state === 'live').length, [events]);
+  const allKnown = useMemo(
+    () => [...events, ...(upcomingQuery.data ?? [])],
+    [events, upcomingQuery.data],
+  );
+
+  const localWatch = useMemo(
+    () => allKnown.find((e) => e.id === watchId) ?? null,
+    [allKnown, watchId],
+  );
+  const lookupQuery = useSportsEvent(watchId, watchId !== null && localWatch === null);
+  const watchEvent = localWatch ?? (lookupQuery.data ?? null);
+  const watchLoading = watchId !== null && localWatch === null && lookupQuery.isPending;
+
+  const matchQuery = useMatchCandidates(watchEvent);
+
+  const liveCount = useMemo(() => allDayQuery.data?.filter((e) => e.state === 'live').length ?? 0, [allDayQuery.data]);
+  const liveBySport = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of allDayQuery.data ?? []) {
+      if (e.state !== 'live') continue;
+      m.set(e.sport, (m.get(e.sport) ?? 0) + 1);
+    }
+    return m;
+  }, [allDayQuery.data]);
   const isToday = date === todayUtc();
+
+  const upNext = useMemo(() => {
+    if (!watchEvent) return [];
+    return allKnown
+      .filter((e) => e.id !== watchEvent.id && e.league === watchEvent.league && e.state !== 'finished')
+      .slice(0, 5);
+  }, [allKnown, watchEvent]);
 
   const filteredChannels = useMemo(() => {
     const q = channelQuery.trim().toLowerCase();
@@ -1075,14 +1377,76 @@ export function SportsView() {
     return list.filter((c) => c.name.toLowerCase().includes(q));
   }, [channelsQuery.data, channelQuery]);
 
-  const openWatch = (event: SportsEvent) => {
-    setChannel(null);
-    setSelected(event);
-    requestAnimationFrame(() => {
-      document.getElementById('sports-watch-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  };
+  const openWatch = useCallback(
+    (event: SportsEvent) => {
+      router.push(`/?view=sports&watch=${event.id}`, { scroll: false });
+    },
+    [router],
+  );
 
+  const closeWatch = useCallback(() => {
+    router.replace('/?view=sports', { scroll: false });
+  }, [router]);
+
+  const browseChannels = useCallback(() => {
+    router.replace('/?view=sports', { scroll: false });
+    setChannel(null);
+    setTab('channels');
+  }, [router]);
+
+  // Land on the watch page when it opens (URL-driven, back-button friendly).
+  useEffect(() => {
+    if (!watchId) return;
+    const t = setTimeout(() => {
+      document.getElementById('sports-watch')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [watchId]);
+
+  // -- Watch page mode ------------------------------------------------------
+  if (watchId) {
+    return (
+      <div className="space-y-6">
+        {watchEvent ? (
+          <WatchPage
+            event={watchEvent}
+            candidates={matchQuery.data ?? []}
+            loading={matchQuery.isPending}
+            onBack={closeWatch}
+            onBrowseChannels={browseChannels}
+            upNext={upNext}
+            onSelectEvent={openWatch}
+          />
+        ) : watchLoading ? (
+          <div className="space-y-4" aria-label="Loading event">
+            <Skeleton className="h-40 rounded-2xl bg-zinc-200 dark:bg-zinc-900" />
+            <Skeleton className="aspect-video w-full rounded-2xl bg-zinc-200 dark:bg-zinc-900" />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-zinc-200 bg-white/90 p-8 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
+            <Info className="mx-auto size-6 text-brand" aria-hidden />
+            <p className="mt-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+              Event not found
+            </p>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
+              It may have been removed from the schedule.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              onClick={closeWatch}
+              className="mt-4 h-9 gap-1.5 rounded-lg bg-brand px-4 text-xs font-semibold text-brand-foreground hover:bg-brand/90"
+            >
+              <ChevronLeft className="size-4" aria-hidden />
+              Back to the schedule
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // -- Schedule / browse mode ------------------------------------------------
   return (
     <div className="space-y-6">
       {/* Heading */}
@@ -1101,7 +1465,7 @@ export function SportsView() {
             )}
           </h1>
           <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">
-            Press Watch and CineDeck finds a working live feed, then plays it instantly — keyless via TheSportsDB &amp; iptv-org.
+            The full day&apos;s schedule — press Watch on any event and it starts playing instantly.
           </p>
         </div>
         <span className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-600">
@@ -1146,22 +1510,35 @@ export function SportsView() {
       {tab === 'today' && (
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
-            {SPORT_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                aria-pressed={sport === chip}
-                onClick={() => setSport(chip)}
-                className={cn(
-                  'h-8 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
-                  sport === chip
-                    ? 'border-brand bg-brand text-brand-foreground'
-                    : 'border-zinc-200 bg-white/70 text-zinc-600 hover:border-brand/40 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100',
-                )}
-              >
-                {chip === 'All' ? 'All sports' : (SPORT_LABELS[chip] ?? chip)}
-              </button>
-            ))}
+            {SPORT_CHIPS.map((chip) => {
+              const count = chip === 'All' ? liveCount : (liveBySport.get(chip) ?? 0);
+              return (
+                <button
+                  key={chip}
+                  type="button"
+                  aria-pressed={sport === chip}
+                  onClick={() => setSport(chip)}
+                  className={cn(
+                    'h-8 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
+                    sport === chip
+                      ? 'border-brand bg-brand text-brand-foreground'
+                      : 'border-zinc-200 bg-white/70 text-zinc-600 hover:border-brand/40 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100',
+                  )}
+                >
+                  {chip === 'All' ? 'All sports' : (SPORT_LABELS[chip] ?? chip)}
+                  {count > 0 && (
+                    <span
+                      className={cn(
+                        'ml-1.5 font-mono text-[10px] tabular-nums',
+                        sport === chip ? 'opacity-80' : 'text-red-500 dark:text-red-400',
+                      )}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           <div className="ml-auto flex items-center gap-1">
             <Button
@@ -1191,41 +1568,19 @@ export function SportsView() {
         </div>
       )}
 
-      {/* Watch panel (event selected) — finished events get the links panel,
-          everything else gets the live player immediately. */}
-      {selected && tab !== 'channels' && (
-        <div id="sports-watch-panel">
-          {selected.state === 'finished' ? (
-            <WatchPanel
-              event={selected}
-              onClose={() => setSelected(null)}
-              onBrowseChannels={() => {
-                setTab('channels');
-                setSelected(null);
-              }}
-            />
-          ) : (
-            <LiveWatchPanel
-              key={selected.id}
-              event={selected}
-              candidates={matchQuery.data ?? []}
-              loading={matchQuery.isPending}
-              onClose={() => setSelected(null)}
-              onBrowseChannels={() => {
-                setTab('channels');
-                setSelected(null);
-              }}
-            />
-          )}
-        </div>
-      )}
-
       {/* Content per tab */}
       {tab === 'today' && (
         eventsQuery.isPending ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-44 rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+          <div className="space-y-5">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i}>
+                <Skeleton className="mb-2 h-5 w-52 rounded-md bg-zinc-200 dark:bg-zinc-900" />
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, j) => (
+                    <Skeleton key={j} className="h-12 rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         ) : eventsQuery.isError ? (
@@ -1239,19 +1594,15 @@ export function SportsView() {
             Try another day or check the Upcoming tab.
           </p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {events.map((event) => (
-              <EventCard key={event.id} event={event} selected={selected?.id === event.id} onWatch={openWatch} />
-            ))}
-          </div>
+          <ScheduleList events={events} watchId={watchId} onWatch={openWatch} />
         )
       )}
 
       {tab === 'upcoming' && (
         upcomingQuery.isPending ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-44 rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+              <Skeleton key={i} className="h-12 rounded-xl bg-zinc-200 dark:bg-zinc-900" />
             ))}
           </div>
         ) : upcomingQuery.isError || (upcomingQuery.data ?? []).length === 0 ? (
@@ -1259,11 +1610,7 @@ export function SportsView() {
             No upcoming fixtures available right now — check back later.
           </p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {upcomingQuery.data!.map((event) => (
-              <EventCard key={event.id} event={event} selected={selected?.id === event.id} onWatch={openWatch} />
-            ))}
-          </div>
+          <ScheduleList events={upcomingQuery.data!} watchId={watchId} onWatch={openWatch} />
         )
       )}
 
@@ -1321,7 +1668,6 @@ export function SportsView() {
                     )}
                   >
                     {c.logo ? (
-                       
                       <img
                         src={c.logo}
                         alt=""
@@ -1368,3 +1714,5 @@ export function SportsView() {
     </div>
   );
 }
+
+
