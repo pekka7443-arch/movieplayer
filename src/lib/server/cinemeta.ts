@@ -99,27 +99,12 @@ interface CinemetaPopularResponse {
   metas?: CinemetaPopularMeta[];
 }
 
-/**
- * Fetch the Cinemeta "top" catalog (popular movies or TV series).
- * Caches 30 minutes — these lists change slowly.
- *
- * @param mediaType 'movie' or 'tv' (Cinemeta's 'series' is normalized)
- * @param limit max items to return (default 20)
- */
-export async function cinemetaPopular(
-  mediaType: 'movie' | 'tv',
-  limit = 20,
-): Promise<MetaSearchItem[]> {
-  const key = `popular:${mediaType}`;
-  const cached = cacheGet<MetaSearchItem[]>(key);
-  if (cached) return cached;
-
-  const cinemetaType = mediaType === 'tv' ? 'series' : 'movie';
-  const data = await cinemetaFetch<CinemetaPopularResponse>(
-    `/catalog/${cinemetaType}/top.json`,
-  );
-
-  const items = (data.metas ?? [])
+/** Shared Cinemeta meta → MetaSearchItem mapper (catalogs carry moviedb_id). */
+function mapPopularMetas(
+  metas: CinemetaPopularMeta[],
+  limit: number,
+): MetaSearchItem[] {
+  return metas
     .filter((m) => typeof m.id === 'string' && /^tt\d+$/.test(m.id))
     .slice(0, limit)
     .map((m) => {
@@ -148,8 +133,78 @@ export async function cinemetaPopular(
         genre: genreArray[0] ?? undefined,
       };
     });
+}
 
+/**
+ * Fetch the Cinemeta "top" catalog (popular movies or TV series).
+ * Caches 30 minutes — these lists change slowly.
+ *
+ * @param mediaType 'movie' or 'tv' (Cinemeta's 'series' is normalized)
+ * @param limit max items to return (default 20)
+ */
+export async function cinemetaPopular(
+  mediaType: 'movie' | 'tv',
+  limit = 20,
+): Promise<MetaSearchItem[]> {
+  const key = `popular:${mediaType}`;
+  const cached = cacheGet<MetaSearchItem[]>(key);
+  if (cached) return cached;
+
+  const cinemetaType = mediaType === 'tv' ? 'series' : 'movie';
+  const data = await cinemetaFetch<CinemetaPopularResponse>(
+    `/catalog/${cinemetaType}/top.json`,
+  );
+
+  const items = mapPopularMetas(data.metas ?? [], limit);
   cacheSet(key, items, 30 * 60 * 1000);
+  return items;
+}
+
+export interface CinemetaCatalogOptions {
+  /** Filter by genre (Cinemeta label, e.g. "Action"). */
+  genre?: string | null;
+  /** Catalog id: "top" (blended popularity) or "imdbRating" (top rated). */
+  sort?: 'top' | 'imdbRating';
+  /** Year catalog — returns titles released that year. */
+  year?: number | null;
+  limit?: number;
+}
+
+/**
+ * Generic keyless catalog fetch backing the home page's extra rows
+ * (Top Rated, New This Year, Explore-by-genre). Same mapping + 30 min cache
+ * as cinemetaPopular.
+ */
+export async function cinemetaCatalog(
+  mediaType: 'movie' | 'tv',
+  options: CinemetaCatalogOptions = {},
+): Promise<MetaSearchItem[]> {
+  const { genre = null, sort = 'top', year = null, limit = 20 } = options;
+  const cinemetaType = mediaType === 'tv' ? 'series' : 'movie';
+
+  let path: string;
+  let cacheKey: string;
+  if (year != null) {
+    path = `/catalog/${cinemetaType}/year/year=${encodeURIComponent(String(year))}.json`;
+    cacheKey = `catalog:${cinemetaType}:year:${year}`;
+  } else if (sort === 'imdbRating') {
+    path = genre
+      ? `/catalog/${cinemetaType}/imdbRating/genre=${encodeURIComponent(genre)}.json`
+      : `/catalog/${cinemetaType}/imdbRating.json`;
+    cacheKey = `catalog:${cinemetaType}:imdbRating:${genre ?? '_all'}`;
+  } else {
+    path = genre
+      ? `/catalog/${cinemetaType}/top/genre=${encodeURIComponent(genre)}.json`
+      : `/catalog/${cinemetaType}/top.json`;
+    cacheKey = `catalog:${cinemetaType}:top:${genre ?? '_all'}`;
+  }
+
+  const cached = cacheGet<MetaSearchItem[]>(cacheKey);
+  if (cached) return cached;
+
+  const data = await cinemetaFetch<CinemetaPopularResponse>(path);
+  const items = mapPopularMetas(data.metas ?? [], limit);
+  cacheSet(cacheKey, items, 30 * 60 * 1000);
   return items;
 }
 

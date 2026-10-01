@@ -11,6 +11,7 @@ import {
   ApiError,
   clearHistory,
   clearWatchlist,
+  fetchCatalogMeta,
   fetchDetails,
   fetchHistory,
   fetchPopular,
@@ -81,6 +82,24 @@ export function usePopularTV(language: string, enabled: boolean) {
       if (error instanceof ApiError && error.code === 'tmdb_key') return false;
       return failureCount < 2;
     },
+  });
+}
+
+export interface CatalogParams {
+  type: 'movie' | 'tv';
+  sort?: 'top' | 'imdbRating';
+  genre?: string | null;
+  year?: number | null;
+}
+
+/** Keyless Cinemeta catalog row — Top Rated, New This Year, genre explorer. */
+export function useCatalog(params: CatalogParams, enabled: boolean) {
+  return useQuery<MetaSearchItem[], ApiError>({
+    queryKey: ['catalog', params.type, params.sort ?? 'top', params.genre ?? '', params.year ?? ''],
+    queryFn: () => fetchCatalogMeta(params),
+    enabled,
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
   });
 }
 

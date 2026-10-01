@@ -3,13 +3,19 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ChevronLeft } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, ChevronLeft } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { PlayerSection } from '@/components/site/player-section';
 import { InfoSection } from '@/components/site/info-section';
 import { SimilarRow, MetaSimilarRow } from '@/components/site/similar-row';
 import { MetaInfo } from '@/components/site/meta-info';
-import { useMediaDetails, useSaveHistory } from '@/hooks/use-media';
+import {
+  useMediaDetails,
+  useSaveHistory,
+  useToggleWatchlist,
+  useWatchlist,
+} from '@/hooks/use-media';
 import { useMetaDetails, useMetaSimilar, useTvmazeShow } from '@/hooks/use-meta';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey, useSettings } from '@/lib/settings';
@@ -87,6 +93,36 @@ export function WatchView({
   const detailsLoading = isImdbMode ? metaQuery.isPending : detailsQuery.isPending;
   const saveHistory = useSaveHistory();
 
+  // My List toggle (TMDB-mode titles only — keyless IMDB mode has no tmdbId).
+  const watchlistQuery = useWatchlist();
+  const toggleWatchlist = useToggleWatchlist();
+  const existingRowId =
+    tmdbId !== undefined
+      ? (watchlistQuery.data ?? []).find(
+          (row) => row.tmdbId === tmdbId && row.mediaType === mediaType,
+        )?.id
+      : undefined;
+  const savedToList = Boolean(existingRowId);
+
+  const onToggleSave = () => {
+    if (tmdbId === undefined) return;
+    toggleWatchlist.mutate(
+      {
+        tmdbId,
+        mediaType,
+        title: details?.title ?? `TMDB #${tmdbId}`,
+        posterPath: details?.posterPath ?? null,
+        backdropPath: details?.backdropPath ?? null,
+        existingRowId,
+      },
+      {
+        onSuccess: ({ added }) =>
+          toast.success(added ? 'Saved to My List' : 'Removed from My List'),
+        onError: () => toast.error('Could not update My List'),
+      },
+    );
+  };
+
   // Switching titles resets the server to the user's preferred one.
   useEffect(() => {
     resetServer();
@@ -116,16 +152,41 @@ export function WatchView({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28 }}
     >
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => router.push('/', { scroll: false })}
-        className="mb-5 h-9 gap-1.5 rounded-lg px-2.5 text-sm text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
-      >
-        <ChevronLeft className="size-4" aria-hidden />
-        Back to browse
-      </Button>
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => router.push('/', { scroll: false })}
+          className="h-9 gap-1.5 rounded-lg px-2.5 text-sm text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+        >
+          <ChevronLeft className="size-4" aria-hidden />
+          Back to browse
+        </Button>
+
+        {tmdbId !== undefined && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onToggleSave}
+            disabled={toggleWatchlist.isPending}
+            aria-pressed={savedToList}
+            className={`h-9 gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors ${
+              savedToList
+                ? 'border-brand/50 bg-brand/10 text-brand hover:bg-brand/20'
+                : 'border-zinc-200 bg-transparent text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100'
+            }`}
+          >
+            {savedToList ? (
+              <BookmarkCheck className="size-4" aria-hidden />
+            ) : (
+              <BookmarkPlus className="size-4" aria-hidden />
+            )}
+            {savedToList ? 'In My List' : 'My List'}
+          </Button>
+        )}
+      </div>
 
       <PlayerSection
         tmdbId={tmdbId}

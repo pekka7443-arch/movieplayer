@@ -28,6 +28,11 @@ interface CinedeckState {
   arcadeOpen: boolean;
   openArcade: () => void;
   closeArcade: () => void;
+  /** Sign in / create account dialog. */
+  authOpen: boolean;
+  authMode: 'signin' | 'signup';
+  openAuth: (mode?: 'signin' | 'signup') => void;
+  closeAuth: () => void;
 }
 
 export const useCinedeckStore = create<CinedeckState>((set) => ({
@@ -57,4 +62,8 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
   arcadeOpen: false,
   openArcade: () => set({ arcadeOpen: true }),
   closeArcade: () => set({ arcadeOpen: false }),
+  authOpen: false,
+  authMode: 'signin',
+  openAuth: (mode = 'signin') => set({ authOpen: true, authMode: mode }),
+  closeAuth: () => set({ authOpen: false }),
 }));

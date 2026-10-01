@@ -1,29 +1,38 @@
 'use client';
 
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   AlertCircle,
   Bookmark,
+  Clapperboard,
+  Compass,
   Film,
   History,
   Play,
   RefreshCw,
+  Sparkles,
   TrendingUp,
+  Trophy,
   Tv,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { HeroSection } from '@/components/site/hero-section';
-import { MediaCard, MediaCardSkeleton } from '@/components/site/media-card';
-import { MediaRow } from '@/components/site/media-row';
-import { ConnectCard } from '@/components/site/connect-card';
-import { useHasTmdbKey } from '@/lib/settings';
-import { useCinedeckStore } from '@/lib/store';
-import { tmdbImg } from '@/lib/languages';
 import {
+  MediaCard,
+  MediaCardSkeleton,
+  type MediaCardItem,
+} from '@/components/site/media-card';
+import { MediaRow } from '@/components/site/media-row';
+import { useCinedeckStore } from '@/lib/store';
+import { useHasTmdbKey } from '@/lib/settings';
+import { useSession } from '@/hooks/use-session';
+import {
+  useCatalog,
   useRemoveHistory,
   useRemoveWatchlist,
   useTrending,
@@ -31,8 +40,37 @@ import {
   usePopularTV,
   useHistory,
   useWatchlist,
+  type CatalogParams,
 } from '@/hooks/use-media';
-import { yearOf, type HistoryItem, type WatchlistItem } from '@/lib/tmdb';
+import { type HistoryItem, type SearchItem, type WatchlistItem } from '@/lib/tmdb';
+import { tmdbImg } from '@/lib/languages';
+import type { MetaSearchItem } from '@/lib/meta';
+
+type AnyRowItem = SearchItem | MetaSearchItem;
+
+/** Normalize either TMDB or keyless Cinemeta row items into MediaCardItem. */
+function toCardItem(item: AnyRowItem): MediaCardItem {
+  if ('imdbId' in item) {
+    // Keyless Cinemeta item — poster is a full URL, watch URL prefers tmdbId.
+    return {
+      id: item.tmdbId ?? 0,
+      imdbId: item.imdbId,
+      mediaType: item.mediaType,
+      title: item.title,
+      posterPath: null,
+      posterUrl: item.poster ?? null,
+      releaseDate: item.year ? `${item.year}-01-01` : '',
+      voteAverage: item.voteAverage,
+      genre: item.genre,
+    };
+  }
+  return item;
+}
+
+function rowKeyOf(item: AnyRowItem): string {
+  if ('imdbId' in item) return `meta-${item.imdbId}`;
+  return `${item.mediaType}-${item.id}`;
+}
 
 function SectionHeading({
   icon: Icon,
@@ -43,17 +81,72 @@ function SectionHeading({
   title: string;
   hint?: string;
 }) {
-  // Zoryva-style section heading: small accent vertical bar + bold tracking-tight
-  // title. Repaints live with the user's chosen accent color (bg-brand).
+  // Section heading: small accent vertical bar + bold tracking-tight title.
+  // Repaints live with the user's chosen accent color (bg-brand).
   return (
-    <div className="mb-3 flex items-baseline gap-2.5">
-      <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-zinc-900 md:text-lg dark:text-zinc-100">
+    <div className="mb-3 flex flex-wrap items-baseline gap-2.5">
+      <h2 className="flex items-center gap-2 text-lg font-bold tracking-tight text-zinc-900 md:text-xl dark:text-zinc-100">
         <span className="size-4 rounded-full bg-brand md:h-5 md:w-1" aria-hidden />
-        <Icon className="size-4.5 text-brand" aria-hidden />
+        <Icon className="size-5 text-brand" aria-hidden />
         {title}
       </h2>
       {hint && <span className="text-xs text-zinc-500 dark:text-zinc-600">{hint}</span>}
     </div>
+  );
+}
+
+/** Skeleton stripe shown by LazySection until the row scrolls near. */
+function RowSkeletonStripe() {
+  return (
+    <div className="flex gap-3 overflow-hidden sm:gap-4">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <div key={i} className="w-[130px] shrink-0 sm:w-[160px] md:w-[180px]">
+          <Skeleton className="aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Renders its children only once scrolled close to the viewport — keeps the
+ * (now much bigger) home page fast: below-fold rows fetch when approached.
+ */
+function LazySection({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLElement | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || visible) return;
+    // IntersectionObserver is available in every supported browser; when it
+    // is somehow missing the row simply stays on its skeleton (safe no-op).
+    if (typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: '700px 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible]);
+
+  return (
+    <section ref={ref} id={id} aria-label={label} aria-busy={!visible}>
+      {visible ? children : <RowSkeletonStripe />}
+    </section>
   );
 }
 
@@ -188,15 +281,75 @@ function RowEmptyState({ text }: { text: string }) {
   );
 }
 
+/** Shared fetch-state shell for keyless catalog rows (skeleton / cards / empty). */
+function CatalogRow({
+  icon,
+  title,
+  hint,
+  params,
+  enabled,
+  priorityCount = 4,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  hint?: string;
+  params: CatalogParams;
+  enabled: boolean;
+  priorityCount?: number;
+}) {
+  const query = useCatalog(params, enabled);
+  const items = query.data;
+
+  return (
+    <div>
+      <SectionHeading icon={icon} title={title} hint={hint} />
+      {query.isPending || (!enabled && !items) ? (
+        <RowSkeletonStripe />
+      ) : query.isError ? (
+        <RowEmptyState text="This row is unavailable right now." />
+      ) : items && items.length > 0 ? (
+        <MediaRow label={title}>
+          {items.map((item, index) => {
+            const card = toCardItem(item);
+            return <MediaCard key={rowKeyOf(item)} item={card} priority={index < priorityCount} />;
+          })}
+        </MediaRow>
+      ) : (
+        <RowEmptyState text="Nothing here right now." />
+      )}
+    </div>
+  );
+}
+
+// Curated Cinemeta genre labels for the Explore section (all verified live).
+const EXPLORE_GENRES = [
+  'Action',
+  'Adventure',
+  'Animation',
+  'Comedy',
+  'Crime',
+  'Drama',
+  'Fantasy',
+  'Horror',
+  'Mystery',
+  'Romance',
+  'Science Fiction',
+  'Thriller',
+] as const;
+
 export function HomeView() {
   const language = useCinedeckStore((s) => s.language);
   const openSettings = useCinedeckStore((s) => s.openSettings);
   const hasKey = useHasTmdbKey();
   const reduceMotion = useReducedMotion();
+  const { user } = useSession();
+
+  const [exploreGenre, setExploreGenre] = useState<string>('Action');
+  const [exploreType, setExploreType] = useState<'movie' | 'tv'>('movie');
 
   // Always fetch trending + popular (keyless Cinemeta fallback is built into
   // the hooks themselves). When the user has a TMDB key, the data comes from
-  // TMDB; without a key, it comes from Cinemeta's public "top" catalog so the
+  // TMDB; without a key, it comes from Cinemeta's public catalogs so the
   // home view shows real content instead of "Connect TMDB" prompts.
   const trendingQuery = useTrending(language, true);
   const popularMoviesQuery = usePopularMovies(language, true);
@@ -209,6 +362,9 @@ export function HomeView() {
   const popularTV = popularTVQuery.data;
   const historyItems = historyQuery.data ?? [];
   const watchlistItems = watchlistQuery.data ?? [];
+
+  const syncHint = user ? 'Synced to your account' : 'Saved on this device';
+  const currentYear = new Date().getFullYear();
 
   const fadeIn = {
     initial: reduceMotion ? undefined : { opacity: 0, y: 14 },
@@ -226,8 +382,8 @@ export function HomeView() {
 
       {/* Continue watching */}
       <motion.section {...fadeIn} aria-labelledby="continue-watching">
-        <div id="continue-watching">
-          <SectionHeading icon={History} title="Continue watching" hint="Synced to this browser" />
+        <div id="continue-watching" className="scroll-mt-24">
+          <SectionHeading icon={History} title="Continue watching" hint={syncHint} />
         </div>
         {historyQuery.isPending ? (
           <div className="flex gap-3 overflow-hidden sm:gap-4">
@@ -250,8 +406,8 @@ export function HomeView() {
 
       {/* My List */}
       <motion.section {...fadeIn} aria-labelledby="my-list">
-        <div id="my-list">
-          <SectionHeading icon={Bookmark} title="My List" hint="Saved titles" />
+        <div id="my-list" className="scroll-mt-24">
+          <SectionHeading icon={Bookmark} title="My List" hint={syncHint} />
         </div>
         {watchlistQuery.isPending ? (
           <div className="flex gap-3 overflow-hidden sm:gap-4">
@@ -262,7 +418,13 @@ export function HomeView() {
             ))}
           </div>
         ) : watchlistItems.length === 0 ? (
-          <RowEmptyState text="Your list is empty — tap the bookmark on any title to save it here." />
+          <RowEmptyState
+            text={
+              user
+                ? 'Your list is empty — tap the bookmark on any title to save it here.'
+                : 'Your list is empty — bookmark titles or create an account to sync them everywhere.'
+            }
+          />
         ) : (
           <MediaRow label="My List">
             {watchlistItems.map((item) => (
@@ -272,17 +434,13 @@ export function HomeView() {
         )}
       </motion.section>
 
-      {/* Trending — horizontal scroll row styled after Zoryva */}
+      {/* Trending — horizontal scroll row */}
       <motion.section {...fadeIn} aria-labelledby="trending-week">
-        <div id="trending-week">
+        <div id="trending-week" className="scroll-mt-24">
           <SectionHeading icon={TrendingUp} title="Trending Now" hint={hasKey ? 'This week on TMDB' : 'Top picks'} />
         </div>
         {trendingQuery.isPending ? (
-          <MediaRow label="Trending Now">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <MediaCardSkeleton key={i} />
-            ))}
-          </MediaRow>
+          <RowSkeletonStripe />
         ) : trendingQuery.isError ? (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-zinc-200 bg-zinc-200/30 px-6 py-10 text-center dark:border-zinc-800 dark:bg-zinc-900/30">
             <AlertCircle className="size-6 text-red-600 dark:text-red-400" aria-hidden />
@@ -300,114 +458,146 @@ export function HomeView() {
           </div>
         ) : trending && trending.length > 0 ? (
           <MediaRow label="Trending Now">
-            {trending.map((item, index) => {
-              // Item is either SearchItem (TMDB mode) or MetaSearchItem
-              // (Cinemeta fallback). Normalize to MediaCardItem shape.
-              const isMeta = !('id' in item) || typeof item.id !== 'number' || item.id === 0;
-              const cardItem = isMeta
-                ? {
-                    id: (item as { tmdbId?: number }).tmdbId ?? 0,
-                    imdbId: (item as { imdbId?: string }).imdbId,
-                    mediaType: item.mediaType,
-                    title: item.title,
-                    posterPath: null,
-                    posterUrl: (item as { poster?: string | null }).poster ?? null,
-                    releaseDate: item.year ? `${item.year}-01-01` : '',
-                    voteAverage: item.voteAverage,
-                    genre: (item as { genre?: string }).genre,
-                  }
-                : item;
-              const key =
-                isMeta && (item as { imdbId?: string }).imdbId
-                  ? `meta-${(item as { imdbId: string }).imdbId}`
-                  : `${item.mediaType}-${item.id}`;
-              return <MediaCard key={key} item={cardItem} priority={index < 6} />;
-            })}
+            {trending.map((item, index) => (
+              <MediaCard
+                key={rowKeyOf(item)}
+                item={toCardItem(item)}
+                priority={index < 6}
+              />
+            ))}
           </MediaRow>
         ) : (
           <RowEmptyState text="No trending data available right now." />
         )}
       </motion.section>
 
-      {/* Popular Movies — all-time popular, distinct from weekly trending */}
+      {/* Popular Movies */}
       <motion.section {...fadeIn} aria-labelledby="popular-movies">
-        <div id="popular-movies">
+        <div id="popular-movies" className="scroll-mt-24">
           <SectionHeading icon={Film} title="Popular Movies" hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'} />
         </div>
         {popularMoviesQuery.isPending ? (
-          <MediaRow label="Popular Movies">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <MediaCardSkeleton key={i} />
-            ))}
-          </MediaRow>
+          <RowSkeletonStripe />
         ) : popularMoviesQuery.isError ? null : popularMovies && popularMovies.length > 0 ? (
           <MediaRow label="Popular Movies">
-            {popularMovies.map((item, index) => {
-              const isMeta = !('id' in item) || typeof item.id !== 'number' || item.id === 0;
-              const cardItem = isMeta
-                ? {
-                    id: (item as { tmdbId?: number }).tmdbId ?? 0,
-                    imdbId: (item as { imdbId?: string }).imdbId,
-                    mediaType: 'movie' as const,
-                    title: item.title,
-                    posterPath: null,
-                    posterUrl: (item as { poster?: string | null }).poster ?? null,
-                    releaseDate: item.year ? `${item.year}-01-01` : '',
-                    voteAverage: item.voteAverage,
-                    genre: (item as { genre?: string }).genre,
-                  }
-                : { ...item, mediaType: 'movie' as const };
-              const key =
-                isMeta && (item as { imdbId?: string }).imdbId
-                  ? `meta-${(item as { imdbId: string }).imdbId}`
-                  : `movie-${item.id}`;
-              return <MediaCard key={key} item={cardItem} priority={index < 4} />;
-            })}
+            {popularMovies.map((item, index) => (
+              <MediaCard
+                key={rowKeyOf(item)}
+                item={toCardItem(item)}
+                priority={index < 4}
+              />
+            ))}
           </MediaRow>
         ) : (
           <RowEmptyState text="No popular movies right now." />
         )}
       </motion.section>
 
-      {/* Popular TV Shows — same endpoint, type=tv */}
+      {/* Popular TV Shows */}
       <motion.section {...fadeIn} aria-labelledby="popular-tv">
-        <div id="popular-tv">
+        <div id="popular-tv" className="scroll-mt-24">
           <SectionHeading icon={Tv} title="Popular TV Shows" hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'} />
         </div>
         {popularTVQuery.isPending ? (
-          <MediaRow label="Popular TV Shows">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <MediaCardSkeleton key={i} />
-            ))}
-          </MediaRow>
+          <RowSkeletonStripe />
         ) : popularTVQuery.isError ? null : popularTV && popularTV.length > 0 ? (
           <MediaRow label="Popular TV Shows">
-            {popularTV.map((item, index) => {
-              const isMeta = !('id' in item) || typeof item.id !== 'number' || item.id === 0;
-              const cardItem = isMeta
-                ? {
-                    id: (item as { tmdbId?: number }).tmdbId ?? 0,
-                    imdbId: (item as { imdbId?: string }).imdbId,
-                    mediaType: 'tv' as const,
-                    title: item.title,
-                    posterPath: null,
-                    posterUrl: (item as { poster?: string | null }).poster ?? null,
-                    releaseDate: item.year ? `${item.year}-01-01` : '',
-                    voteAverage: item.voteAverage,
-                    genre: (item as { genre?: string }).genre,
-                  }
-                : { ...item, mediaType: 'tv' as const };
-              const key =
-                isMeta && (item as { imdbId?: string }).imdbId
-                  ? `meta-${(item as { imdbId: string }).imdbId}`
-                  : `tv-${item.id}`;
-              return <MediaCard key={key} item={cardItem} priority={index < 4} />;
-            })}
+            {popularTV.map((item, index) => (
+              <MediaCard
+                key={rowKeyOf(item)}
+                item={toCardItem(item)}
+                priority={index < 4}
+              />
+            ))}
           </MediaRow>
         ) : (
           <RowEmptyState text="No popular TV shows right now." />
         )}
       </motion.section>
+
+      {/* Top Rated Movies — keyless imdbRating catalog, fetched when near */}
+      <LazySection id="top-rated" label="Top rated movies">
+        <CatalogRow
+          icon={Trophy}
+          title="Top Rated Movies"
+          hint="IMDB all-time greats"
+          params={{ type: 'movie', sort: 'imdbRating' }}
+          enabled
+        />
+      </LazySection>
+
+      {/* New This Year — keyless year catalog */}
+      <LazySection id="new-this-year" label="New this year">
+        <CatalogRow
+          icon={Sparkles}
+          title={`New in ${currentYear}`}
+          hint="Fresh releases"
+          params={{ type: 'movie', year: currentYear }}
+          enabled
+        />
+      </LazySection>
+
+      {/* Explore by genre — interactive keyless genre browser */}
+      <LazySection id="explore" label="Explore by genre">
+        <div>
+          <SectionHeading
+            icon={Compass}
+            title="Explore by genre"
+            hint="Pick a mood — instant keyless catalog"
+          />
+          <div
+            role="group"
+            aria-label="Genre filter"
+            className="-mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {EXPLORE_GENRES.map((genre) => {
+              const active = genre === exploreGenre;
+              return (
+                <button
+                  key={genre}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setExploreGenre(genre)}
+                  className={`h-8 shrink-0 rounded-full border px-3.5 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                    active
+                      ? 'border-transparent bg-brand text-brand-foreground shadow-[0_0_14px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)]'
+                      : 'border-zinc-200 bg-white/70 text-zinc-600 hover:border-brand/40 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  }`}
+                >
+                  {genre}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mb-4 flex items-center gap-2">
+            <div className="flex rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-950/60">
+              {(['movie', 'tv'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={exploreType === t}
+                  onClick={() => setExploreType(t)}
+                  className={`flex h-7 items-center gap-1.5 rounded-md px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                    exploreType === t
+                      ? 'bg-brand text-brand-foreground'
+                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  {t === 'movie' ? <Film className="size-3.5" aria-hidden /> : <Tv className="size-3.5" aria-hidden />}
+                  {t === 'movie' ? 'Movies' : 'TV'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <CatalogRow
+            icon={Clapperboard}
+            title={`${exploreGenre} ${exploreType === 'movie' ? 'movies' : 'shows'}`}
+            params={{ type: exploreType, genre: exploreGenre, sort: 'top' }}
+            enabled
+            priorityCount={6}
+          />
+        </div>
+      </LazySection>
 
       {/* Keyless nudge — the full TMDB layer is optional, not a paywall. */}
       {!hasKey && (

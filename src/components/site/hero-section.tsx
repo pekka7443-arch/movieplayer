@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Dices, Play, Star } from 'lucide-react';
+import { Dices, Play, Star, Clapperboard, Server, Users, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -119,9 +119,9 @@ export function HeroSection({
         className="pointer-events-none absolute -top-32 left-1/4 h-72 w-[36rem] rounded-full bg-brand-soft blur-3xl"
       />
 
-      <div className="relative grid items-center gap-8 py-10 sm:py-14 lg:grid-cols-2 lg:gap-12">
+      <div className="relative grid items-center gap-8 py-12 sm:py-16 lg:grid-cols-2 lg:gap-12 lg:py-20">
         <div>
-          <motion.h1 {...fadeUp(0)} className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl lg:text-5xl dark:text-zinc-100">
+          <motion.h1 {...fadeUp(0)} className="text-4xl font-bold tracking-tight text-zinc-900 sm:text-5xl lg:text-6xl dark:text-zinc-100">
             {hasKey ? (
               <>
                 Play anything with a <span className="text-brand">TMDB ID</span>.
@@ -132,10 +132,10 @@ export function HeroSection({
               </>
             )}
           </motion.h1>
-          <motion.p {...fadeUp(0.06)} className="mt-3 max-w-md text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-400">
+          <motion.p {...fadeUp(0.06)} className="mt-4 max-w-md text-base leading-relaxed text-zinc-600 sm:text-lg dark:text-zinc-400">
             {hasKey
-              ? 'No sign-ups, no browsing walls. Paste an ID, pick a server, press play — or browse the trending rows below.'
-              : 'Type a title in the search bar and hit Enter — CineDeck scans every stream source and plays the healthiest one. No API key, no sign-up: metadata flows live from Cinemeta & TVmaze.'}
+              ? 'Paste an ID, pick a server, press play — or browse the rows below. Create a free account to sync My List & history everywhere.'
+              : 'Type a title, hit Enter — CineDeck scans every stream source and plays the healthiest one. No API key. Optional free account syncs your lists across devices.'}
           </motion.p>
 
           <motion.div
@@ -298,6 +298,49 @@ export function HeroSection({
           )}
         </motion.div>
       </div>
+
+      {/* Stats band — what the site ships, at a glance */}
+      <motion.div
+        {...fadeUp(0.22)}
+        aria-label="What CineDeck ships"
+        className="relative grid grid-cols-2 gap-2.5 pb-10 sm:grid-cols-4 lg:pb-14"
+      >
+        {[
+          {
+            icon: Clapperboard,
+            value: '10,000+ titles',
+            label: 'keyless catalogs',
+          },
+          {
+            icon: Server,
+            value: '13 servers',
+            label: 'auto-scan + failover',
+          },
+          {
+            icon: Zap,
+            value: 'One press',
+            label: 'search → play',
+          },
+          {
+            icon: Users,
+            value: 'Free accounts',
+            label: 'sync My List & history',
+          },
+        ].map(({ icon: Icon, value, label }) => (
+          <div
+            key={value}
+            className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white/60 px-3.5 py-3 dark:border-zinc-800/60 dark:bg-zinc-900/40"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+              <Icon className="size-4.5" aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{value}</span>
+              <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-500">{label}</span>
+            </span>
+          </div>
+        ))}
+      </motion.div>
     </section>
   );
 }

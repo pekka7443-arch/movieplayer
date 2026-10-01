@@ -260,6 +260,28 @@ export async function fetchPopularMeta(
   return data.results ?? [];
 }
 
+/**
+ * KEYLESS catalog fetch for the home page's extra rows — Top Rated
+ * (sort=imdbRating), New This Year (year=YYYY) and Explore-by-genre
+ * (genre=Action …). Always served from Cinemeta, never needs a key.
+ */
+export async function fetchCatalogMeta(params: {
+  type: 'movie' | 'tv';
+  sort?: 'top' | 'imdbRating';
+  genre?: string | null;
+  year?: number | null;
+}): Promise<MetaSearchItem[]> {
+  const search = new URLSearchParams({ type: params.type });
+  if (params.sort) search.set('sort', params.sort);
+  if (params.genre) search.set('genre', params.genre);
+  if (params.year) search.set('year', String(params.year));
+  const data = await apiFetch<{ results: MetaSearchItem[] }>(
+    `/api/meta/catalog?${search.toString()}`,
+    { headers: { accept: 'application/json' } }
+  );
+  return data.results ?? [];
+}
+
 export async function fetchDetails(
   id: number,
   mediaType: MediaType,

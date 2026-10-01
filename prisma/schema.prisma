@@ -14,11 +14,12 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Post {
@@ -31,8 +32,11 @@ model Post {
   updatedAt DateTime @updatedAt
 }
 
+// `ownerId` is either an authenticated User id or a guest device UUID
+// (cinedeck_guest cookie). Rows migrate from guest → user on register/login.
 model WatchHistory {
   id           String   @id @default(cuid())
+  ownerId      String
   tmdbId       Int
   mediaType    String
   title        String
@@ -42,17 +46,19 @@ model WatchHistory {
   episode      Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  @@unique([tmdbId, mediaType])
-  @@index([updatedAt])
+  @@unique([ownerId, tmdbId, mediaType])
+  @@index([ownerId, updatedAt])
 }
 
 model WatchlistItem {
   id           String   @id @default(cuid())
+  ownerId      String
   tmdbId       Int
   mediaType    String
   title        String
   posterPath   String?
   backdropPath String?
   addedAt      DateTime @default(now())
-  @@unique([tmdbId, mediaType])
+  @@unique([ownerId, tmdbId, mediaType])
+  @@index([ownerId, addedAt])
 }

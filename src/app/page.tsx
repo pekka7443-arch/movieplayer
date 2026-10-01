@@ -8,6 +8,7 @@ import { HomeView } from '@/components/site/home-view';
 import { WatchView } from '@/components/site/watch-view';
 import { SettingsDialog } from '@/components/site/settings-dialog';
 import { ArcadeDialog } from '@/components/site/arcade-dialog';
+import { AuthDialog } from '@/components/site/auth-dialog';
 import { SiteFooter } from '@/components/site/site-footer';
 import type { MediaType } from '@/lib/tmdb';
 
@@ -34,7 +35,7 @@ function App() {
     <AppProviders>
       <div className="flex min-h-svh flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
         <Header />
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8">
           {id !== null ? (
             <WatchView tmdbId={id} mediaType={type} season={season} episode={episode} />
           ) : imdbId !== null ? (
@@ -46,6 +47,7 @@ function App() {
         <SiteFooter />
         <SettingsDialog />
         <ArcadeDialog />
+        <AuthDialog />
       </div>
     </AppProviders>
   );
