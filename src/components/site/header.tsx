@@ -187,10 +187,11 @@ export function Header() {
                 variant="ghost"
                 size="sm"
                 onClick={() => openAuth('signin')}
-                className="h-9 gap-1.5 rounded-lg px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+                aria-label="Sign in"
+                className="h-9 w-9 gap-1.5 rounded-lg px-0 text-sm font-medium text-zinc-700 hover:bg-zinc-200/70 hover:text-zinc-900 sm:w-auto sm:px-3 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
               >
                 <UserRound className="size-4" aria-hidden />
-                Sign in
+                <span className="hidden sm:inline">Sign in</span>
               </Button>
               <Button
                 type="button"

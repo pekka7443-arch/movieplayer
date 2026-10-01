@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -10,13 +10,16 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Info,
   Loader2,
   MonitorPlay,
   Radio,
   RefreshCw,
   Search,
+  SkipForward,
   Trophy,
   Tv,
+  Volume2,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { useSettings } from '@/lib/settings';
 
 // ---------------------------------------------------------------------------
 // Types (mirror the server routes)
@@ -149,6 +153,33 @@ function useSportsChannels() {
       return json.channels;
     },
     staleTime: 30 * 60_000,
+  });
+}
+
+/**
+ * Ranked + probed live feeds for the selected event. The server ranks every
+ * iptv-org sports channel against the event (teams, league, sport) and probes
+ * the top candidates so the browser starts with ones that actually respond.
+ */
+function useMatchCandidates(event: SportsEvent | null) {
+  return useQuery<SportsChannel[]>({
+    queryKey: ['sports-match', event?.id ?? null],
+    enabled: !!event && event.state !== 'finished',
+    queryFn: async () => {
+      const p = new URLSearchParams({
+        sport: event!.sport,
+        league: event!.league,
+        home: event!.home,
+        away: event!.away,
+      });
+      const res = await fetch(`/api/sports/match?${p.toString()}`);
+      if (!res.ok) throw new Error('match_unreachable');
+      const json = (await res.json()) as { candidates: SportsChannel[] };
+      return json.candidates;
+    },
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
 }
 
@@ -322,7 +353,7 @@ function EventCard({
           )}
         >
           {event.state === 'live' ? <Radio className="size-3.5" aria-hidden /> : <MonitorPlay className="size-3.5" aria-hidden />}
-          {event.state === 'live' ? 'Watch live' : event.state === 'upcoming' ? 'Preview' : 'Watch'}
+          {event.state === 'live' ? 'Watch live' : 'Watch'}
         </Button>
       </div>
     </article>
@@ -609,6 +640,413 @@ function ChannelPlayer({ channel, onClose }: { channel: SportsChannel; onClose: 
 }
 
 // ---------------------------------------------------------------------------
+// Live event player — "Watch" auto-plays the best probed feed for the event
+// and watchdogs through the ranked candidates until one actually plays.
+// ---------------------------------------------------------------------------
+
+type LivePhase = 'finding' | 'connecting' | 'live' | 'exhausted';
+
+function LivePlayer({
+  event,
+  candidates,
+  loading,
+  onClose,
+  onBrowseChannels,
+}: {
+  event: SportsEvent;
+  candidates: SportsChannel[];
+  loading: boolean;
+  onClose: () => void;
+  onBrowseChannels: () => void;
+}) {
+  const { autoFailover, failoverSeconds } = useSettings();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const activeUrlRef = useRef<string | null>(null);
+  const [idx, setIdx] = useState(0);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
+  const [muted, setMuted] = useState(true);
+
+  const current = candidates[idx] ?? null;
+  const phase: LivePhase = current
+    ? (liveUrl === current.url ? 'live' : 'connecting')
+    : (loading ? 'finding' : 'exhausted');
+
+  /** Watchdog / error fallback — jump to the next ranked candidate. */
+  const advance = useCallback(() => setIdx((i) => i + 1), []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !current) return;
+    let destroyed = false;
+    let hls: { destroy: () => void } | null = null;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    activeUrlRef.current = current.url;
+
+    const disarm = () => {
+      if (watchdog) {
+        clearTimeout(watchdog);
+        watchdog = null;
+      }
+    };
+    const armWatchdog = () => {
+      disarm();
+      if (!autoFailover) return;
+      watchdog = setTimeout(() => {
+        if (!destroyed) advance();
+      }, Math.max(4, failoverSeconds) * 1000);
+    };
+
+    const setup = async () => {
+      // Playback goes through CineDeck's HLS proxy (fixes CORS + mixed content).
+      const playUrl = `/api/sports/stream?u=${encodeURIComponent(current.url)}`;
+      video.muted = true;
+      const canNative = video.canPlayType('application/vnd.apple.mpegurl');
+      if (canNative) {
+        video.src = playUrl;
+        video.play().catch(() => undefined);
+        armWatchdog();
+        return;
+      }
+      try {
+        const { default: Hls } = await import('hls.js');
+        if (destroyed) return;
+        if (!Hls.isSupported()) {
+          advance();
+          return;
+        }
+        const instance = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 60 });
+        hls = instance;
+        instance.loadSource(playUrl);
+        instance.attachMedia(video);
+        instance.on(Hls.Events.ERROR, (_e, data) => {
+          if (data.fatal && !destroyed) {
+            disarm();
+            advance();
+          }
+        });
+        video.play().catch(() => undefined);
+        armWatchdog();
+      } catch {
+        if (!destroyed) advance();
+      }
+    };
+    void setup();
+
+    return () => {
+      destroyed = true;
+      disarm();
+      hls?.destroy();
+      video.removeAttribute('src');
+      video.load();
+    };
+  }, [current, autoFailover, failoverSeconds, advance]);
+
+  /** Manual pick from the ranked rail. */
+  const pick = (i: number) => {
+    if (!candidates[i] || i === idx) return;
+    setLiveUrl(null);
+    setIdx(i);
+  };
+
+  return (
+    <>
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        aria-label={`Live player for ${event.home} vs ${event.away}`}
+        className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-black shadow-sm dark:border-zinc-800"
+      >
+        <div className="relative aspect-video w-full">
+          <video
+            ref={videoRef}
+            controls
+            autoPlay
+            muted
+            playsInline
+            className="absolute inset-0 size-full bg-black"
+            onPlaying={() => setLiveUrl(activeUrlRef.current)}
+            onError={(e) => {
+              const el = e.currentTarget;
+              if (el.error && el.readyState === 0 && current) advance();
+            }}
+          />
+
+          {phase === 'finding' && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+              <span className="flex items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-xs font-medium text-white">
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                Scanning live feeds for {event.home} vs {event.away}…
+              </span>
+            </div>
+          )}
+
+          {phase === 'connecting' && current && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
+              <span className="flex items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-xs font-medium text-white">
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                Connecting to {current.name}
+                {candidates.length > 0 && (
+                  <span className="opacity-70">
+                    ({Math.min(idx + 1, candidates.length)}/{candidates.length})
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+
+          {phase === 'live' && muted && (
+            <button
+              type="button"
+              onClick={() => {
+                const v = videoRef.current;
+                if (v) {
+                  v.muted = false;
+                  setMuted(false);
+                  v.play().catch(() => undefined);
+                }
+              }}
+              className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-brand-foreground shadow-lg transition-transform hover:scale-105"
+            >
+              <Volume2 className="size-4" aria-hidden />
+              Tap for sound
+            </button>
+          )}
+
+          {phase === 'exhausted' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/85 p-6 text-center">
+              <Info className="size-6 text-brand" aria-hidden />
+              <p className="text-sm font-semibold text-white">
+                No free live feed found for this match right now
+              </p>
+              <p className="max-w-md text-xs leading-relaxed text-zinc-400">
+                Feeds rotate constantly — try again at kickoff, check the sites below, or play any
+                always-on sports channel.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {WATCH_LINKS(event).slice(0, 3).map((link) => (
+                  <Button
+                    key={link.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(link.href, '_blank', 'noopener,noreferrer')}
+                    className="h-8 gap-1.5 rounded-lg border-zinc-700 bg-transparent text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white"
+                  >
+                    {link.label}
+                    <ExternalLink className="size-3" aria-hidden />
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={onBrowseChannels}
+                  className="h-8 gap-1.5 rounded-lg bg-brand text-xs font-semibold text-brand-foreground hover:bg-brand/90"
+                >
+                  <Tv className="size-3.5" aria-hidden />
+                  Browse channels
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 border-t border-zinc-800 bg-zinc-950 px-4 py-3">
+          {current?.logo ? (
+            <img
+              src={current.logo}
+              alt=""
+              width={28}
+              height={28}
+              className="size-7 rounded object-contain"
+              onError={(e) => {
+                e.currentTarget.style.visibility = 'hidden';
+              }}
+            />
+          ) : (
+            <Tv className="size-5 shrink-0 text-brand" aria-hidden />
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-zinc-100">
+              {current ? current.name : 'Looking for a live feed…'}
+            </p>
+            <p className="truncate text-[11px] text-zinc-500">
+              {current ? `${current.group} · live via iptv-org` : 'Auto-switching feeds until one plays'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={advance}
+            disabled={!current}
+            className="ml-auto h-8 shrink-0 gap-1.5 rounded-lg px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            <SkipForward className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">Next feed</span>
+          </Button>
+        </div>
+      </motion.section>
+
+      {candidates.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1" aria-label="Ranked live feeds">
+          {candidates.slice(0, 14).map((c, i) => (
+            <button
+              key={`${c.id}-${i}`}
+              type="button"
+              onClick={() => pick(i)}
+              aria-pressed={current?.id === c.id}
+              className={cn(
+                'flex h-10 shrink-0 items-center gap-2 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
+                current?.id === c.id
+                  ? 'border-brand bg-brand text-brand-foreground'
+                  : 'border-zinc-200 bg-white/70 text-zinc-600 hover:border-brand/40 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100',
+              )}
+            >
+              {c.logo ? (
+                <img
+                  src={c.logo}
+                  alt=""
+                  width={18}
+                  height={18}
+                  loading="lazy"
+                  className="size-[18px] shrink-0 rounded object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.visibility = 'hidden';
+                  }}
+                />
+              ) : (
+                <Tv className="size-3.5 shrink-0" aria-hidden />
+              )}
+              <span className="max-w-44 truncate">{c.name}</span>
+              <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] tabular-nums opacity-70 dark:bg-white/10">
+                #{i + 1}
+              </span>
+            </button>
+          ))}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onBrowseChannels}
+            className="h-10 shrink-0 gap-1.5 rounded-full px-3.5 text-xs text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
+          >
+            All channels
+            <ArrowRight className="size-3.5" aria-hidden />
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Watch panel with a live feed that starts playing immediately. */
+function LiveWatchPanel({
+  event,
+  candidates,
+  loading,
+  onClose,
+  onBrowseChannels,
+}: {
+  event: SportsEvent;
+  candidates: SportsChannel[];
+  loading: boolean;
+  onClose: () => void;
+  onBrowseChannels: () => void;
+}) {
+  const now = useNow();
+
+  return (
+    <div className="space-y-4" aria-label={`Watch ${event.home} vs ${event.away}`}>
+      <div className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-16 right-0 -z-10 h-48 w-96 rounded-full bg-brand-soft blur-3xl"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Close watch panel"
+          onClick={onClose}
+          className="absolute right-3 top-3 size-8 rounded-lg text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
+        >
+          <X className="size-4" aria-hidden />
+        </Button>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {event.leagueBadge ? (
+            <img src={event.leagueBadge} alt="" width={36} height={36} className="size-9 rounded object-contain" />
+          ) : (
+            <Trophy className="size-6 text-brand" aria-hidden />
+          )}
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
+              {event.league}
+              {event.round ? ` · Round ${event.round}` : ''}
+            </p>
+            <h2 className="truncate text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+              {event.home} <span className="font-normal text-zinc-400">vs</span> {event.away}
+            </h2>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <StatusPill event={event} />
+            {event.state === 'upcoming' && event.start && (
+              <span className="rounded-lg bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand">
+                {countdownParts(event.start, now)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <p className="mt-4 rounded-xl border border-red-500/25 bg-red-500/5 px-4 py-3 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+          {event.state === 'live' ? (
+            <>
+              <strong className="font-semibold text-red-600 dark:text-red-400">This match is live right now.</strong>{' '}
+              CineDeck found the best free feed and started it — if it stutters, hop to another
+              channel below or hit Next feed.
+            </>
+          ) : (
+            <>
+              <strong className="font-semibold text-brand">Not kicked off yet.</strong> The top{' '}
+              {SPORT_LABELS[event.sport] ?? event.sport} channel is already playing — it usually
+              carries the match when it starts.
+            </>
+          )}
+        </p>
+      </div>
+
+      <LivePlayer
+        event={event}
+        candidates={candidates}
+        loading={loading}
+        onClose={onClose}
+        onBrowseChannels={onBrowseChannels}
+      />
+
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-600">
+          More feeds
+        </span>
+        {WATCH_LINKS(event).map((link) => (
+          <Button
+            key={link.label}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(link.href, '_blank', 'noopener,noreferrer')}
+            className="h-8 gap-1.5 rounded-lg border-zinc-200 bg-white/70 text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          >
+            {link.label}
+            <ExternalLink className="size-3" aria-hidden />
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main view
 // ---------------------------------------------------------------------------
 
@@ -624,6 +1062,7 @@ export function SportsView() {
   const eventsQuery = useSportsEvents(date, tab === 'today' ? sport : 'All');
   const upcomingQuery = useUpcomingEvents(tab === 'upcoming');
   const channelsQuery = useSportsChannels();
+  const matchQuery = useMatchCandidates(selected);
 
   const events = eventsQuery.data ?? [];
   const liveCount = useMemo(() => events.filter((e) => e.state === 'live').length, [events]);
@@ -662,7 +1101,7 @@ export function SportsView() {
             )}
           </h1>
           <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">
-            Live scores, schedules and free sports TV channels — keyless via TheSportsDB &amp; iptv-org.
+            Press Watch and CineDeck finds a working live feed, then plays it instantly — keyless via TheSportsDB &amp; iptv-org.
           </p>
         </div>
         <span className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-600">
@@ -752,17 +1191,32 @@ export function SportsView() {
         </div>
       )}
 
-      {/* Watch panel (event selected) */}
+      {/* Watch panel (event selected) — finished events get the links panel,
+          everything else gets the live player immediately. */}
       {selected && tab !== 'channels' && (
         <div id="sports-watch-panel">
-          <WatchPanel
-            event={selected}
-            onClose={() => setSelected(null)}
-            onBrowseChannels={() => {
-              setTab('channels');
-              setSelected(null);
-            }}
-          />
+          {selected.state === 'finished' ? (
+            <WatchPanel
+              event={selected}
+              onClose={() => setSelected(null)}
+              onBrowseChannels={() => {
+                setTab('channels');
+                setSelected(null);
+              }}
+            />
+          ) : (
+            <LiveWatchPanel
+              key={selected.id}
+              event={selected}
+              candidates={matchQuery.data ?? []}
+              loading={matchQuery.isPending}
+              onClose={() => setSelected(null)}
+              onBrowseChannels={() => {
+                setTab('channels');
+                setSelected(null);
+              }}
+            />
+          )}
         </div>
       )}
 
