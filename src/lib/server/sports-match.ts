@@ -18,8 +18,8 @@ const PROBE_TIMEOUT_MS = 2_500;
 const PROBE_DEADLINE_MS = 4_000;
 /** Hard ceiling for the whole probe round — the match API must always answer fast. */
 const PROBE_ROUND_DEADLINE_MS = 8_000;
-const PROBE_TOP_N = 20;
-const MAX_CANDIDATES = 16;
+const PROBE_TOP_N = 28;
+const MAX_CANDIDATES = 20;
 const FALLBACK_UNPROBED = 8;
 const CACHE_TTL_MS = 5 * 60_000;
 

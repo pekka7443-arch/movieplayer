@@ -192,8 +192,15 @@ function useMatchCandidates(event: SportsEvent | null) {
       const json = (await res.json()) as { candidates: SportsChannel[] };
       return json.candidates;
     },
-    staleTime: 5 * 60_000,
+    staleTime: 30 * 60_000,
+    gcTime: 30 * 60_000,
+    // Frozen while watching: an automatic refetch (window focus, staleness…)
+    // would hand the player a NEW candidate array — same channels, fresh
+    // object identity — which re-ranked feeds mid-playback. "Retry scan"
+    // refetches explicitly; that's the only path that refreshes this query.
     refetchOnWindowFocus: false,
+    refetchInterval: false,
+    refetchOnReconnect: false,
     retry: 1,
   });
 }
@@ -787,6 +794,7 @@ function LivePlayer({
   const [muted, setMuted] = useState(true);
 
   const current = candidates[idx] ?? null;
+  const currentUrl = current?.url ?? null;
   const phase: LivePhase = current
     ? (liveUrl === current.url ? 'live' : 'connecting')
     : (loading ? 'finding' : 'exhausted');
@@ -794,13 +802,18 @@ function LivePlayer({
   /** Watchdog / error fallback — jump to the next ranked candidate. */
   const advance = useCallback(() => setIdx((i) => i + 1), []);
 
+  // NOTE: the effect depends on the primitive `currentUrl`, NOT the candidate
+  // object — a refetch that produces a fresh array (same channels, new
+  // identity) must never tear down a playing stream.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !current) return;
+    if (!video || !currentUrl) return;
     let destroyed = false;
     let hls: { destroy: () => void } | null = null;
     let watchdog: ReturnType<typeof setTimeout> | null = null;
-    activeUrlRef.current = current.url;
+    let hasPlayed = false;
+    let lastTime = -1;
+    activeUrlRef.current = currentUrl;
 
     const disarm = () => {
       if (watchdog) {
@@ -808,17 +821,59 @@ function LivePlayer({
         watchdog = null;
       }
     };
+    /**
+     * (Re)arm the failover watchdog. While the stream is healthy every
+     * `timeupdate` (≈4×/s) rearms this, so the timeout only ever fires when
+     * playback has genuinely gone quiet for `failoverSeconds`. A feed that
+     * PLAYS is never switched away from — that was the "working stream
+     * randomly jumps to another one" bug: the watchdog used to keep running
+     * to completion even after the video had started.
+     */
     const armWatchdog = () => {
       disarm();
       if (!autoFailover) return;
       watchdog = setTimeout(() => {
-        if (!destroyed) advance();
+        if (destroyed) return;
+        if (video.paused) {
+          // Paused before ever playing → autoplay was blocked → try the next
+          // feed. Paused after playing → the user paused it on purpose; the
+          // `playing` event rearms the watchdog on resume.
+          if (!hasPlayed) advance();
+          return;
+        }
+        advance();
       }, Math.max(4, failoverSeconds) * 1000);
     };
 
+    const onPlaying = () => {
+      hasPlayed = true;
+      lastTime = video.currentTime;
+      setLiveUrl(activeUrlRef.current);
+      armWatchdog();
+    };
+    const onTimeUpdate = () => {
+      if (video.paused || video.currentTime === lastTime) return; // no progress → let the watchdog run
+      lastTime = video.currentTime;
+      armWatchdog(); // healthy progress → push the deadline out again
+    };
+    const onWaiting = () => {
+      if (hasPlayed) armWatchdog(); // brief stall — give it a full window to recover
+    };
+    const onMediaError = () => {
+      // Only trust real media errors that left us with nothing to render.
+      if (video.error && video.readyState === 0 && !destroyed) {
+        disarm();
+        advance();
+      }
+    };
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('error', onMediaError);
+
     const setup = async () => {
       // Playback goes through CineDeck's HLS proxy (fixes CORS + mixed content).
-      const playUrl = `/api/sports/stream?u=${encodeURIComponent(current.url)}`;
+      const playUrl = `/api/sports/stream?u=${encodeURIComponent(currentUrl)}`;
       video.muted = true;
       const canNative = video.canPlayType('application/vnd.apple.mpegurl');
       if (canNative) {
@@ -855,11 +910,15 @@ function LivePlayer({
     return () => {
       destroyed = true;
       disarm();
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('error', onMediaError);
       hls?.destroy();
       video.removeAttribute('src');
       video.load();
     };
-  }, [current, autoFailover, failoverSeconds, advance]);
+  }, [currentUrl, autoFailover, failoverSeconds, advance]);
 
   /** Manual pick from the ranked feeds list. */
   const pick = (i: number) => {
@@ -892,11 +951,6 @@ function LivePlayer({
             muted
             playsInline
             className="absolute inset-0 size-full bg-black"
-            onPlaying={() => setLiveUrl(activeUrlRef.current)}
-            onError={(e) => {
-              const el = e.currentTarget;
-              if (el.error && el.readyState === 0 && current) advance();
-            }}
           />
 
           {phase === 'finding' && (
@@ -1416,6 +1470,13 @@ export function SportsView() {
     if (!q) return list;
     return list.filter((c) => c.name.toLowerCase().includes(q));
   }, [channelsQuery.data, channelQuery]);
+  // The merged country playlists push the grid past 500 channels — render a
+  // window and let "Show more" extend it (search always covers everything).
+  const [visibleChannels, setVisibleChannels] = useState(120);
+  const shownChannels = useMemo(
+    () => filteredChannels.slice(0, visibleChannels),
+    [filteredChannels, visibleChannels],
+  );
 
   const openWatch = useCallback(
     (event: SportsEvent) => {
@@ -1670,8 +1731,11 @@ export function SportsView() {
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
               <Input
                 value={channelQuery}
-                onChange={(e) => setChannelQuery(e.target.value)}
-                placeholder="Search 280+ free sports channels…"
+                onChange={(e) => {
+                  setChannelQuery(e.target.value);
+                  setVisibleChannels(120); // new search → collapse back to the first page
+                }}
+                placeholder={`Search ${channelsQuery.data?.length ?? '500+'} free sports channels…`}
                 aria-label="Search sports channels"
                 className="h-10 rounded-xl border-zinc-200 bg-white/80 pl-9 text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:border-brand/60 focus-visible:ring-brand/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:placeholder:text-zinc-600"
               />
@@ -1700,7 +1764,7 @@ export function SportsView() {
             </p>
           ) : (
             <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-              {filteredChannels.map((c) => (
+              {shownChannels.map((c) => (
                 <li key={c.id}>
                   <button
                     type="button"
@@ -1740,6 +1804,22 @@ export function SportsView() {
                 </li>
               ))}
             </ul>
+          )}
+          {!channelsQuery.isPending && filteredChannels.length > shownChannels.length && (
+            <div className="flex justify-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setVisibleChannels((n) => n + 240)}
+                className="h-9 gap-1.5 rounded-xl border-zinc-200 bg-white/70 text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              >
+                Show more channels
+                <span className="font-mono text-[10px] tabular-nums opacity-60">
+                  {shownChannels.length}/{filteredChannels.length}
+                </span>
+              </Button>
+            </div>
           )}
         </>
       )}

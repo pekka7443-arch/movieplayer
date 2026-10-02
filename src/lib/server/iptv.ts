@@ -6,6 +6,10 @@
 
 import https from 'node:https';
 
+// The categories/sports.m3u list is iptv-org's global union of every sports
+// channel — country playlists are strict subsets of it (verified: merging 15
+// country lists added zero unique URLs), so this single fetch is the whole
+// matchable pool.
 const PLAYLIST_URL = 'https://iptv-org.github.io/iptv/categories/sports.m3u';
 const TIMEOUT_MS = 15_000;
 
