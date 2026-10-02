@@ -1,13 +1,17 @@
-import { PROVIDERS, getEmbedUrl } from "@/lib/providers";
+import { PROVIDERS, getEmbedUrl, supportsDub } from "@/lib/providers";
 import type { ScanResult } from "@/lib/meta";
 
 // GET /api/scan?type=movie|tv&imdb=tt1375666  (or &tmdb=123)
-//              &s=1&e=1
+//              &s=1&e=1  [&dub=fi]
 //
 // Probes every provider's embed URL server-side and reports which sources
 // respond with a playable page. The player uses this to auto-pick a healthy
 // source ("scan all sites and play"). Results are cached briefly per URL so
 // episode switches don't re-hit every provider.
+//
+// When &dub=XX is set, dub-capable providers (VidSrc XYZ / VIP) are probed
+// with the dub parameter appended — so the health ranking reflects exactly
+// the URL the player will load — and those rows carry lang=XX.
 export const dynamic = "force-dynamic";
 
 const PROBE_TIMEOUT_MS = 8_000;
@@ -82,6 +86,8 @@ export async function GET(request: Request) {
   const tmdb = (searchParams.get("tmdb") ?? "").trim();
   const season = Number.parseInt(searchParams.get("s") ?? "1", 10) || 1;
   const episode = Number.parseInt(searchParams.get("e") ?? "1", 10) || 1;
+  const dubRaw = (searchParams.get("dub") ?? "").trim().toLowerCase();
+  const dub = /^[a-z]{2}$/.test(dubRaw) ? dubRaw : null;
 
   const id: number | string | null =
     /^tt\d+$/.test(imdb) ? imdb : /^\d+$/.test(tmdb) ? Number(tmdb) : null;
@@ -90,7 +96,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "bad_id" }, { status: 400 });
   }
 
-  const cacheKey = `${type}:${String(id)}:${season}:${episode}`;
+  const cacheKey = `${type}:${String(id)}:${season}:${episode}:${dub ?? "orig"}`;
   const cached = scanCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return Response.json({ results: cached.value, cached: true });
@@ -98,9 +104,22 @@ export async function GET(request: Request) {
 
   const probes = await Promise.all(
     PROVIDERS.map(async (provider): Promise<ScanResult> => {
-      const url = getEmbedUrl(provider.id, type, id, type === "tv" ? season : undefined, type === "tv" ? episode : undefined);
+      const url = getEmbedUrl(
+        provider.id,
+        type,
+        id,
+        type === "tv" ? season : undefined,
+        type === "tv" ? episode : undefined,
+        dub,
+      );
       const probe = await probeEmbed(url);
-      return { providerId: provider.id, name: provider.name, ...probe };
+      return {
+        providerId: provider.id,
+        name: provider.name,
+        ...probe,
+        // Only flag rows whose URL actually carries the dub request.
+        lang: dub && supportsDub(provider.id) ? dub : null,
+      };
     }),
   );
 

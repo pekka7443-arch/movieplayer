@@ -64,12 +64,14 @@ export interface ScanParams {
   mediaType: 'movie' | 'tv';
   season: number;
   episode: number;
+  /** 2-letter dub code (e.g. "fi") — probed + ranked dub-first. null = original. */
+  dub?: string | null;
 }
 
 export function useServerScan(params: ScanParams, enabled: boolean) {
-  const { imdb, tmdb, mediaType, season, episode } = params;
+  const { imdb, tmdb, mediaType, season, episode, dub } = params;
   return useQuery<ScanResult[], MetaError>({
-    queryKey: ['scan', mediaType, imdb ?? tmdb, season, episode],
+    queryKey: ['scan', mediaType, imdb ?? tmdb, season, episode, dub ?? 'orig'],
     queryFn: async () => {
       const search = new URLSearchParams({
         type: mediaType,
@@ -78,6 +80,7 @@ export function useServerScan(params: ScanParams, enabled: boolean) {
       });
       if (imdb) search.set('imdb', imdb);
       else if (tmdb) search.set('tmdb', String(tmdb));
+      if (dub) search.set('dub', dub);
       const data = await getJson<{ results: ScanResult[] }>(`/api/scan?${search.toString()}`);
       return data.results;
     },

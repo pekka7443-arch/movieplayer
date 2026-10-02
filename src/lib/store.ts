@@ -7,6 +7,9 @@ interface CinedeckState {
   /** Active TMDB content language (persisted). */
   language: string;
   setLanguage: (code: string) => void;
+  /** Global browse filter — All / Movies / TV Series (persisted). */
+  contentType: 'all' | 'movie' | 'tv';
+  setContentType: (type: 'all' | 'movie' | 'tv') => void;
   /** Currently selected stream provider id (persisted as preferred). */
   server: string;
   setServer: (providerId: string) => void;
@@ -41,6 +44,11 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
     updateSettings({ language: code });
     set({ language: code });
   },
+  contentType: 'all',
+  setContentType: (type) => {
+    updateSettings({ contentType: type });
+    set({ contentType: type });
+  },
   server: DEFAULT_PROVIDER,
   setServer: (providerId) => {
     updateSettings({ preferredServer: providerId });
@@ -54,7 +62,7 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
   },
   hydrateFromSettings: () => {
     const s = getSettings();
-    set({ language: s.language, server: s.preferredServer ?? DEFAULT_PROVIDER });
+    set({ language: s.language, contentType: s.contentType, server: s.preferredServer ?? DEFAULT_PROVIDER });
   },
   settingsOpen: false,
   openSettings: () => set({ settingsOpen: true }),

@@ -1,11 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { SlidersHorizontal, Zap } from 'lucide-react';
+import { Languages, SlidersHorizontal, Zap } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Popover,
   PopoverContent,
@@ -13,6 +20,7 @@ import {
 } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import { updateSettings, useSettings, FAILOVER_SECONDS_MIN, FAILOVER_SECONDS_MAX } from '@/lib/settings';
+import { LANGUAGES } from '@/lib/languages';
 
 /** Keyboard shortcuts available while the player is on screen. */
 export const PLAYER_SHORTCUTS: { keys: string; action: string }[] = [
@@ -116,6 +124,56 @@ export function PlayerSettingsMenu() {
             aria-label="Failover timeout in seconds"
             className="[&_[data-slot=slider-range]]:bg-brand [&_[data-slot=slider-thumb]]:border-brand"
           />
+        </div>
+
+        {/* Dubbed audio preference */}
+        <div className="space-y-2.5 py-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="pset-dub" className="flex items-center gap-2 text-[13px] leading-tight">
+              <Languages className="size-3.5 text-brand" aria-hidden />
+              Audio track
+            </Label>
+            {settings.dubLanguage !== 'original' && (
+              <span className="rounded-md bg-brand-soft px-2 py-0.5 font-mono text-[11px] font-bold uppercase text-brand">
+                {settings.dubLanguage} dub
+              </span>
+            )}
+          </div>
+          <Select
+            value={settings.dubLanguage}
+            onValueChange={(v) => updateSettings({ dubLanguage: v })}
+          >
+            <SelectTrigger
+              id="pset-dub"
+              className="h-9 w-full rounded-lg border-zinc-200 bg-white/80 text-[13px] text-zinc-800 focus-visible:ring-brand/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
+            >
+              <SelectValue placeholder="Audio" />
+            </SelectTrigger>
+            <SelectContent className="z-[60] max-h-72 border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
+              <SelectItem
+                value="original"
+                className="focus:bg-zinc-200/80 focus:text-zinc-900 dark:focus:bg-zinc-800/80 dark:focus:text-zinc-100"
+              >
+                Original audio
+              </SelectItem>
+              {LANGUAGES.map((lang) => {
+                const code = lang.code.split('-')[0];
+                return (
+                  <SelectItem
+                    key={code}
+                    value={code}
+                    className="focus:bg-zinc-200/80 focus:text-zinc-900 dark:focus:bg-zinc-800/80 dark:focus:text-zinc-100"
+                  >
+                    {lang.label} dub
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-600">
+            Requests a dubbed track on VidSrc XYZ / VIP (marked FI etc. above) — the scan then
+            prefers those sources. Other mirrors: switch audio in the player's own ⚙ menu.
+          </p>
         </div>
 
         <Separator className="my-2 bg-zinc-200 dark:bg-zinc-800/80" />

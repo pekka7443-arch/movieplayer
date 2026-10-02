@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { CornerDownLeft, Database, Loader2, Search, SearchX } from 'lucide-react';
+import { CornerDownLeft, Database, Film, Loader2, Search, SearchX, Tv } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useSearch } from '@/hooks/use-media';
 import { useMetaSearch } from '@/hooks/use-meta';
@@ -147,6 +147,9 @@ export function SearchBar() {
   const router = useRouter();
   const language = useCinedeckStore((s) => s.language);
   const hasKey = useHasTmdbKey();
+  // The global Movies / TV Series filter applies to search results too.
+  const contentType = useCinedeckStore((s) => s.contentType);
+  const setContentType = useCinedeckStore((s) => s.setContentType);
 
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
@@ -169,9 +172,15 @@ export function SearchBar() {
     () => (hasKey ? results : metaResults) as Array<SearchItem | MetaSearchItem>,
     [hasKey, results, metaResults]
   );
+  // Type-filtered view + how many rows the filter hid.
+  const visible = useMemo(
+    () => (contentType === 'all' ? flat : flat.filter((i) => i.mediaType === contentType)),
+    [flat, contentType]
+  );
+  const hiddenCount = flat.length - visible.length;
 
   // Derived (never stored) so a shrinking result list can't leave a stale cursor.
-  const safeIndex = Math.min(activeIndex, Math.max(0, flat.length - 1));
+  const safeIndex = Math.min(activeIndex, Math.max(0, visible.length - 1));
 
   // Keep the highlighted row visible while arrowing through the list.
   useEffect(() => {
@@ -232,18 +241,18 @@ export function SearchBar() {
 
   /** Enter = play the highlighted row (or the best match when closed). */
   const playActive = useCallback(() => {
-    const item = flat[safeIndex] ?? flat[0];
+    const item = visible[safeIndex] ?? visible[0];
     if (!item) return;
     if ('imdbId' in item) selectMeta(item as MetaSearchItem);
     else select(item as SearchItem);
-  }, [flat, safeIndex, select, selectMeta]);
+  }, [visible, safeIndex, select, selectMeta]);
 
   const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'ArrowDown' && flat.length > 0) {
+    if (event.key === 'ArrowDown' && visible.length > 0) {
       event.preventDefault();
       setOpen(true);
-      setActiveIndex(Math.min(safeIndex + 1, flat.length - 1));
-    } else if (event.key === 'ArrowUp' && flat.length > 0) {
+      setActiveIndex(Math.min(safeIndex + 1, visible.length - 1));
+    } else if (event.key === 'ArrowUp' && visible.length > 0) {
       event.preventDefault();
       setActiveIndex(Math.max(safeIndex - 1, 0));
     } else if (event.key === 'Enter') {
@@ -256,6 +265,24 @@ export function SearchBar() {
   };
 
   const showDropdown = open && text.trim().length > 0;
+
+  /** Small banner shown when the global type filter is active in search. */
+  const filterBanner = contentType !== 'all' && (
+    <div className="flex items-center gap-2 border-b border-zinc-200/70 px-3 pb-2 pt-2 text-[11px] text-zinc-500 dark:border-zinc-800/70 dark:text-zinc-400">
+      <span className="inline-flex items-center gap-1 font-semibold text-zinc-700 dark:text-zinc-200">
+        {contentType === 'movie' ? <Film className="size-3 text-brand" aria-hidden /> : <Tv className="size-3 text-brand" aria-hidden />}
+        {contentType === 'movie' ? 'Movies only' : 'TV Series only'}
+      </span>
+      {hiddenCount > 0 && <span>· {hiddenCount} hidden</span>}
+      <button
+        type="button"
+        onClick={() => setContentType('all')}
+        className="ml-auto rounded px-1.5 py-0.5 font-medium text-brand underline-offset-2 hover:bg-brand-soft hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+      >
+        Show everything
+      </button>
+    </div>
+  );
 
   let body: React.ReactNode;
   if (!hasKey) {
@@ -279,17 +306,37 @@ export function SearchBar() {
           No results for “{trimmed}”
         </div>
       );
+    } else if (visible.length === 0) {
+      body = (
+        <div className="flex flex-col items-center gap-2 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
+          <SearchX className="size-4 text-zinc-500 dark:text-zinc-600" aria-hidden />
+          <span>
+            Only {contentType === 'movie' ? 'series' : 'movies'} matched “{trimmed}” — the{' '}
+            {contentType === 'movie' ? 'Movies' : 'TV Series'} filter is hiding them.
+          </span>
+          <button
+            type="button"
+            onClick={() => setContentType('all')}
+            className="rounded-md bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-soft-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+          >
+            Show everything
+          </button>
+        </div>
+      );
     } else {
       body = (
         <div className="p-1" ref={listRef}>
-          {metaResults.map((item, i) => (
-            <MetaResultRow
-              key={`${item.mediaType}-${item.imdbId}`}
-              item={item}
-              active={i === safeIndex}
-              onSelect={selectMeta}
-            />
-          ))}
+          {visible.map((item, i) => {
+            const meta = item as MetaSearchItem;
+            return (
+              <MetaResultRow
+                key={`${meta.mediaType}-${meta.imdbId}`}
+                item={meta}
+                active={i === safeIndex}
+                onSelect={selectMeta}
+              />
+            );
+          })}
           <p className="flex items-center gap-1.5 px-2 pb-1 pt-1.5 text-[11px] text-zinc-500 dark:text-zinc-600">
             <Database className="size-3" aria-hidden />
             Keyless mode — plays via IMDB · add a TMDB key for the full library
@@ -317,17 +364,37 @@ export function SearchBar() {
         No results for “{trimmed}”
       </div>
     );
+  } else if (visible.length === 0) {
+    body = (
+      <div className="flex flex-col items-center gap-2 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
+        <SearchX className="size-4 text-zinc-500 dark:text-zinc-600" aria-hidden />
+        <span>
+          Only {contentType === 'movie' ? 'series' : 'movies'} matched “{trimmed}” — the{' '}
+          {contentType === 'movie' ? 'Movies' : 'TV Series'} filter is hiding them.
+        </span>
+        <button
+          type="button"
+          onClick={() => setContentType('all')}
+          className="rounded-md bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-soft-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+        >
+          Show everything
+        </button>
+      </div>
+    );
   } else {
     body = (
       <div className="p-1" ref={listRef}>
-        {results.map((item, i) => (
-          <ResultRow
-            key={`${item.mediaType}-${item.id}`}
-            item={item}
-            active={i === safeIndex}
-            onSelect={select}
-          />
-        ))}
+        {visible.map((item, i) => {
+          const tmdbItem = item as SearchItem;
+          return (
+            <ResultRow
+              key={`${tmdbItem.mediaType}-${tmdbItem.id}`}
+              item={tmdbItem}
+              active={i === safeIndex}
+              onSelect={select}
+            />
+          );
+        })}
       </div>
     );
   }
@@ -358,8 +425,9 @@ export function SearchBar() {
           aria-label="Search results"
           className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-1 shadow-xl shadow-black/10 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/40 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-700"
         >
+          {filterBanner}
           {body}
-          {flat.length > 0 && (
+          {visible.length > 0 && (
             <p className="flex items-center justify-end gap-3 border-t border-zinc-200/70 px-3 pb-1.5 pt-2 text-[10px] font-medium text-zinc-400 dark:border-zinc-800/70 dark:text-zinc-600">
               <span className="inline-flex items-center gap-1">
                 <kbd className="rounded border border-zinc-300 px-1 font-mono text-[9px] dark:border-zinc-700">↑↓</kbd>

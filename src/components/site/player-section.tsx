@@ -32,7 +32,7 @@ import {
 import { Fragment } from 'react';
 import { useSeason } from '@/hooks/use-media';
 import { useServerScan, useTvmazeShow } from '@/hooks/use-meta';
-import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl } from '@/lib/providers';
+import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl, supportsDub, dubCodeOf } from '@/lib/providers';
 import { useCinedeckStore } from '@/lib/store';
 import { useSettings } from '@/lib/settings';
 import { PlayerSettingsMenu } from '@/components/site/player-settings';
@@ -78,6 +78,8 @@ export function PlayerSection({
   // Playback preferences (auto-pick / auto-failover / stall timeout).
   const settings = useSettings();
   const [theater, setTheater] = useState(false);
+  /** 2-letter dub code when the user wants dubbed audio (null = original). */
+  const dubLang = dubCodeOf(settings.dubLanguage);
 
   const tvDetails = details && details.mediaType === 'tv' ? (details as TvDetails) : undefined;
   const isTv = mediaType === 'tv';
@@ -110,7 +112,7 @@ export function PlayerSection({
   // the healthiest one. A manual server pick always wins over auto-selection.
   // ---------------------------------------------------------------------------
   const scanQuery = useServerScan(
-    { imdb: imdbId ?? null, tmdb: tmdbId ?? null, mediaType, season, episode },
+    { imdb: imdbId ?? null, tmdb: tmdbId ?? null, mediaType, season, episode, dub: dubLang },
     watchId !== 0,
   );
   const manualPickRef = useRef(false);
@@ -136,15 +138,21 @@ export function PlayerSection({
 
   /**
    * Auto-play order: confirmed-online sources first (fastest response wins),
-   * then bot-blocked-but-maybe-working (403), then everything else.
+   * then bot-blocked-but-maybe-working (403), then everything else. With dub
+   * audio enabled, dub-capable sources (VidSrc XYZ / VIP) jump ahead of the
+   * other online mirrors so the user actually GETS the requested dub.
    */
   const candidates = useMemo(() => {
     const rows = scanQuery.data ?? [];
-    const ok = rows.filter((r) => r.ok).sort((a, b) => a.ms - b.ms).map((r) => r.providerId);
+    const rank = (ids: string[]) =>
+      dubLang
+        ? [...ids.filter(supportsDub), ...ids.filter((id) => !supportsDub(id))]
+        : ids;
+    const ok = rank(rows.filter((r) => r.ok).sort((a, b) => a.ms - b.ms).map((r) => r.providerId));
     const unknown = rows.filter((r) => !r.ok && r.status === 403).map((r) => r.providerId);
     const rest = rows.filter((r) => !r.ok && r.status !== 403).map((r) => r.providerId);
     return [...ok, ...unknown, ...rest];
-  }, [scanQuery.data]);
+  }, [scanQuery.data, dubLang]);
 
   // The scan outranked the current server → move on (unless the user picked
   // manually or disabled auto-pick in playback settings).
@@ -157,7 +165,7 @@ export function PlayerSection({
   }, [settings.autoPickSource, scanQuery.data, healthMap, candidates, server, setServerTransient]);
 
   const provider = getProvider(server);
-  const embedUrl = getEmbedUrl(server, mediaType, watchId, isTv ? season : undefined, isTv ? episode : undefined);
+  const embedUrl = getEmbedUrl(server, mediaType, watchId, isTv ? season : undefined, isTv ? episode : undefined, dubLang);
   // The player iframe is loaded via /api/player-proxy — a wrapper page that
   // contains the real provider iframe WITHOUT sandbox. The OUTER iframe
   // (this one) is sandboxed, which blocks pop-ups and top-level redirects
@@ -382,7 +390,7 @@ export function PlayerSection({
         )}
       </div>
 
-      {/* Server tabs + tools — 13 providers grouped into 2Embed / VidSrc / Other clusters */}
+      {/* Server tabs + tools — providers grouped into 2Embed / VidSrc / Other clusters */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div
           role="tablist"
@@ -453,6 +461,15 @@ export function PlayerSection({
                         }
                       />
                       {p.short}
+                      {dubLang && supportsDub(p.id) && (
+                        <span
+                          aria-hidden
+                          title={`Dubbed audio requested: ${dubLang.toUpperCase()}`}
+                          className="rounded bg-brand/15 px-1 font-mono text-[9px] font-bold uppercase leading-4 text-brand"
+                        >
+                          {dubLang}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -473,10 +490,10 @@ export function PlayerSection({
               aria-hidden
             />
             {scanQuery.isFetching && !scanQuery.data
-              ? 'Scanning 13 sources…'
+              ? `Scanning ${PROVIDERS.length} sources…`
               : scanQuery.data
                 ? onlineCount > 0
-                  ? `${onlineCount}/${scanQuery.data.length} online — auto ${provider.name}`
+                  ? `${onlineCount}/${scanQuery.data.length} online — auto ${provider.name}${dubLang ? ' · dub' : ''}`
                   : 'No mirror responded yet'
                 : 'Source scan'}
           </span>
@@ -766,7 +783,7 @@ export function PlayerSection({
                   <p className="text-sm text-zinc-700 dark:text-zinc-300">
                     {failover?.forUrl === embedUrl && failover.toId
                       ? `Auto-switched to ${getProvider(failover.toId).name}…`
-                      : `Connecting to ${provider.name}…`}
+                      : `Connecting to ${provider.name}${dubLang && supportsDub(server) ? ` · ${dubLang.toUpperCase()} dub` : ''}…`}
                   </p>
                   {failover?.forUrl === embedUrl && failover.toId ? (
                     <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-600">
@@ -793,7 +810,7 @@ export function PlayerSection({
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-600">
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
-          CineDeck scans all 13 mirrors (7× 2Embed + 4× VidSrc + 2 others), plays the healthiest one
+          CineDeck scans all {PROVIDERS.length} mirrors (7× 2Embed + 5× VidSrc + 2 others), plays the healthiest one
           and auto-switches if a source stalls — tune it all under{' '}
           <strong className="font-semibold text-brand">Settings</strong> above. Shortcuts:{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">R</kbd> reload ·{' '}

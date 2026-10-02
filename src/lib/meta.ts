@@ -77,4 +77,6 @@ export interface ScanResult {
   ok: boolean;
   status: number | null;
   ms: number;
+  /** 2-letter dub code the probed embed URL requested (null = original audio). */
+  lang?: string | null;
 }

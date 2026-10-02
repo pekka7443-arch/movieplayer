@@ -12,6 +12,7 @@ export type ProviderId =
   | 'vidsrc_sh'
   | 'vidsrc_cc'
   | 'vidsrcxyz'
+  | 'vidsrcvip'
   // Other public providers (kept as last-resort alternates)
   | 'superembed'
   | 'embedsu';
@@ -33,6 +34,12 @@ export interface Provider {
   short: string;
   /** Cluster this provider belongs to ('twoembed' | 'vidsrc' | 'other'). */
   group: 'twoembed' | 'vidsrc' | 'other';
+  /**
+   * Query parameter name this provider uses to request a DUBBED audio track
+   * (e.g. "ds_lang" → &ds_lang=fi). Null/undefined = no dub support — the
+   * player's own audio menu is the only way to switch languages there.
+   */
+  dubParam?: string | null;
   movie: (id: number) => string;
   tv: (id: number, season: number, episode: number) => string;
   /** IMDB-id variants (e.g. "tt1375666") — used by the keyless IMDB watch mode. */
@@ -170,10 +177,24 @@ export const PROVIDERS: Provider[] = [
     name: 'VidSrc XYZ',
     short: 'xyz',
     group: 'vidsrc',
+    // ds_lang = default (dub) audio language, documented by vidsrc.xyz.
+    dubParam: 'ds_lang',
     movie: (id) => `https://vidsrc.xyz/embed/movie?tmdb=${id}`,
     tv: (id, s, e) => `https://vidsrc.xyz/embed/tv?tmdb=${id}&season=${s}&episode=${e}`,
     movieImdb: (imdb) => `https://vidsrc.xyz/embed/movie?imdb=${imdb}`,
     tvImdb: (imdb, s, e) => `https://vidsrc.xyz/embed/tv?imdb=${imdb}&season=${s}&episode=${e}`,
+  },
+  {
+    id: 'vidsrcvip',
+    name: 'VidSrc VIP',
+    short: 'vip',
+    group: 'vidsrc',
+    // Same embed API family as VidSrc XYZ (same query shape + ds_lang dub).
+    dubParam: 'ds_lang',
+    movie: (id) => `https://vidsrc.vip/embed/movie?tmdb=${id}`,
+    tv: (id, s, e) => `https://vidsrc.vip/embed/tv?tmdb=${id}&season=${s}&episode=${e}`,
+    movieImdb: (imdb) => `https://vidsrc.vip/embed/movie?imdb=${imdb}`,
+    tvImdb: (imdb, s, e) => `https://vidsrc.vip/embed/tv?imdb=${imdb}&season=${s}&episode=${e}`,
   },
 
   // ----- Other public providers (kept as last-resort alternates) -----
@@ -218,24 +239,52 @@ export function isImdbId(value: number | string): value is string {
 /**
  * Build the embed URL for either a TMDB id (number) or an IMDB id (string).
  * Falls back to the TMDB variant when no IMDB function exists.
+ *
+ * `dubLang` — optional 2-letter language code (e.g. "fi"). When set and the
+ * provider supports dubbing (dubParam), the code is appended so the provider
+ * player starts with that dubbed audio track preselected.
  */
 export function getEmbedUrl(
   providerId: string,
   mediaType: 'movie' | 'tv',
   tmdbOrImdbId: number | string,
   season?: number,
-  episode?: number
+  episode?: number,
+  dubLang?: string | null
 ): string {
   const provider = getProvider(providerId);
   const s = season && season >= 1 ? season : 1;
   const e = episode && episode >= 1 ? episode : 1;
 
+  const build = (url: string): string =>
+    dubLang && provider.dubParam
+      ? `${url}&${provider.dubParam}=${encodeURIComponent(dubLang)}`
+      : url;
+
   if (isImdbId(tmdbOrImdbId)) {
-    return mediaType === 'tv'
-      ? provider.tvImdb(tmdbOrImdbId, s, e)
-      : provider.movieImdb(tmdbOrImdbId);
+    return build(
+      mediaType === 'tv'
+        ? provider.tvImdb(tmdbOrImdbId, s, e)
+        : provider.movieImdb(tmdbOrImdbId),
+    );
   }
 
-  if (mediaType === 'tv') return provider.tv(tmdbOrImdbId, s, e);
-  return provider.movie(tmdbOrImdbId);
+  return build(
+    mediaType === 'tv' ? provider.tv(tmdbOrImdbId, s, e) : provider.movie(tmdbOrImdbId),
+  );
+}
+
+/** True when this provider can request a dubbed audio track via URL. */
+export function supportsDub(providerId: string): boolean {
+  return Boolean(getProvider(providerId).dubParam);
+}
+
+/**
+ * Normalize a dub preference to the 2-letter code embed providers expect
+ * ("fi-FI" → "fi", "fi" → "fi"). Returns null for 'original'/empty input.
+ */
+export function dubCodeOf(pref: string | null | undefined): string | null {
+  if (!pref || pref === 'original') return null;
+  const code = pref.split('-')[0].toLowerCase();
+  return /^[a-z]{2}$/.test(code) ? code : null;
 }

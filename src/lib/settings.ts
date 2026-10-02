@@ -22,6 +22,14 @@ export interface CinedeckSettings {
   autoFailover: boolean;
   /** How long to wait for a source to load before failing over (6–30s). */
   failoverSeconds: number;
+  /**
+   * Dubbed audio preference for the player. 'original' = don't request dubs;
+   * otherwise a 2-letter code ("fi", "de", …) appended to dub-capable sources
+   * (VidSrc XYZ / VIP `ds_lang`) so they start with that audio track.
+   */
+  dubLanguage: string;
+  /** Global home/browse filter: show everything, only movies, or only series. */
+  contentType: 'all' | 'movie' | 'tv';
 }
 
 export const FAILOVER_SECONDS_MIN = 6;
@@ -42,7 +50,19 @@ export const DEFAULT_SETTINGS: CinedeckSettings = {
   autoPickSource: true,
   autoFailover: true,
   failoverSeconds: FAILOVER_SECONDS_DEFAULT,
+  dubLanguage: 'original',
+  contentType: 'all',
 };
+
+function normalizeDubLanguage(value: unknown): string {
+  if (typeof value !== 'string' || !value || value === 'original') return 'original';
+  const code = value.split('-')[0].toLowerCase();
+  return /^[a-z]{2}$/.test(code) ? code : 'original';
+}
+
+function normalizeContentType(value: unknown): 'all' | 'movie' | 'tv' {
+  return value === 'movie' || value === 'tv' ? value : 'all';
+}
 
 /**
  * Apply the saved accent color to document.documentElement so all
@@ -163,6 +183,8 @@ export function getSettings(): CinedeckSettings {
           autoPickSource: typeof parsed.autoPickSource === 'boolean' ? parsed.autoPickSource : true,
           autoFailover: typeof parsed.autoFailover === 'boolean' ? parsed.autoFailover : true,
           failoverSeconds: clampFailoverSeconds(parsed.failoverSeconds),
+          dubLanguage: normalizeDubLanguage(parsed.dubLanguage),
+          contentType: normalizeContentType(parsed.contentType),
         };
       }
     } catch {

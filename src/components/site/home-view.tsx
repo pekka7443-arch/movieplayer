@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import {
   Compass,
   Film,
   History,
+  LayoutGrid,
   Play,
   RefreshCw,
   Sparkles,
@@ -389,12 +390,20 @@ export function HomeView() {
   const router = useRouter();
   const language = useCinedeckStore((s) => s.language);
   const openSettings = useCinedeckStore((s) => s.openSettings);
+  const contentType = useCinedeckStore((s) => s.contentType);
+  const setContentType = useCinedeckStore((s) => s.setContentType);
   const hasKey = useHasTmdbKey();
   const reduceMotion = useReducedMotion();
   const { user } = useSession();
 
   const [exploreGenre, setExploreGenre] = useState<string>('Action');
-  const [exploreType, setExploreType] = useState<'movie' | 'tv'>('movie');
+  const [localExploreType, setLocalExploreType] = useState<'movie' | 'tv'>('movie');
+  // The global Movies/TV filter also drives the Explore section when active.
+  const exploreType = contentType === 'all' ? localExploreType : contentType;
+  const pickExploreType = (t: 'movie' | 'tv') => {
+    setLocalExploreType(t);
+    if (contentType !== 'all') setContentType(t);
+  };
 
   // Always fetch trending + popular (keyless Cinemeta fallback is built into
   // the hooks themselves). When the user has a TMDB key, the data comes from
@@ -412,6 +421,21 @@ export function HomeView() {
   const historyItems = historyQuery.data ?? [];
   const watchlistItems = watchlistQuery.data ?? [];
 
+  // Global Movies / TV Series filter — trims every mixed row (trending,
+  // continue watching, my list). Catalog rows handle it via their `type` param.
+  const filteredTrending = useMemo(
+    () => (contentType === 'all' ? trending : trending?.filter((i) => i.mediaType === contentType)),
+    [trending, contentType],
+  );
+  const filteredHistory = useMemo(
+    () => (contentType === 'all' ? historyItems : historyItems.filter((i) => i.mediaType === contentType)),
+    [historyItems, contentType],
+  );
+  const filteredWatchlist = useMemo(
+    () => (contentType === 'all' ? watchlistItems : watchlistItems.filter((i) => i.mediaType === contentType)),
+    [watchlistItems, contentType],
+  );
+
   const syncHint = user ? 'Synced to your account' : 'Saved on this device';
   const currentYear = new Date().getFullYear();
 
@@ -427,10 +451,65 @@ export function HomeView() {
   return (
     <div className="space-y-12">
       <HeroSection
-        trending={trending}
+        trending={filteredTrending}
         trendingLoading={trendingQuery.isPending}
         hasKey={hasKey}
       />
+
+      {/* Global content filter — Movies / TV Series / All. Slides the amber
+          pill, persists the choice and filters every row + search below. */}
+      <motion.section {...fadeIn} aria-label="Browse filter">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-zinc-200 bg-white/70 px-4 py-3 shadow-sm backdrop-blur-sm dark:border-zinc-800/60 dark:bg-zinc-900/50">
+          <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <LayoutGrid className="size-3.5 text-brand" aria-hidden />
+            Browse
+          </span>
+          <div
+            role="group"
+            aria-label="Show movies or series"
+            className="flex rounded-xl border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-950/60"
+          >
+            {([
+              { id: 'all', label: 'All', icon: LayoutGrid },
+              { id: 'movie', label: 'Movies', icon: Film },
+              { id: 'tv', label: 'TV Series', icon: Tv },
+            ] as const).map(({ id, label, icon: Icon }) => {
+              const active = contentType === id;
+              return (
+                <motion.button
+                  key={id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setContentType(id)}
+                  whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+                  className={`relative flex h-8 items-center gap-1.5 overflow-hidden rounded-lg px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 sm:px-4 ${
+                    active
+                      ? 'text-brand-foreground'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  }`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="content-filter-pill"
+                      className="absolute inset-0 rounded-lg bg-brand shadow-[0_0_16px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)]"
+                      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    <Icon className="size-3.5" aria-hidden />
+                    {label}
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
+          <span className="ml-auto hidden text-[11px] text-zinc-500 md:inline dark:text-zinc-600">
+            {contentType === 'all'
+              ? 'Showing everything — pick Movies or TV Series to filter every row'
+              : `Showing ${contentType === 'movie' ? 'movies only' : 'series only'} — every row, the hero and search respect this`}
+          </span>
+        </div>
+      </motion.section>
 
       {/* Live Sports teaser band */}
       <motion.section {...fadeIn} aria-labelledby="sports-teaser">
@@ -486,11 +565,17 @@ export function HomeView() {
               </div>
             ))}
           </div>
-        ) : historyItems.length === 0 ? (
-          <RowEmptyState text="Nothing in progress yet — play something to pick up where you left off." />
+        ) : filteredHistory.length === 0 ? (
+          <RowEmptyState
+            text={
+              historyItems.length > 0
+                ? `No ${contentType === 'tv' ? 'series' : 'movies'} in progress — switch the browse filter to All.`
+                : 'Nothing in progress yet — play something to pick up where you left off.'
+            }
+          />
         ) : (
           <MediaRow label="Continue watching">
-            {historyItems.map((item) => (
+            {filteredHistory.map((item) => (
               <HistoryCard key={item.id} item={item} />
             ))}
           </MediaRow>
@@ -510,27 +595,33 @@ export function HomeView() {
               </div>
             ))}
           </div>
-        ) : watchlistItems.length === 0 ? (
+        ) : filteredWatchlist.length === 0 ? (
           <RowEmptyState
             text={
-              user
-                ? 'Your list is empty — tap the bookmark on any title to save it here.'
-                : 'Your list is empty — bookmark titles or create an account to sync them everywhere.'
+              watchlistItems.length > 0
+                ? `No ${contentType === 'tv' ? 'series' : 'movies'} saved — switch the browse filter to All.`
+                : user
+                  ? 'Your list is empty — tap the bookmark on any title to save it here.'
+                  : 'Your list is empty — bookmark titles or create an account to sync them everywhere.'
             }
           />
         ) : (
           <MediaRow label="My List">
-            {watchlistItems.map((item) => (
+            {filteredWatchlist.map((item) => (
               <WatchlistCard key={item.id} item={item} />
             ))}
           </MediaRow>
         )}
       </motion.section>
 
-      {/* Trending — horizontal scroll row */}
+      {/* Trending — horizontal scroll row (type follows the browse filter) */}
       <motion.section {...fadeIn} aria-labelledby="trending-week">
         <div id="trending-week" className="scroll-mt-24">
-          <SectionHeading icon={TrendingUp} title="Trending Now" hint={hasKey ? 'This week on TMDB' : 'Top picks'} />
+          <SectionHeading
+            icon={TrendingUp}
+            title={contentType === 'movie' ? 'Trending Movies' : contentType === 'tv' ? 'Trending Series' : 'Trending Now'}
+            hint={hasKey ? 'This week on TMDB' : 'Top picks'}
+          />
         </div>
         {trendingQuery.isPending ? (
           <RowSkeletonStripe />
@@ -549,9 +640,9 @@ export function HomeView() {
               Try again
             </Button>
           </div>
-        ) : trending && trending.length > 0 ? (
+        ) : filteredTrending && filteredTrending.length > 0 ? (
           <MediaRow label="Trending Now">
-            {trending.map((item, index) => (
+            {filteredTrending.map((item, index) => (
               <MediaCard
                 key={rowKeyOf(item)}
                 item={toCardItem(item)}
@@ -565,7 +656,8 @@ export function HomeView() {
         )}
       </motion.section>
 
-      {/* Popular Movies */}
+      {/* Popular Movies — hidden while the filter shows series only */}
+      {contentType !== 'tv' && (
       <motion.section {...fadeIn} aria-labelledby="popular-movies">
         <div id="popular-movies" className="scroll-mt-24">
           <SectionHeading icon={Film} title="Popular Movies" hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'} />
@@ -587,8 +679,10 @@ export function HomeView() {
           <RowEmptyState text="No popular movies right now." />
         )}
       </motion.section>
+      )}
 
-      {/* Popular TV Shows */}
+      {/* Popular TV Shows — hidden while the filter shows movies only */}
+      {contentType !== 'movie' && (
       <motion.section {...fadeIn} aria-labelledby="popular-tv">
         <div id="popular-tv" className="scroll-mt-24">
           <SectionHeading icon={Tv} title="Popular TV Shows" hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'} />
@@ -610,25 +704,32 @@ export function HomeView() {
           <RowEmptyState text="No popular TV shows right now." />
         )}
       </motion.section>
+      )}
 
-      {/* Top Rated Movies — keyless imdbRating catalog, fetched when near */}
-      <LazySection id="top-rated" label="Top rated movies">
+      {/* Top Rated — keyless imdbRating catalog, type follows the browse filter */}
+      <LazySection id="top-rated" label="Top rated">
         <CatalogRow
           icon={Trophy}
-          title="Top Rated Movies"
+          title={contentType === 'tv' ? 'Top Rated Shows' : 'Top Rated Movies'}
           hint="IMDB all-time greats"
-          params={{ type: 'movie', sort: 'imdbRating' }}
+          params={{ type: contentType === 'tv' ? 'tv' : 'movie', sort: 'imdbRating' }}
           enabled
         />
       </LazySection>
 
-      {/* New This Year — keyless year catalog */}
+      {/* New This Year — keyless year catalog, type follows the browse filter */}
       <LazySection id="new-this-year" label="New this year">
         <CatalogRow
           icon={Sparkles}
-          title={`New in ${currentYear}`}
+          title={
+            contentType === 'tv'
+              ? `New series in ${currentYear}`
+              : contentType === 'movie'
+                ? `New movies in ${currentYear}`
+                : `New in ${currentYear}`
+          }
           hint="Fresh releases"
-          params={{ type: 'movie', year: currentYear }}
+          params={{ type: contentType === 'tv' ? 'tv' : 'movie', year: currentYear }}
           enabled
         />
       </LazySection>
@@ -680,7 +781,7 @@ export function HomeView() {
                   key={t}
                   type="button"
                   aria-pressed={exploreType === t}
-                  onClick={() => setExploreType(t)}
+                  onClick={() => pickExploreType(t)}
                   whileTap={reduceMotion ? undefined : { scale: 0.95 }}
                   className={`relative flex h-7 items-center gap-1.5 overflow-hidden rounded-md px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
                     exploreType === t
