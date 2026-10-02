@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, useReducedMotion } from 'framer-motion';
 import { BookmarkCheck, BookmarkPlus, ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -60,7 +59,6 @@ export function WatchView({
   episode: number;
 }) {
   const router = useRouter();
-  const reduceMotion = useReducedMotion();
 
   const language = useCinedeckStore((s) => s.language);
   const resetServer = useCinedeckStore((s) => s.resetServer);
@@ -147,11 +145,14 @@ export function WatchView({
   }, [tmdbId, mediaType, season, episode, settings.saveHistory, details?.title, hasKey, detailsQuery.isPending, isImdbMode]);
 
   return (
-    <motion.div
-      initial={reduceMotion ? undefined : { opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28 }}
-    >
+    <div>
+      {/* Local accent bloom behind the player — draws the eye to the action. */}
+      <div
+        aria-hidden
+        className="pointer-events-none relative -mt-2 mb-1"
+      >
+        <div className="absolute -top-6 left-1/2 h-40 w-[82%] max-w-3xl -translate-x-1/2 rounded-full bg-brand/15 blur-[90px]" />
+      </div>
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -235,6 +236,6 @@ export function WatchView({
       {isImdbMode && (
         <MetaSimilarRow items={metaSimilarQuery.data} loading={metaSimilarQuery.isPending} />
       )}
-    </motion.div>
+    </div>
   );
 }

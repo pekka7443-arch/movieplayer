@@ -14,16 +14,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CineDeck — Play movies & shows by TMDB ID",
+  title: "CineDeck — Movies, TV & Live Sports, one press away",
   description:
-    "Paste any TMDB ID and press play. CineDeck is a minimal, player-first movie & TV front-end with multiple streaming servers, watchlist, history, trailers and 12-language TMDB metadata.",
+    "Search any title and press play — CineDeck scans every stream source and plays the healthiest one. Live sports with scores & replays, 13 auto-failover servers, watchlist, history, arcade and 12-language metadata. No API key needed.",
   keywords: [
     "CineDeck",
     "TMDB",
     "movie player",
     "TV shows",
+    "live sports",
+    "sports replays",
     "stream player",
-    "watch by ID",
+    "watch online",
+    "free sports TV",
     "trailers",
     "watchlist",
   ],
@@ -32,15 +35,17 @@ export const metadata: Metadata = {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
   openGraph: {
-    title: "CineDeck — Play anything with a TMDB ID",
-    description: "Player-first movie & TV front-end. Paste a TMDB ID, pick a server, press play.",
+    title: "CineDeck — Movies, TV & Live Sports, one press away",
+    description:
+      "Player-first streaming front-end: one-press search & play, live sports with replays you can scrub, 13 auto-failover servers.",
     siteName: "CineDeck",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "CineDeck — Play anything with a TMDB ID",
-    description: "Player-first movie & TV front-end with servers, watchlist, history and trailers.",
+    title: "CineDeck — Movies, TV & Live Sports",
+    description:
+      "One-press playback, live sports & replays, watchlist sync and zero ads.",
   },
 };
 

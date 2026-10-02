@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useMotionValueEvent, useScroll } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -49,6 +51,14 @@ export function Header() {
   const { user, loading } = useSession();
   const goSection = useHomeSectionNav();
 
+  // Scroll-aware chrome: the header densifies and gains depth as the page
+  // scrolls, then relaxes back at the top.
+  const { scrollY } = useScroll();
+  const [scrolled, setScrolled] = useState(false);
+  useMotionValueEvent(scrollY, 'change', (latest) => {
+    setScrolled(latest > 12);
+  });
+
   const signOut = async () => {
     await logoutAccount();
     invalidateIdentityCaches(queryClient);
@@ -58,17 +68,27 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800/60 dark:bg-zinc-950/80">
-      <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+    <header
+      className={`sticky top-0 z-50 border-b backdrop-blur-xl transition-all duration-300 ${
+        scrolled
+          ? 'border-zinc-200/90 bg-white/85 shadow-[0_10px_38px_-12px_rgba(0,0,0,0.28)] dark:border-zinc-800 dark:bg-zinc-950/85 dark:shadow-black/50'
+          : 'border-transparent bg-white/60 dark:bg-zinc-950/55'
+      }`}
+    >
+      <div
+        className={`mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-3 px-4 transition-all duration-300 sm:px-6 ${
+          scrolled ? 'py-2' : 'py-3'
+        }`}
+      >
         <button
           type="button"
           onClick={() => router.push('/', { scroll: false })}
           aria-label="CineDeck — back to home"
-          className="flex shrink-0 items-center gap-2.5 rounded-lg px-1 py-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="flex shrink-0 items-center gap-2.5 rounded-lg px-1 py-1 transition-all duration-200 hover:opacity-90 hover:scale-[1.03] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         >
           {/* User's hamster logo — round, bordered container so it reads as a
               brand mark at small sizes. */}
-          <span className="size-9 overflow-hidden rounded-full ring-2 ring-brand/40 shadow-[0_0_18px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)]">
+          <span className="cd-pulse size-9 overflow-hidden rounded-full ring-2 ring-brand/40 shadow-[0_0_18px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)]">
             <img
               src="/user-logo.png"
               alt=""
@@ -97,9 +117,14 @@ export function Header() {
             aria-label="Live sports — scores, schedules and free sports TV"
             title="Live Sports"
             onClick={() => router.push('/?view=sports', { scroll: false })}
-            className="size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+            className="relative size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
           >
-            <Trophy className="size-4.5 text-brand" aria-hidden />
+            <Trophy className="size-4.5 text-brand transition-transform duration-300 hover:rotate-12" aria-hidden />
+            {/* live dot — the sports section never sleeps */}
+            <span aria-hidden className="absolute right-1.5 top-1.5 flex size-2">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-75" />
+              <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+            </span>
           </Button>
           <Button
             variant="ghost"

@@ -1,8 +1,8 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Film, Star, Tv } from 'lucide-react';
+import { Film, Play, Star, Tv } from 'lucide-react';
 import { tmdbImg } from '@/lib/languages';
 import { yearOf, type MediaType } from '@/lib/tmdb';
 
@@ -27,14 +27,44 @@ export interface MediaCardItem {
 }
 
 /**
- * Poster card styled like Zoryva's media rows: fixed width per breakpoint,
- * aspect-[2/3] poster, rounded-xl, gradient overlay from the bottom, and
- * the title + year + genre rendered as an overlay (white text on the dark
- * gradient) so the visual stays clean even on busy posters.
+ * Premium poster card: spring-back 3D tilt on pointer move (fine pointers
+ * only), a shine sweep on hover, a scale-in center play button, and a
+ * staggered rise-in entrance. All motion is transform/opacity only and
+ * collapses to static under prefers-reduced-motion.
  */
-export function MediaCard({ item, priority = false }: { item: MediaCardItem; priority?: boolean }) {
+export function MediaCard({
+  item,
+  priority = false,
+  index = 0,
+}: {
+  item: MediaCardItem;
+  priority?: boolean;
+  /** Position within the row — drives the entrance stagger. */
+  index?: number;
+}) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
+
+  // 3D tilt motion values (springs return the card to flat on leave).
+  const rotateX = useMotionValue(0);
+  const rotateY = useMotionValue(0);
+  const tiltX = useSpring(rotateX, { stiffness: 280, damping: 24, mass: 0.5 });
+  const tiltY = useSpring(rotateY, { stiffness: 280, damping: 24, mass: 0.5 });
+
+  const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (reduceMotion || e.pointerType !== 'mouse') return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width - 0.5;
+    const ny = (e.clientY - rect.top) / rect.height - 0.5;
+    rotateY.set(nx * 9);
+    rotateX.set(-ny * 7);
+  };
+
+  const resetTilt = () => {
+    rotateX.set(0);
+    rotateY.set(0);
+  };
+
   // Prefer posterUrl (full URL, used by Cinemeta). Fall back to TMDB path →
   // image.tmdb.org URL via tmdbImg().
   const poster = item.posterUrl ?? tmdbImg(item.posterPath, 'w500');
@@ -51,23 +81,29 @@ export function MediaCard({ item, priority = false }: { item: MediaCardItem; pri
   return (
     <motion.button
       type="button"
-      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28 }}
-      whileHover={reduceMotion ? undefined : { y: -4 }}
+      transition={{
+        duration: 0.3,
+        delay: reduceMotion || priority ? 0 : Math.min(index * 0.035, 0.32),
+      }}
+      whileHover={reduceMotion ? undefined : { y: -6 }}
+      whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+      style={{ rotateX: tiltX, rotateY: tiltY, transformPerspective: 750 }}
+      onPointerMove={onPointerMove}
+      onPointerLeave={resetTilt}
       disabled={!watchTarget}
       onClick={() => watchTarget && router.push(watchTarget, { scroll: false })}
       aria-label={`${item.title}${year ? ` (${year})` : ''} — open`}
       className="group relative block w-[130px] shrink-0 text-left focus-visible:outline-none disabled:cursor-not-allowed sm:w-[160px] md:w-[180px]"
     >
-      <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 transition-all duration-300 group-hover:border-brand/40 group-hover:shadow-[0_8px_30px_color-mix(in_srgb,var(--cinedeck-accent)_15%,transparent)] group-focus-visible:border-brand/60 dark:border-zinc-800/80 dark:bg-zinc-900/60">
+      <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 transition-all duration-300 group-hover:border-brand/40 group-hover:shadow-[0_14px_40px_-8px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)] group-focus-visible:border-brand/60 dark:border-zinc-800/80 dark:bg-zinc-900/60">
         {poster ? (
-           
           <img
             src={poster}
             alt={`${item.title} poster`}
             loading={priority ? 'eager' : 'lazy'}
-            className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+            className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.06]"
           />
         ) : (
           <span className="flex size-full flex-col items-center justify-center gap-2 bg-zinc-200/40 dark:bg-zinc-900/40">
@@ -82,7 +118,7 @@ export function MediaCard({ item, priority = false }: { item: MediaCardItem; pri
           </span>
         )}
 
-        {/* Top-left media-type badge — small pill with the icon + label, like Zoryva. */}
+        {/* Top-left media-type badge — small pill with the icon + label. */}
         <span className="absolute left-2 top-2 inline-flex h-5 items-center gap-1 rounded-md border border-transparent bg-zinc-950/70 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
           {item.mediaType === 'tv' ? (
             <Tv className="size-2.5" aria-hidden />
@@ -100,8 +136,21 @@ export function MediaCard({ item, priority = false }: { item: MediaCardItem; pri
           </span>
         )}
 
-        {/* Bottom gradient + title overlay — same shape as Zoryva cards so
-            the title reads cleanly over busy poster artwork. */}
+        {/* Center play button — springs in on hover. */}
+        <span
+          aria-hidden
+          className="absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 group-hover:opacity-100"
+        >
+          <span className="flex size-11 scale-50 items-center justify-center rounded-full bg-brand text-zinc-950 shadow-[0_0_28px_color-mix(in_srgb,var(--cinedeck-accent)_45%,transparent)] transition-transform duration-300 group-hover:scale-100">
+            <Play className="size-5 translate-x-[1px] fill-zinc-950" aria-hidden />
+          </span>
+        </span>
+
+        {/* Shine sweep on hover. */}
+        <span aria-hidden className="cd-shine rounded-xl" />
+
+        {/* Bottom gradient + title overlay so the title reads cleanly over
+            busy poster artwork. */}
         <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-80 transition-opacity duration-300 group-hover:opacity-95" />
         <span className="absolute inset-x-0 bottom-0 p-2.5 md:p-3">
           <span className="block line-clamp-2 text-xs font-semibold text-white drop-shadow md:text-sm">
@@ -123,7 +172,7 @@ export function MediaCard({ item, priority = false }: { item: MediaCardItem; pri
 export function MediaCardSkeleton() {
   return (
     <div aria-hidden className="w-[130px] shrink-0 sm:w-[160px] md:w-[180px]">
-      <div className="aspect-[2/3] w-full animate-pulse rounded-xl border border-zinc-200 bg-zinc-200 dark:border-zinc-800/80 dark:bg-zinc-900" />
+      <div className="cd-shimmer aspect-[2/3] w-full animate-pulse rounded-xl border border-zinc-200 bg-zinc-200 dark:border-zinc-800/80 dark:bg-zinc-900" />
     </div>
   );
 }

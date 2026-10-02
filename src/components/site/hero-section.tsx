@@ -1,10 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, useReducedMotion } from 'framer-motion';
+import {
+  animate,
+  motion,
+  useInView,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+  useTransform,
+} from 'framer-motion';
 import { toast } from 'sonner';
-import { Dices, Play, Star, Clapperboard, Server, Users, Zap } from 'lucide-react';
+import { Dices, Play, Server, Sparkles, Star, Clapperboard, Undo2, Users, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -35,9 +43,62 @@ function watchUrlOf(item: HeroTrendingItem): string | null {
   return null;
 }
 
+/** Headline words: [text, accent] — accent words get the animated gradient. */
+const HEADLINE_KEY: [string, boolean][] = [
+  ['Play', false],
+  ['anything', false],
+  ['with', false],
+  ['a', false],
+  ['TMDB', true],
+  ['ID.', true],
+];
+const HEADLINE_KEYLESS: [string, boolean][] = [
+  ['Search', false],
+  ['it.', false],
+  ['Press', true],
+  ['play.', true],
+];
+
+/** Word-by-word headline reveal: rises out of a blur, springy and cinematic. */
+function StaggeredHeadline({ words }: { words: [string, boolean][] }) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <h1 className="text-4xl font-bold tracking-tight text-zinc-900 sm:text-5xl lg:text-6xl dark:text-zinc-100">
+      {words.map(([word, accent], index) => (
+        <motion.span
+          key={`${word}-${index}`}
+          initial={reduceMotion ? undefined : { opacity: 0, y: '0.55em', filter: 'blur(8px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.55, delay: 0.08 + index * 0.065, ease: [0.22, 1, 0.36, 1] }}
+          className={`mr-[0.26em] inline-block last:mr-0 ${accent ? 'cd-gradient-text' : ''}`}
+        >
+          {word}
+        </motion.span>
+      ))}
+    </h1>
+  );
+}
+
+/** Count-up number that springs from 0 the first time it scrolls into view. */
+function CountUp({ value, suffix = '' }: { value: number; suffix?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: '-40px' });
+  const count = useMotionValue(0);
+  const text = useTransform(count, (v) => `${Math.round(v).toLocaleString('en-US')}${suffix}`);
+
+  useEffect(() => {
+    if (!inView) return;
+    const controls = animate(count, value, { duration: 1.6, ease: [0.22, 1, 0.36, 1] });
+    return () => controls.stop();
+  }, [inView, value, count]);
+
+  return <motion.span ref={ref}>{text}</motion.span>;
+}
+
 /**
  * Hero: headline + TMDB ID quick-play card on the left, the #1 trending
- * backdrop (TMDB or keyless Cinemeta — whichever feeds the site) on the right.
+ * backdrop (TMDB or keyless Cinemeta — whichever feeds the site) on the right
+ * with mouse parallax, floating feature badges and a hover shine sweep.
  */
 export function HeroSection({
   trending,
@@ -54,6 +115,22 @@ export function HeroSection({
   const [idText, setIdText] = useState('');
   const [seasonText, setSeasonText] = useState('1');
   const [episodeText, setEpisodeText] = useState('1');
+
+  // Mouse parallax for the featured backdrop (fine pointers, motion only).
+  const pointerNX = useMotionValue(0);
+  const pointerNY = useMotionValue(0);
+  const springX = useSpring(pointerNX, { stiffness: 55, damping: 18, mass: 0.6 });
+  const springY = useSpring(pointerNY, { stiffness: 55, damping: 18, mass: 0.6 });
+  const cardX = useTransform(springX, (v) => v * 12);
+  const cardY = useTransform(springY, (v) => v * 8);
+  const imgX = useTransform(springX, (v) => v * 22);
+  const imgY = useTransform(springY, (v) => v * 15);
+
+  const onHeroPointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    if (reduceMotion || e.pointerType !== 'mouse') return;
+    pointerNX.set(e.clientX / window.innerWidth - 0.5);
+    pointerNY.set(e.clientY / window.innerHeight - 0.5);
+  };
 
   const play = () => {
     const id = parsePositive(idText);
@@ -112,7 +189,7 @@ export function HeroSection({
   });
 
   return (
-    <section className="relative overflow-hidden" aria-label="Quick play">
+    <section className="relative overflow-hidden" aria-label="Quick play" onPointerMove={onHeroPointerMove}>
       {/* Ambient accent glow */}
       <div
         aria-hidden
@@ -121,17 +198,18 @@ export function HeroSection({
 
       <div className="relative grid items-center gap-8 py-12 sm:py-16 lg:grid-cols-2 lg:gap-12 lg:py-20">
         <div>
-          <motion.h1 {...fadeUp(0)} className="text-4xl font-bold tracking-tight text-zinc-900 sm:text-5xl lg:text-6xl dark:text-zinc-100">
-            {hasKey ? (
-              <>
-                Play anything with a <span className="text-brand">TMDB ID</span>.
-              </>
-            ) : (
-              <>
-                Search it. <span className="text-brand">Press play.</span>
-              </>
-            )}
-          </motion.h1>
+          {/* Eyebrow chip */}
+          <motion.div {...fadeUp(0)}>
+            <span className="inline-flex items-center gap-2 rounded-full border border-zinc-200/80 bg-white/60 px-3.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-zinc-600 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300">
+              <Sparkles className="size-3.5 text-brand" aria-hidden />
+              Movies · TV · Live sports · Replays
+            </span>
+          </motion.div>
+
+          <div className="mt-5">
+            <StaggeredHeadline words={hasKey ? HEADLINE_KEY : HEADLINE_KEYLESS} />
+          </div>
+
           <motion.p {...fadeUp(0.06)} className="mt-4 max-w-md text-base leading-relaxed text-zinc-600 sm:text-lg dark:text-zinc-400">
             {hasKey
               ? 'Paste an ID, pick a server, press play — or browse the rows below. Create a free account to sync My List & history everywhere.'
@@ -214,7 +292,7 @@ export function HeroSection({
               <Button
                 type="button"
                 onClick={play}
-                className="h-11 rounded-lg bg-brand px-6 text-sm font-semibold text-zinc-950 shadow-[0_0_20px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)] hover:bg-brand/90"
+                className="h-11 rounded-lg bg-brand px-6 text-sm font-semibold text-zinc-950 shadow-[0_0_20px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)] transition-all duration-200 hover:bg-brand/90 hover:shadow-[0_0_34px_color-mix(in_srgb,var(--cinedeck-accent)_40%,transparent)] hover:-translate-y-0.5 active:scale-[0.97]"
               >
                 <Play className="size-4 fill-zinc-950" aria-hidden />
                 Play
@@ -223,9 +301,9 @@ export function HeroSection({
                 type="button"
                 variant="outline"
                 onClick={surprise}
-                className="h-11 rounded-lg border-zinc-200 bg-transparent px-5 text-sm font-medium text-zinc-700 hover:bg-zinc-200/70 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+                className="h-11 rounded-lg border-zinc-200 bg-transparent px-5 text-sm font-medium text-zinc-700 transition-all duration-200 hover:-translate-y-0.5 hover:bg-zinc-200/70 hover:text-zinc-900 active:scale-[0.97] dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
               >
-                <Dices className="size-4 text-brand" aria-hidden />
+                <Dices className="size-4 text-brand transition-transform duration-300 hover:rotate-12" aria-hidden />
                 Surprise me
               </Button>
               <span className="text-[11px] text-zinc-500 dark:text-zinc-600">
@@ -237,69 +315,114 @@ export function HeroSection({
           </motion.div>
         </div>
 
-        {/* Hero art zone — featured #1 regardless of which API feeds it */}
+        {/* Hero art zone — featured #1 regardless of which API feeds it,
+            wrapped in a springy mouse-parallax layer. */}
         <motion.div {...fadeUp(0.18)} className="relative">
-          {trendingLoading ? (
-            <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800/60">
-              <Skeleton className="size-full rounded-none bg-zinc-200 dark:bg-zinc-900" />
-            </div>
-          ) : featured && featuredBackdrop && featuredUrl ? (
-            <button
-              type="button"
-              onClick={() => router.push(featuredUrl, { scroll: false })}
-              aria-label={`Play ${featuredTitle}`}
-              className="group relative block w-full overflow-hidden rounded-xl border border-zinc-200 text-left focus-visible:outline-none dark:border-zinc-800/60"
-            >
-              <img
-                src={featuredBackdrop}
-                alt={`${featuredTitle} backdrop`}
-                className="aspect-video w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-              />
-              {/* gradient masks */}
-              <div
-                aria-hidden
-                className="absolute inset-0 bg-gradient-to-t from-zinc-50 via-zinc-50/35 to-transparent dark:from-zinc-950 dark:via-zinc-950/35"
-              />
-              <div
-                aria-hidden
-                className="absolute inset-0 bg-gradient-to-r from-zinc-50/70 via-transparent to-transparent dark:from-zinc-950/70"
-              />
-              <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 p-4 sm:p-5">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-brand">
-                    {hasKey ? 'Trending #1 this week' : 'Trending #1 — live via Cinemeta'}
-                  </p>
-                  <p className="mt-1 truncate text-lg font-semibold text-zinc-900 sm:text-xl dark:text-zinc-50">
-                    {featuredTitle}
-                  </p>
-                  <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                    {featuredYear && <span>{featuredYear}</span>}
-                    {featuredGenre && <span className="max-w-40 truncate">{featuredGenre}</span>}
-                    {featuredRating && (
-                      <span className="inline-flex items-center gap-1">
-                        <Star className="size-3 fill-brand text-brand" aria-hidden />
-                        {featuredRating}
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <span className="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-brand px-5 text-sm font-semibold text-zinc-950 shadow-[0_0_20px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)] transition-transform duration-200 group-hover:scale-105">
-                  <Play className="size-4 fill-zinc-950" aria-hidden />
-                  Play
-                </span>
+          <motion.div style={reduceMotion ? undefined : { x: cardX, y: cardY }} className="relative">
+            {trendingLoading ? (
+              <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800/60">
+                <Skeleton className="size-full rounded-none bg-zinc-200 dark:bg-zinc-900" />
               </div>
-            </button>
-          ) : !hasKey ? (
-            <ConnectCard />
-          ) : (
-            <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/40 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-600">
-              Trending is unavailable right now.
-            </div>
-          )}
+            ) : featured && featuredBackdrop && featuredUrl ? (
+              <button
+                type="button"
+                onClick={() => router.push(featuredUrl, { scroll: false })}
+                aria-label={`Play ${featuredTitle}`}
+                className="group relative block w-full overflow-hidden rounded-xl border border-zinc-200 text-left shadow-2xl shadow-black/10 transition-shadow duration-500 focus-visible:outline-none hover:shadow-[0_24px_70px_-18px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)] dark:border-zinc-800/60 dark:shadow-black/50"
+              >
+                <motion.img
+                  src={featuredBackdrop}
+                  alt={`${featuredTitle} backdrop`}
+                  style={reduceMotion ? undefined : { x: imgX, y: imgY }}
+                  className="aspect-video w-full scale-[1.07] object-cover"
+                />
+                {/* gradient masks */}
+                <div
+                  aria-hidden
+                  className="absolute inset-0 bg-gradient-to-t from-zinc-50 via-zinc-50/35 to-transparent dark:from-zinc-950 dark:via-zinc-950/35"
+                />
+                <div
+                  aria-hidden
+                  className="absolute inset-0 bg-gradient-to-r from-zinc-50/70 via-transparent to-transparent dark:from-zinc-950/70"
+                />
+                {/* shine sweep on hover */}
+                <span aria-hidden className="cd-shine" />
+                <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 p-4 sm:p-5">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-brand">
+                      {hasKey ? 'Trending #1 this week' : 'Trending #1 — live via Cinemeta'}
+                    </p>
+                    <p className="mt-1 truncate text-lg font-semibold text-zinc-900 sm:text-xl dark:text-zinc-50">
+                      {featuredTitle}
+                    </p>
+                    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                      {featuredYear && <span>{featuredYear}</span>}
+                      {featuredGenre && <span className="max-w-40 truncate">{featuredGenre}</span>}
+                      {featuredRating && (
+                        <span className="inline-flex items-center gap-1">
+                          <Star className="size-3 fill-brand text-brand" aria-hidden />
+                          {featuredRating}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <span className="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-brand px-5 text-sm font-semibold text-zinc-950 shadow-[0_0_20px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)] transition-transform duration-200 group-hover:scale-105 group-active:scale-95">
+                    <Play className="size-4 fill-zinc-950" aria-hidden />
+                    Play
+                  </span>
+                </div>
+              </button>
+            ) : !hasKey ? (
+              <ConnectCard />
+            ) : (
+              <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/40 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-600">
+                Trending is unavailable right now.
+              </div>
+            )}
+
+            {/* Floating feature badges — decorative, desktop only */}
+            {!trendingLoading && (
+              <>
+                <motion.span
+                  initial={reduceMotion ? undefined : { opacity: 0, scale: 0.7, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ delay: 0.55, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  aria-hidden
+                  className="cd-float pointer-events-none absolute -left-5 -top-5 hidden items-center gap-2 rounded-xl border border-zinc-200/80 bg-white/80 px-3 py-2 text-[11px] font-semibold text-zinc-700 shadow-lg shadow-black/5 backdrop-blur-md lg:inline-flex dark:border-zinc-700/70 dark:bg-zinc-900/80 dark:text-zinc-200"
+                >
+                  <Server className="size-3.5 text-brand" aria-hidden />
+                  13 servers · auto-failover
+                </motion.span>
+                <motion.span
+                  initial={reduceMotion ? undefined : { opacity: 0, scale: 0.7, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ delay: 0.7, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  aria-hidden
+                  className="cd-float-delay pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 items-center gap-2 rounded-xl border border-zinc-200/80 bg-white/80 px-3 py-2 text-[11px] font-semibold text-zinc-700 shadow-lg shadow-black/5 backdrop-blur-md lg:inline-flex dark:border-zinc-700/70 dark:bg-zinc-900/80 dark:text-zinc-200"
+                >
+                  <Undo2 className="size-3.5 text-brand" aria-hidden />
+                  Replays with full seek
+                </motion.span>
+                <motion.span
+                  initial={reduceMotion ? undefined : { opacity: 0, scale: 0.7, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ delay: 0.85, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  aria-hidden
+                  className="cd-float-slow pointer-events-none absolute -bottom-5 right-10 hidden items-center gap-2 rounded-xl border border-zinc-200/80 bg-white/80 px-3 py-2 text-[11px] font-semibold text-zinc-700 shadow-lg shadow-black/5 backdrop-blur-md lg:inline-flex dark:border-zinc-700/70 dark:bg-zinc-900/80 dark:text-zinc-200"
+                >
+                  <span className="relative flex size-2">
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-70" />
+                    <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+                  </span>
+                  Live sports &amp; scores
+                </motion.span>
+              </>
+            )}
+          </motion.div>
         </motion.div>
       </div>
 
-      {/* Stats band — what the site ships, at a glance */}
+      {/* Stats band — what the site ships, at a glance (numbers count up) */}
       <motion.div
         {...fadeUp(0.22)}
         aria-label="What CineDeck ships"
@@ -308,37 +431,47 @@ export function HeroSection({
         {[
           {
             icon: Clapperboard,
-            value: '10,000+ titles',
+            value: 10000,
+            suffix: '+',
             label: 'keyless catalogs',
           },
           {
             icon: Server,
-            value: '13 servers',
+            value: 13,
+            suffix: '',
             label: 'auto-scan + failover',
           },
           {
             icon: Zap,
-            value: 'One press',
+            value: null,
+            text: 'One press',
             label: 'search → play',
           },
           {
             icon: Users,
-            value: 'Free accounts',
+            value: null,
+            text: 'Free accounts',
             label: 'sync My List & history',
           },
-        ].map(({ icon: Icon, value, label }) => (
-          <div
-            key={value}
-            className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white/60 px-3.5 py-3 dark:border-zinc-800/60 dark:bg-zinc-900/40"
+        ].map(({ icon: Icon, value, suffix, text, label }, index) => (
+          <motion.div
+            key={label}
+            initial={reduceMotion ? undefined : { opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 + index * 0.08 }}
+            whileHover={reduceMotion ? undefined : { y: -4 }}
+            className="group flex items-center gap-3 rounded-xl border border-zinc-200 bg-white/60 px-3.5 py-3 backdrop-blur-sm transition-colors duration-300 hover:border-brand/40 dark:border-zinc-800/60 dark:bg-zinc-900/40"
           >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110">
               <Icon className="size-4.5" aria-hidden />
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{value}</span>
+              <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {value !== null ? <CountUp value={value} suffix={suffix} /> : text}
+              </span>
               <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-500">{label}</span>
             </span>
-          </div>
+          </motion.div>
         ))}
       </motion.div>
     </section>

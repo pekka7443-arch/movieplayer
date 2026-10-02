@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   AlertCircle,
@@ -102,10 +102,50 @@ function RowSkeletonStripe() {
     <div className="flex gap-3 overflow-hidden sm:gap-4">
       {Array.from({ length: 10 }).map((_, i) => (
         <div key={i} className="w-[130px] shrink-0 sm:w-[160px] md:w-[180px]">
-          <Skeleton className="aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+          <Skeleton className="cd-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
         </div>
       ))}
     </div>
+  );
+}
+
+/** Rotating highlight text for the sports teaser band. */
+const SPORTS_HIGHLIGHTS = [
+  'Live scores & schedules',
+  'Replays with full seek',
+  'Rally · WRC · F1',
+  '280+ free sports channels',
+] as const;
+
+function CyclingHighlight() {
+  const [index, setIndex] = useState(0);
+  const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    const timer = setInterval(
+      () => setIndex((i) => (i + 1) % SPORTS_HIGHLIGHTS.length),
+      2600,
+    );
+    return () => clearInterval(timer);
+  }, [reduceMotion]);
+
+  const text = reduceMotion ? SPORTS_HIGHLIGHTS[0] : SPORTS_HIGHLIGHTS[index];
+  return (
+    <span aria-hidden className="relative inline-flex h-5 min-w-52 overflow-hidden align-middle">
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={text}
+          initial={reduceMotion ? undefined : { y: 14, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={reduceMotion ? undefined : { y: -14, opacity: 0 }}
+          transition={{ duration: 0.28, ease: 'easeOut' }}
+          className="absolute whitespace-nowrap text-brand"
+        >
+          {text}
+        </motion.span>
+      </AnimatePresence>
+    </span>
   );
 }
 
@@ -300,9 +340,16 @@ function CatalogRow({
 }) {
   const query = useCatalog(params, enabled);
   const items = query.data;
+  const reduceMotion = useReducedMotion();
+  const reveal = {
+    initial: reduceMotion ? undefined : { opacity: 0, y: 22 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, margin: '-70px' },
+    transition: { duration: 0.5, ease: 'easeOut' as const },
+  };
 
   return (
-    <div>
+    <motion.div {...reveal}>
       <SectionHeading icon={icon} title={title} hint={hint} />
       {query.isPending || (!enabled && !items) ? (
         <RowSkeletonStripe />
@@ -312,13 +359,13 @@ function CatalogRow({
         <MediaRow label={title}>
           {items.map((item, index) => {
             const card = toCardItem(item);
-            return <MediaCard key={rowKeyOf(item)} item={card} priority={index < priorityCount} />;
+            return <MediaCard key={rowKeyOf(item)} item={card} priority={index < priorityCount} index={index} />;
           })}
         </MediaRow>
       ) : (
         <RowEmptyState text="Nothing here right now." />
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -368,10 +415,13 @@ export function HomeView() {
   const syncHint = user ? 'Synced to your account' : 'Saved on this device';
   const currentYear = new Date().getFullYear();
 
+  // Scroll-reveal for every home section: rises in once, 70px before it
+  // would enter the viewport.
   const fadeIn = {
-    initial: reduceMotion ? undefined : { opacity: 0, y: 14 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.3 },
+    initial: reduceMotion ? undefined : { opacity: 0, y: 22 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, margin: '-70px' },
+    transition: { duration: 0.5, ease: 'easeOut' as const },
   };
 
   return (
@@ -388,25 +438,36 @@ export function HomeView() {
           type="button"
           id="sports-teaser"
           onClick={() => router.push('/?view=sports', { scroll: false })}
-          className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 px-5 py-4 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-800 dark:bg-zinc-900/60"
+          className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 px-5 py-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-[0_16px_44px_-14px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-800 dark:bg-zinc-900/60"
         >
           <span
             aria-hidden
             className="pointer-events-none absolute -right-10 -top-16 h-44 w-72 rounded-full bg-brand-soft blur-3xl"
           />
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft">
+          <span aria-hidden className="cd-shine" />
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
             <Trophy className="size-5 text-brand" aria-hidden />
           </span>
           <span className="min-w-0">
-            <span className="block text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+            <span className="flex items-center gap-2 text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+              <span className="relative flex size-2" aria-hidden>
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-70" />
+                <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+              </span>
               Live Sports
             </span>
             <span className="block truncate text-xs text-zinc-500 dark:text-zinc-500">
-              Live scores, schedules &amp; 280+ free sports TV channels — keyless.
+              Live scores, schedules, replays &amp; 280+ free sports TV channels — keyless.
             </span>
           </span>
+          <span
+            aria-hidden
+            className="ml-auto hidden shrink-0 items-center text-xs font-medium text-zinc-500 md:inline-flex dark:text-zinc-400"
+          >
+            <CyclingHighlight />
+          </span>
           <ArrowRight
-            className="ml-auto size-5 shrink-0 text-zinc-400 transition-transform group-hover:translate-x-1 group-hover:text-brand"
+            className="ml-auto size-5 shrink-0 text-zinc-400 transition-transform duration-300 group-hover:translate-x-1.5 group-hover:text-brand md:ml-4"
             aria-hidden
           />
         </button>
@@ -421,7 +482,7 @@ export function HomeView() {
           <div className="flex gap-3 overflow-hidden sm:gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="w-32 shrink-0 sm:w-36">
-                <Skeleton className="aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+                <Skeleton className="cd-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
               </div>
             ))}
           </div>
@@ -445,7 +506,7 @@ export function HomeView() {
           <div className="flex gap-3 overflow-hidden sm:gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="w-32 shrink-0 sm:w-36">
-                <Skeleton className="aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+                <Skeleton className="cd-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
               </div>
             ))}
           </div>
@@ -495,6 +556,7 @@ export function HomeView() {
                 key={rowKeyOf(item)}
                 item={toCardItem(item)}
                 priority={index < 6}
+                index={index}
               />
             ))}
           </MediaRow>
@@ -517,6 +579,7 @@ export function HomeView() {
                 key={rowKeyOf(item)}
                 item={toCardItem(item)}
                 priority={index < 4}
+                index={index}
               />
             ))}
           </MediaRow>
@@ -539,6 +602,7 @@ export function HomeView() {
                 key={rowKeyOf(item)}
                 item={toCardItem(item)}
                 priority={index < 4}
+                index={index}
               />
             ))}
           </MediaRow>
@@ -585,39 +649,57 @@ export function HomeView() {
             {EXPLORE_GENRES.map((genre) => {
               const active = genre === exploreGenre;
               return (
-                <button
+                <motion.button
                   key={genre}
                   type="button"
                   aria-pressed={active}
                   onClick={() => setExploreGenre(genre)}
-                  className={`h-8 shrink-0 rounded-full border px-3.5 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                  whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+                  className={`relative h-8 shrink-0 overflow-hidden rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
                     active
-                      ? 'border-transparent bg-brand text-brand-foreground shadow-[0_0_14px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)]'
+                      ? 'border-transparent text-brand-foreground'
                       : 'border-zinc-200 bg-white/70 text-zinc-600 hover:border-brand/40 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100'
                   }`}
                 >
-                  {genre}
-                </button>
+                  {active && (
+                    <motion.span
+                      layoutId="explore-genre-pill"
+                      className="absolute inset-0 rounded-full bg-brand shadow-[0_0_14px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)]"
+                      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-10">{genre}</span>
+                </motion.button>
               );
             })}
           </div>
           <div className="mb-4 flex items-center gap-2">
             <div className="flex rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-950/60">
               {(['movie', 'tv'] as const).map((t) => (
-                <button
+                <motion.button
                   key={t}
                   type="button"
                   aria-pressed={exploreType === t}
                   onClick={() => setExploreType(t)}
-                  className={`flex h-7 items-center gap-1.5 rounded-md px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                  whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+                  className={`relative flex h-7 items-center gap-1.5 overflow-hidden rounded-md px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
                     exploreType === t
-                      ? 'bg-brand text-brand-foreground'
+                      ? 'text-brand-foreground'
                       : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                   }`}
                 >
-                  {t === 'movie' ? <Film className="size-3.5" aria-hidden /> : <Tv className="size-3.5" aria-hidden />}
-                  {t === 'movie' ? 'Movies' : 'TV'}
-                </button>
+                  {exploreType === t && (
+                    <motion.span
+                      layoutId="explore-type-pill"
+                      className="absolute inset-0 rounded-md bg-brand"
+                      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    {t === 'movie' ? <Film className="size-3.5" aria-hidden /> : <Tv className="size-3.5" aria-hidden />}
+                    {t === 'movie' ? 'Movies' : 'TV'}
+                  </span>
+                </motion.button>
               ))}
             </div>
           </div>
