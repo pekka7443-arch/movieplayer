@@ -118,8 +118,20 @@ export const SPORTS = [
   'American Football',
   'Baseball',
   'Motorsport',
+  'Rally',
   'Fighting',
 ] as const;
+
+/**
+ * Rally events (WRC, ERC, Rallycross…) live in TheSportsDB's "Motorsport"
+ * sport but get their own CineDeck chip — the schedule splits them so neither
+ * category drowns the other.
+ */
+const RALLY_LEAGUE_RE = /\b(wrc|wrc2|jwrc|erc|rally|rallycross|raid)\b/i;
+
+export function isRallyEvent(event: { league: string }): boolean {
+  return RALLY_LEAGUE_RE.test(event.league ?? '');
+}
 
 export type SportName = (typeof SPORTS)[number];
 
@@ -147,6 +159,7 @@ const LIVE_WINDOW_MS: Record<string, number> = {
   'American Football': 3.5 * 60 * 60 * 1000,
   Baseball: 3.5 * 60 * 60 * 1000,
   Motorsport: 3 * 60 * 60 * 1000,
+  Rally: 4 * 60 * 60 * 1000,
   Fighting: 3 * 60 * 60 * 1000,
 };
 
@@ -169,6 +182,7 @@ function deriveState(raw: string, startIso: string | null, sport: string, now: n
 
 interface RawEvent {
   idEvent?: string;
+  strEvent?: string | null;
   strSport?: string;
   strLeague?: string;
   idLeague?: string;
@@ -188,8 +202,16 @@ interface RawEvent {
 }
 
 function normalizeEvent(raw: RawEvent, now: number): SportsEvent | null {
-  if (!raw.idEvent || !raw.strHomeTeam || !raw.strAwayTeam) return null;
-  const sport = raw.strSport ?? 'Soccer';
+  if (!raw.idEvent) return null;
+  // Team sports carry home/away; motorsport-style sessions ("WRC Rally Italia
+  // Sardegna SS1", "Japan Grand Prix Qualifying") only have strEvent — keep
+  // them as TEAM-LESS events: home = title, away = empty string.
+  const title = (raw.strEvent ?? '').trim();
+  const home = (raw.strHomeTeam ?? '').trim() || title;
+  const away = (raw.strAwayTeam ?? '').trim();
+  if (!home) return null;
+  const league = raw.strLeague ?? '';
+  const sport = RALLY_LEAGUE_RE.test(league) ? 'Rally' : raw.strSport ?? 'Soccer';
   // strTimestamp is UTC without a zone suffix — treat as UTC.
   const start = raw.strTimestamp ? `${raw.strTimestamp}Z` : null;
   const startIso = start && Number.isFinite(Date.parse(start)) ? raw.strTimestamp! : null;
@@ -197,16 +219,19 @@ function normalizeEvent(raw: RawEvent, now: number): SportsEvent | null {
   return {
     id: raw.idEvent,
     sport,
-    league: raw.strLeague ?? '',
+    league,
     leagueId: raw.idLeague ?? '',
     leagueBadge: raw.strLeagueBadge ?? null,
-    home: raw.strHomeTeam,
-    away: raw.strAwayTeam,
+    home,
+    away,
     homeBadge: raw.strHomeTeamBadge ?? null,
     awayBadge: raw.strAwayTeamBadge ?? null,
     start: startIso ? `${startIso}Z` : null,
     status,
-    state: deriveState(status, startIso ? new Date(`${startIso}Z`).toISOString() : null, sport, now),
+    // startIso is raw UTC ("2026-10-01T14:05:00") — deriveState appends the Z
+    // itself. (Passing a toISOString() here produced "…000ZZ" → NaN → every
+    // status-less event stayed 'upcoming' forever, hiding finished sessions.)
+    state: deriveState(status, startIso, sport, now),
     homeScore: parseScore(raw.intHomeScore),
     awayScore: parseScore(raw.intAwayScore),
     venue: raw.strVenue ?? null,
@@ -240,10 +265,14 @@ export async function sportsEventsDay(sport: string, date: string): Promise<Spor
   return events;
 }
 
-/** Events for EVERY supported sport on one day — parallel, partial failure ok. */
+/**
+ * Events for EVERY supported sport on one day — parallel, partial failure ok.
+ * (Rally is intentionally not queried: TheSportsDB has no "Rally" sport — its
+ * events arrive tagged via the Motorsport day list and are re-chipped here.)
+ */
 export async function sportsEventsAllSports(
   date: string,
-  sports: readonly string[] = SPORTS,
+  sports: readonly string[] = SPORTS.filter((s) => s !== 'Rally'),
 ): Promise<SportsEvent[]> {
   const results = await Promise.allSettled(sports.map((s) => sportsEventsDay(s, date)));
   const merged: SportsEvent[] = [];

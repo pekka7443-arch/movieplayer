@@ -10,10 +10,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  History,
   Info,
   ListOrdered,
   Loader2,
+  Maximize,
   MonitorPlay,
+  Pause,
+  Play,
   Radio,
   RefreshCw,
   Search,
@@ -21,6 +25,7 @@ import {
   Trophy,
   Tv,
   Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -71,6 +76,7 @@ const SPORT_CHIPS = [
   'American Football',
   'Baseball',
   'Motorsport',
+  'Rally',
   'Fighting',
 ];
 
@@ -81,11 +87,45 @@ const SPORT_LABELS: Record<string, string> = {
   'American Football': 'Am. football',
   Baseball: 'Baseball',
   Motorsport: 'Motorsport',
+  Rally: 'Rally · WRC',
   Fighting: 'Fighting',
 };
 
 const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
 const dayFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+/** Display title — team events read "A vs B", stage/GP events read as-is. */
+function eventTitle(event: SportsEvent): string {
+  return event.away ? `${event.home} vs ${event.away}` : event.home;
+}
+
+/** "1:47:10" / "23:45" for replay durations. */
+function fmtDuration(totalSec: number): string {
+  const s = Math.max(0, Math.floor(totalSec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    : `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+/** "1.2M views" for replay meta. */
+function fmtViews(views: number): string {
+  if (views >= 1_000_000) return `${(views / 1_000_000).toFixed(views >= 10_000_000 ? 0 : 1)}M`;
+  if (views >= 1_000) return `${(views / 1_000).toFixed(views >= 10_000 ? 0 : 1)}K`;
+  return String(views);
+}
+
+/** Pass through upstream labels like "2 years ago"; prettify ISO dates. */
+function fmtPublished(published: string | null): string {
+  if (!published) return '';
+  if (/\d{4}-\d{2}-\d{2}/.test(published)) {
+    const t = Date.parse(published);
+    if (Number.isFinite(t)) return dayFmt.format(new Date(t));
+  }
+  return published;
+}
 
 /**
  * Hard client-side cap on every sports API call. A hung response must NEVER
@@ -177,7 +217,9 @@ function useSportsChannels() {
 function useMatchCandidates(event: SportsEvent | null) {
   return useQuery<SportsChannel[]>({
     queryKey: ['sports-match', event?.id ?? null],
-    enabled: !!event && event.state !== 'finished',
+    // Enabled for FINISHED events too — the watch page's "Live TV" tab plays
+    // live channels that replay matches all day.
+    enabled: !!event,
     queryFn: async () => {
       const p = new URLSearchParams({
         sport: event!.sport,
@@ -217,6 +259,48 @@ function useSportsEvent(id: string | null, enabled: boolean) {
       return json.event;
     },
     staleTime: 60_000,
+    retry: 1,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Replays — for finished events, searched on YouTube via keyless Piped APIs
+// ---------------------------------------------------------------------------
+
+interface ReplayVideo {
+  videoId: string;
+  title: string;
+  channel: string;
+  thumb: string;
+  durationSec: number;
+  views: number | null;
+  published: string | null;
+  kind: 'full' | 'highlights' | 'other';
+  score: number;
+}
+
+/** Ranked YouTube replays (full matches + highlights) for one event. */
+function useReplayVideos(event: SportsEvent | null) {
+  return useQuery<ReplayVideo[]>({
+    queryKey: ['sports-replay', event?.id ?? null],
+    enabled: !!event && event.state === 'finished',
+    queryFn: async () => {
+      const p = new URLSearchParams({
+        sport: event!.sport,
+        league: event!.league,
+        home: event!.home,
+        away: event!.away,
+      });
+      if (event!.start) p.set('date', event!.start.slice(0, 10));
+      // 12s cap × 1 retry — a slow Piped instance can never pin the UI.
+      const res = await fetchCapped(`/api/sports/replay?${p.toString()}`, 12_000);
+      if (!res.ok) throw new Error('replay_unreachable');
+      const json = (await res.json()) as { videos: ReplayVideo[] };
+      return json.videos;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
     retry: 1,
   });
 }
@@ -308,7 +392,7 @@ function useNow(intervalMs = 1000): number {
 }
 
 const WATCH_LINKS = (event: SportsEvent): { label: string; href: string }[] => {
-  const q = encodeURIComponent(`${event.home} vs ${event.away} live stream`);
+  const q = encodeURIComponent(`${eventTitle(event)} live stream`);
   const links = [
     { label: 'Sportsurge', href: 'https://sportsurge.net/' },
     { label: 'Reddit streams', href: `https://www.reddit.com/search/?q=${q}` },
@@ -362,6 +446,7 @@ function ScheduleRow({
   onWatch: (event: SportsEvent) => void;
 }) {
   const hasScore = event.homeScore !== null && event.awayScore !== null;
+  const teamless = !event.away;
   return (
     <li
       className={cn(
@@ -385,7 +470,7 @@ function ScheduleRow({
         <button
           type="button"
           onClick={() => onWatch(event)}
-          aria-label={`Watch ${event.home} vs ${event.away}`}
+          aria-label={`Watch ${eventTitle(event)}`}
           className="flex min-w-0 flex-1 cursor-pointer items-center rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         >
           {/* Mobile — two stacked team lines so names stay readable */}
@@ -425,7 +510,8 @@ function ScheduleRow({
                 </span>
               )}
             </span>
-            <span className="flex min-w-0 items-center gap-1.5">
+            {!teamless && (
+              <span className="flex min-w-0 items-center gap-1.5">
               {event.awayBadge ? (
                 <img
                   src={event.awayBadge}
@@ -459,24 +545,38 @@ function ScheduleRow({
                   {event.awayScore}
                 </span>
               )}
-            </span>
+              </span>
+            )}
           </span>
 
           {/* sm+ — classic single line: home score away */}
           <span className="hidden min-w-0 flex-1 items-center gap-2 sm:flex">
-            {event.homeBadge ? (
-              <img
-                src={event.homeBadge}
-                alt=""
-                width={18}
-                height={18}
-                loading="lazy"
-                className="size-[18px] shrink-0 object-contain"
-                onError={(e) => {
-                  e.currentTarget.style.visibility = 'hidden';
-                }}
-              />
-            ) : null}
+            {teamless ? (
+              <span
+                className={cn(
+                  'min-w-0 flex-1 truncate text-sm font-semibold',
+                  event.state === 'finished'
+                    ? 'text-zinc-500 dark:text-zinc-500'
+                    : 'text-zinc-900 dark:text-zinc-100',
+                )}
+              >
+                {event.home}
+              </span>
+            ) : (
+              <>
+                {event.homeBadge ? (
+                  <img
+                    src={event.homeBadge}
+                    alt=""
+                    width={18}
+                    height={18}
+                    loading="lazy"
+                    className="size-[18px] shrink-0 object-contain"
+                    onError={(e) => {
+                      e.currentTarget.style.visibility = 'hidden';
+                    }}
+                  />
+                ) : null}
             <span
               className={cn(
                 'min-w-0 flex-1 truncate text-right text-sm font-semibold',
@@ -524,6 +624,8 @@ function ScheduleRow({
                 }}
               />
             ) : null}
+              </>
+            )}
           </span>
         </button>
 
@@ -940,7 +1042,7 @@ function LivePlayer({
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        aria-label={`Live player for ${event.home} vs ${event.away}`}
+        aria-label={`Live player for ${eventTitle(event)}`}
         className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-black shadow-sm dark:border-zinc-800"
       >
         <div className="relative aspect-video w-full">
@@ -957,7 +1059,7 @@ function LivePlayer({
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
               <span className="flex items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-xs font-medium text-white">
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                Scanning live feeds for {event.home} vs {event.away}…
+                Scanning live feeds for {eventTitle(event)}…
               </span>
             </div>
           )}
@@ -1205,6 +1307,639 @@ function FeedList({
 }
 
 // ---------------------------------------------------------------------------
+// Replay player — YouTube via the IFrame API with CineDeck's own seek bar
+// (keyboard: ←/→ ±10s, J/L, K/space, M, F), speed control and fullscreen.
+// If the YT API script can't load, falls back to a plain embed with native
+// controls — which are still fully seekable.
+// ---------------------------------------------------------------------------
+
+interface YTPlayer {
+  playVideo(): void;
+  pauseVideo(): void;
+  mute(): void;
+  unMute(): void;
+  isMuted(): boolean;
+  seekTo(seconds: number, allowSeekAhead: boolean): void;
+  getCurrentTime(): number;
+  getDuration(): number;
+  getVideoLoadedFraction(): number;
+  setPlaybackRate(rate: number): void;
+  destroy(): void;
+}
+interface YTPlayerEvent {
+  target: YTPlayer;
+  data?: number;
+}
+interface YTNamespace {
+  Player: new (
+    el: HTMLElement | string,
+    opts: {
+      videoId?: string;
+      playerVars?: Record<string, number | string>;
+      events?: {
+        onReady?: (e: YTPlayerEvent) => void;
+        onStateChange?: (e: YTPlayerEvent) => void;
+        onError?: (e: YTPlayerEvent) => void;
+      };
+    },
+  ) => YTPlayer;
+  PlayerState: { ENDED: number; PLAYING: number; PAUSED: number; BUFFERING: number; CUED: number };
+}
+declare global {
+  interface Window {
+    YT?: YTNamespace;
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+let ytApiPromise: Promise<YTNamespace | null> | null = null;
+
+/** Load https://www.youtube.com/iframe_api once; null after ~6s of silence. */
+function loadYtApi(): Promise<YTNamespace | null> {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (ytApiPromise) return ytApiPromise;
+  ytApiPromise = new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(window.YT ?? null), 6_000);
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      prev?.();
+      clearTimeout(timer);
+      resolve(window.YT ?? null);
+    };
+    const script = document.createElement('script');
+    script.src = 'https://www.youtube.com/iframe_api';
+    script.async = true;
+    script.onerror = () => {
+      clearTimeout(timer);
+      resolve(null);
+    };
+    document.head.appendChild(script);
+  });
+  return ytApiPromise;
+}
+
+const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+function YtPlayer({
+  videoId,
+  title,
+  onUnavailable,
+}: {
+  videoId: string;
+  title: string;
+  /** Fired when YouTube reports THIS video can't play in an embed. */
+  onUnavailable?: (videoId: string) => void;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<YTPlayer | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [buffered, setBuffered] = useState(0);
+  const [rate, setRate] = useState(1);
+  const [showRates, setShowRates] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  // Callback identity must never retrigger the player effect — read it via ref.
+  const unavailableRef = useRef(onUnavailable);
+  useEffect(() => {
+    unavailableRef.current = onUnavailable;
+  }, [onUnavailable]);
+
+  // Create the YT player once the API resolves; poll time/buffer while ready.
+  // (YtPlayer is keyed by videoId upstream — a new video remounts this whole
+  // component, so state starts fresh and the effect needs no resets.)
+  useEffect(() => {
+    let destroyed = false;
+    let poll: ReturnType<typeof setInterval> | null = null;
+
+    void loadYtApi().then((YT) => {
+      if (destroyed) return;
+      const host = hostRef.current;
+      if (!YT?.Player || !host) {
+        setFailed(true);
+        return;
+      }
+      const player = new YT.Player(host, {
+        videoId,
+        playerVars: {
+          autoplay: 1,
+          mute: 1, // autoplay policy — unmute button in the control bar
+          controls: 0,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          iv_load_policy: 3,
+        },
+        events: {
+          onReady: (e) => {
+            if (destroyed) return;
+            playerRef.current = e.target;
+            setReady(true);
+            setMuted(e.target.isMuted());
+            setDuration(e.target.getDuration());
+            e.target.playVideo();
+          },
+          onStateChange: (e) => {
+            if (destroyed) return;
+            setPlaying(e.data === YT.PlayerState.PLAYING);
+            setDuration(e.target.getDuration());
+          },
+          onError: () => {
+            // 2/5/100/101/150 — invalid, HTML5, not-found or embedding
+            // disallowed. Skip to the next ranked replay instead of showing
+            // a dead player. Report THIS instance's videoId — the ref may
+            // already point at a newer closure for a different video.
+            if (destroyed) return;
+            setFailed(true);
+            unavailableRef.current?.(videoId);
+          },
+        },
+      });
+      playerRef.current = player;
+      poll = setInterval(() => {
+        const p = playerRef.current;
+        if (!p) return;
+        try {
+          setTime(p.getCurrentTime());
+          setDuration(p.getDuration());
+          setBuffered(p.getVideoLoadedFraction());
+        } catch {
+          // iframe not ready this tick
+        }
+      }, 500);
+    });
+
+    return () => {
+      destroyed = true;
+      if (poll) clearInterval(poll);
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        // already gone
+      }
+      playerRef.current = null;
+    };
+  }, [videoId]);
+
+  // Fullscreen state sync (Esc key etc.).
+  useEffect(() => {
+    const onFsChange = () => setFullscreen(document.fullscreenElement === wrapRef.current);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  const togglePlay = () => {
+    const p = playerRef.current;
+    if (!p) return;
+    if (playing) p.pauseVideo();
+    else p.playVideo();
+  };
+  const seekTo = (sec: number) => {
+    const p = playerRef.current;
+    if (!p || duration <= 0) return;
+    p.seekTo(Math.min(Math.max(0, sec), duration - 0.5), true);
+    setTime(Math.min(Math.max(0, sec), duration));
+  };
+  const nudge = (delta: number) => seekTo((playerRef.current?.getCurrentTime() ?? 0) + delta);
+  const toggleMute = () => {
+    const p = playerRef.current;
+    if (!p) return;
+    if (p.isMuted()) {
+      p.unMute();
+      setMuted(false);
+    } else {
+      p.mute();
+      setMuted(true);
+    }
+  };
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void wrapRef.current?.requestFullscreen();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case ' ':
+      case 'k':
+        e.preventDefault();
+        togglePlay();
+        break;
+      case 'ArrowLeft':
+      case 'j':
+        e.preventDefault();
+        nudge(-10);
+        break;
+      case 'ArrowRight':
+      case 'l':
+        e.preventDefault();
+        nudge(10);
+        break;
+      case 'm':
+        toggleMute();
+        break;
+      case 'f':
+        toggleFullscreen();
+        break;
+    }
+  };
+
+  // Fallback: plain embed with YouTube's own (seekable) controls.
+  if (failed) {
+    return (
+      <div className="relative aspect-video w-full bg-black">
+        <iframe
+          key={videoId}
+          src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&controls=1&rel=0&modestbranding=1&playsinline=1`}
+          title={title}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          className="absolute inset-0 size-full border-0"
+        />
+      </div>
+    );
+  }
+
+  const pct = duration > 0 ? (time / duration) * 100 : 0;
+
+  return (
+    <div
+      ref={wrapRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      aria-label={`Replay player: ${title}`}
+      className={
+        'group relative aspect-video w-full bg-black outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-inset ' +
+        (fullscreen ? 'flex h-screen items-center justify-center' : '')
+      }
+    >
+      <div className={fullscreen ? 'h-full w-full' : 'absolute inset-0'}>
+        {/* YT.Player replaces this div with the iframe */}
+        <div ref={hostRef} className="size-full" />
+      </div>
+
+      {!ready && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="flex items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-xs font-medium text-white">
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            Loading replay…
+          </span>
+        </div>
+      )}
+
+      {ready && muted && (
+        <button
+          type="button"
+          onClick={() => {
+            const p = playerRef.current;
+            if (p) {
+              p.unMute();
+              setMuted(false);
+              p.playVideo();
+            }
+          }}
+          className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-brand-foreground shadow-lg transition-transform hover:scale-105"
+        >
+          <Volume2 className="size-4" aria-hidden />
+          Tap for sound
+        </button>
+      )}
+
+      {/* Custom control bar — the "kelaa" bar */}
+      {ready && (
+        <div
+          className={
+            'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent px-3 pb-2 pt-6 opacity-100 transition-opacity sm:px-4 ' +
+            (playing ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100' : '')
+          }
+        >
+          <div
+            role="slider"
+            aria-label="Seek"
+            aria-valuemin={0}
+            aria-valuemax={Math.floor(duration)}
+            aria-valuenow={Math.floor(time)}
+            tabIndex={-1}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              const rect = e.currentTarget.getBoundingClientRect();
+              seekTo(((e.clientX - rect.left) / rect.width) * duration);
+            }}
+            onPointerMove={(e) => {
+              if (e.buttons !== 1) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              seekTo(((e.clientX - rect.left) / rect.width) * duration);
+            }}
+            className="group/bar relative h-4 cursor-pointer touch-none select-none"
+          >
+            <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-white/25">
+              <div className="h-full bg-white/35" style={{ width: `${buffered * 100}%` }} />
+            </div>
+            <div
+              className="absolute inset-y-0 left-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-brand"
+              style={{ width: `${pct}%` }}
+            />
+            <div
+              className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand shadow transition-transform group-hover/bar:scale-125"
+              style={{ left: `${pct}%` }}
+            />
+          </div>
+
+          <div className="mt-0.5 flex items-center gap-1.5 text-white">
+            <button
+              type="button"
+              onClick={togglePlay}
+              aria-label={playing ? 'Pause' : 'Play'}
+              className="flex size-9 items-center justify-center rounded-full hover:bg-white/15"
+            >
+              {playing ? <Pause className="size-4.5" aria-hidden /> : <Play className="size-4.5" aria-hidden />}
+            </button>
+            <button
+              type="button"
+              onClick={toggleMute}
+              aria-label={muted ? 'Unmute' : 'Mute'}
+              className="flex size-9 items-center justify-center rounded-full hover:bg-white/15"
+            >
+              {muted ? <VolumeX className="size-4.5" aria-hidden /> : <Volume2 className="size-4.5" aria-hidden />}
+            </button>
+            <span className="ml-1 font-mono text-[11px] tabular-nums text-white/90">
+              {fmtDuration(time)} / {fmtDuration(duration)}
+            </span>
+
+            <div className="relative ml-auto">
+              <button
+                type="button"
+                onClick={() => setShowRates((v) => !v)}
+                aria-label="Playback speed"
+                className="flex h-9 items-center gap-1 rounded-full px-2.5 text-xs font-bold hover:bg-white/15"
+              >
+                {rate}×
+              </button>
+              {showRates && (
+                <div className="absolute bottom-11 right-0 z-10 w-20 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900/95 py-1 shadow-xl">
+                  {PLAYBACK_RATES.map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => {
+                        playerRef.current?.setPlaybackRate(r);
+                        setRate(r);
+                        setShowRates(false);
+                      }}
+                      className={cn(
+                        'block w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800',
+                        r === rate ? 'font-bold text-brand' : 'text-zinc-200',
+                      )}
+                    >
+                      {r}×
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              className="flex size-9 items-center justify-center rounded-full hover:bg-white/15"
+            >
+              <Maximize className="size-4.5" aria-hidden />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type ReplayFilter = 'all' | 'full' | 'highlights';
+
+/** Replay browser — ranked YouTube replays with filters + the seekable player. */
+function ReplayPlayer({ event }: { event: SportsEvent }) {
+  const videosQuery = useReplayVideos(event);
+  const [filter, setFilter] = useState<ReplayFilter>('all');
+  const [picked, setPicked] = useState<ReplayVideo | null>(null);
+  // Videos YouTube refused to play (embedding disabled, gone…) — auto-skipped.
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
+
+  const videos = useMemo(() => videosQuery.data ?? [], [videosQuery.data]);
+  const playable = useMemo(() => {
+    const pool = videos.filter((v) => !skipped.has(v.videoId));
+    return pool.length > 0 ? pool : videos; // never empty the player completely
+  }, [videos, skipped]);
+  // Derived selection — when the list lands, the top-ranked replay plays;
+  // once the user picks one, their choice wins until the event changes.
+  const active =
+    picked && playable.some((v) => v.videoId === picked.videoId) ? picked : (playable[0] ?? null);
+  const shown = useMemo(
+    () => (filter === 'all' ? playable : playable.filter((v) => v.kind === filter)),
+    [playable, filter],
+  );
+  const fullCount = playable.filter((v) => v.kind === 'full').length;
+  const hlCount = playable.filter((v) => v.kind === 'highlights').length;
+
+  const skipCurrent = useCallback((failedVideoId: string) => {
+    setPicked(null);
+    setSkipped((prev) => {
+      const next = new Set(prev);
+      next.add(failedVideoId);
+      return next;
+    });
+  }, []);
+  // Every video refused → stop auto-skipping (it would loop); the player
+  // shows YouTube's own "watch on YouTube" UI for the top pick instead.
+  const allSkipped = videos.length > 0 && videos.every((v) => skipped.has(v.videoId));
+
+  return (
+    <div className="space-y-4">
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        aria-label={`Replay player for ${eventTitle(event)}`}
+        className="overflow-hidden rounded-2xl border border-zinc-200 bg-black shadow-sm dark:border-zinc-800"
+      >
+        {active ? (
+          <YtPlayer
+            key={active.videoId}
+            videoId={active.videoId}
+            title={active.title}
+            onUnavailable={allSkipped ? undefined : skipCurrent}
+          />
+        ) : (
+          <div className="flex aspect-video w-full items-center justify-center bg-black">
+            {videosQuery.isPending ? (
+              <span className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-medium text-white">
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                Searching for replays of {eventTitle(event)}…
+              </span>
+            ) : (
+              <div className="max-w-md p-6 text-center">
+                <History className="mx-auto size-6 text-brand" aria-hidden />
+                <p className="mt-2 text-sm font-semibold text-white">No replay found yet</p>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                  Full replays usually surface on YouTube a few hours after the final whistle —
+                  check back soon, watch the live channels (they replay matches all day), or try
+                  one of the sites below.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {active && (
+          <div className="flex items-center gap-3 border-t border-zinc-800 bg-zinc-950 px-4 py-3">
+            <History className="size-5 shrink-0 text-brand" aria-hidden />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-zinc-100">{active.title}</p>
+              <p className="truncate text-[11px] text-zinc-500">
+                {active.channel}
+                {active.views ? ` · ${fmtViews(active.views)} views` : ''}
+                {active.published ? ` · ${fmtPublished(active.published)}` : ''}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                window.open(`https://www.youtube.com/watch?v=${active.videoId}`, '_blank', 'noopener,noreferrer')
+              }
+              className="ml-auto h-8 shrink-0 gap-1.5 rounded-lg px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              <ExternalLink className="size-3.5" aria-hidden />
+              <span className="hidden sm:inline">YouTube</span>
+            </Button>
+          </div>
+        )}
+      </motion.section>
+
+      {/* Replay list */}
+      <section
+        aria-label="Replays"
+        className="overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80"
+      >
+        <header className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800/70">
+          <History className="size-4 shrink-0 text-brand" aria-hidden />
+          <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Replays</h3>
+          <span className="hidden text-[11px] text-zinc-500 sm:inline dark:text-zinc-500">
+            Found on YouTube · full replays &amp; highlights · seek with the bar or ←/→
+          </span>
+          <div className="ml-auto flex items-center gap-1">
+            {(
+              [
+                { id: 'all' as const, label: `All ${videos.length || ''}` },
+                { id: 'full' as const, label: `Full ${fullCount || ''}` },
+                { id: 'highlights' as const, label: `Highlights ${hlCount || ''}` },
+              ]
+            ).map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={filter === id}
+                onClick={() => setFilter(id)}
+                className={cn(
+                  'h-7 rounded-full border px-2.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
+                  filter === id
+                    ? 'border-brand bg-brand text-brand-foreground'
+                    : 'border-zinc-200 bg-white/70 text-zinc-500 hover:border-brand/40 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100',
+                )}
+              >
+                {label.trim()}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        {shown.length > 0 ? (
+          <ul className="grid gap-1.5 p-2 sm:grid-cols-2">
+            {shown.map((v) => (
+              <li key={v.videoId}>
+                <button
+                  type="button"
+                  onClick={() => setPicked(v)}
+                  aria-pressed={active?.videoId === v.videoId}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-xl border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
+                    active?.videoId === v.videoId
+                      ? 'border-brand/60 bg-brand-soft ring-1 ring-brand/40'
+                      : 'border-zinc-200 bg-white/60 hover:border-brand/40 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:bg-zinc-800/60',
+                  )}
+                >
+                  <span className="relative w-28 shrink-0 overflow-hidden rounded-lg bg-zinc-200 sm:w-32 dark:bg-zinc-800">
+                    <img
+                      src={v.thumb}
+                      alt=""
+                      width={128}
+                      height={72}
+                      loading="lazy"
+                      className="aspect-video size-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.visibility = 'hidden';
+                      }}
+                    />
+                    <span className="absolute bottom-1 right-1 rounded bg-black/85 px-1 py-0.5 font-mono text-[10px] font-bold tabular-nums text-white">
+                      {fmtDuration(v.durationSec)}
+                    </span>
+                    {v.kind === 'full' && (
+                      <span className="absolute left-1 top-1 rounded bg-brand px-1 py-0.5 text-[9px] font-black uppercase tracking-wide text-brand-foreground">
+                        Full
+                      </span>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="line-clamp-2 text-[13px] font-semibold leading-snug text-zinc-800 dark:text-zinc-200">
+                      {v.title}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-zinc-500 dark:text-zinc-600">
+                      {v.channel}
+                      {v.views ? ` · ${fmtViews(v.views)} views` : ''}
+                      {v.published ? ` · ${fmtPublished(v.published)}` : ''}
+                    </span>
+                  </span>
+                  {active?.videoId === v.videoId && (
+                    <span className="flex shrink-0 items-center gap-1 pr-1 text-[10px] font-bold uppercase tracking-wide text-brand">
+                      <Play className="size-3" aria-hidden />
+                      playing
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="px-4 py-4 text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
+            {videosQuery.isPending
+              ? 'Searching YouTube for full replays and highlights…'
+              : videos.length === 0
+                ? 'Nothing uploaded for this event yet — replays usually appear within a few hours. Live sports channels replay matches all day too.'
+                : `No ${filter === 'full' ? 'full replays' : 'highlights'} in this list — switch back to All.`}
+          </p>
+        )}
+
+        {videosQuery.isError && (
+          <p className="px-4 py-3 text-xs text-zinc-500">
+            Replay search hit a snag —{' '}
+            <button
+              type="button"
+              onClick={() => void videosQuery.refetch()}
+              className="font-semibold text-brand underline underline-offset-2"
+            >
+              retry
+            </button>
+            .
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Watch page — the focused, URL-driven view for one event (like a dedicated
 // /watch page: big player on top, feeds + context below, back returns to the
 // schedule).
@@ -1231,6 +1966,8 @@ function WatchPage({
 }) {
   const now = useNow();
   const hasScore = event.homeScore !== null && event.awayScore !== null;
+  const teamless = !event.away;
+  const [mode, setMode] = useState<'replay' | 'live'>(event.state === 'finished' ? 'replay' : 'live');
 
   return (
     <div id="sports-watch" className="space-y-4 scroll-mt-24">
@@ -1280,7 +2017,12 @@ function WatchPage({
           </div>
         </div>
 
-        {/* Teams + score */}
+        {/* Teams + score — team-less events (WRC stage / F1 GP) get a centered title */}
+        {teamless ? (
+          <div className="mt-4 text-center">
+            <p className="text-lg font-bold text-zinc-900 sm:text-xl dark:text-zinc-100">{event.home}</p>
+          </div>
+        ) : (
         <div className="mt-4 flex items-center justify-center gap-3 sm:gap-6">
           <div className="flex min-w-0 flex-1 items-center justify-end gap-2.5 sm:gap-3">
             <span className="min-w-0 truncate text-right text-base font-bold text-zinc-900 sm:text-xl dark:text-zinc-100">
@@ -1331,75 +2073,98 @@ function WatchPage({
             </span>
           </div>
         </div>
+        )}
       </div>
 
-      {/* Body — finished events get links, everything else plays live now */}
+      {/* Body — finished events replay (seekable) with a Live TV fallback;
+          everything else plays live now. */}
       {event.state === 'finished' ? (
-        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
-          <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Match finished</p>
-          <p className="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
-            Full replays usually appear on the source sites a few hours after the final whistle.
-          </p>
-          <div className="mt-4">
-            <LinksRow event={event} dense />
-          </div>
-          <div className="mt-3">
-            <Button
-              type="button"
-              size="sm"
-              onClick={onBrowseChannels}
-              className="h-8 gap-1.5 rounded-lg bg-brand px-3.5 text-xs font-semibold text-brand-foreground hover:bg-brand/90"
-            >
-              <Tv className="size-3.5" aria-hidden />
-              Browse sports channels
-            </Button>
-          </div>
-        </div>
-      ) : (
         <>
-          <LivePlayer
-            event={event}
-            candidates={candidates}
-            loading={loading}
-            onBrowseChannels={onBrowseChannels}
-            onRetryScan={onRetryScan}
-          />
+          <div
+            role="tablist"
+            aria-label="Finished event modes"
+            className="flex w-full items-center gap-1 rounded-xl border border-zinc-200 bg-white/70 p-1.5 dark:border-zinc-800/60 dark:bg-zinc-900/60 sm:w-auto"
+          >
+            {(
+              [
+                { id: 'replay' as const, label: 'Replay', icon: History },
+                { id: 'live' as const, label: 'Live TV', icon: Radio },
+              ]
+            ).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={mode === id}
+                onClick={() => setMode(id)}
+                className={cn(
+                  'flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 sm:flex-none',
+                  mode === id
+                    ? 'bg-brand text-brand-foreground'
+                    : 'text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100',
+                )}
+              >
+                <Icon className="size-4" aria-hidden />
+                {label}
+              </button>
+            ))}
+          </div>
 
-          <LinksRow event={event} />
-
-          {upNext.length > 0 && (
-            <section
-              aria-label="Up next"
-              className="overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80"
-            >
-              <header className="flex items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800/70">
-                <CalendarDays className="size-4 shrink-0 text-brand" aria-hidden />
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  Up next in {event.league || 'this league'}
-                </h3>
-              </header>
-              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                {upNext.map((e) => (
-                  <li key={e.id}>
-                    <button
-                      type="button"
-                      onClick={() => onSelectEvent(e)}
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/50 dark:hover:bg-zinc-800/50"
-                    >
-                      <span className="w-16 shrink-0">
-                        <RowStatus event={e} />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-800 dark:text-zinc-200">
-                        {e.home} <span className="font-normal text-zinc-400">vs</span> {e.away}
-                      </span>
-                      <ArrowRight className="size-3.5 shrink-0 text-zinc-400" aria-hidden />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
+          {mode === 'replay' ? (
+            <ReplayPlayer event={event} />
+          ) : (
+            <LivePlayer
+              event={event}
+              candidates={candidates}
+              loading={loading}
+              onBrowseChannels={onBrowseChannels}
+              onRetryScan={onRetryScan}
+            />
           )}
         </>
+      ) : (
+        <LivePlayer
+          event={event}
+          candidates={candidates}
+          loading={loading}
+          onBrowseChannels={onBrowseChannels}
+          onRetryScan={onRetryScan}
+        />
+      )}
+
+      <LinksRow event={event} dense={event.state === 'finished' ? mode === 'replay' : false} />
+
+      {upNext.length > 0 && (
+        <section
+          aria-label="Up next"
+          className="overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80"
+        >
+          <header className="flex items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800/70">
+            <CalendarDays className="size-4 shrink-0 text-brand" aria-hidden />
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+              Up next in {event.league || 'this league'}
+            </h3>
+          </header>
+          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+            {upNext.map((e) => (
+              <li key={e.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectEvent(e)}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-zinc-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/50 dark:hover:bg-zinc-800/50"
+                >
+                  <span className="w-16 shrink-0">
+                    <RowStatus event={e} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-800 dark:text-zinc-200">
+                    {eventTitle(e)}
+                  </span>
+                  <ArrowRight className="size-3.5 shrink-0 text-zinc-400" aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );
@@ -1510,6 +2275,7 @@ export function SportsView() {
       <div className="space-y-6">
         {watchEvent ? (
           <WatchPage
+            key={watchEvent.id}
             event={watchEvent}
             candidates={matchQuery.data ?? []}
             // isLoading (not isPending): a disabled query (e.g. a finished

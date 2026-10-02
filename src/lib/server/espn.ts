@@ -146,6 +146,7 @@ interface EspnCompetitor {
 
 interface EspnEvent {
   id?: string;
+  name?: string;
   date?: string;
   status?: {
     displayClock?: string;
@@ -174,9 +175,12 @@ function normalizeEspnEvent(ev: EspnEvent, league: EspnLeague, meta: { name: str
   const comp = ev.competitions?.[0];
   const homeComp = comp?.competitors?.find((c) => c.homeAway === 'home');
   const awayComp = comp?.competitors?.find((c) => c.homeAway === 'away');
-  const home = homeComp?.team?.displayName;
-  const away = awayComp?.team?.displayName;
-  if (!home || !away) return null;
+  // Racing events (F1 GP) have no team competitors — the event NAME is the
+  // title ("Gulf Air Bahrain Grand Prix"). Keep them as team-less events:
+  // home = title, away = empty string.
+  const home = homeComp?.team?.displayName ?? ev.name?.trim() ?? '';
+  const away = awayComp?.team?.displayName ?? '';
+  if (!home) return null;
 
   const stateRaw = ev.status?.type?.state;
   const state: SportsEvent['state'] =

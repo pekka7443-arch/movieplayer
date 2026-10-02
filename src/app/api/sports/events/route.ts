@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   SPORTS,
+  isRallyEvent,
   sportsEventById,
   sportsEventsAllSports,
   sportsEventsDay,
@@ -32,6 +33,25 @@ function mergeAndDedupe(primary: SportsEvent[], secondary: SportsEvent[]): Sport
     out.push(e);
   }
   return out;
+}
+
+/**
+ * TheSportsDB has no "Rally" sport — its WRC/ERC rows arrive inside the
+ * Motorsport day list (tagged 'Rally' by the normalizer). Chip filtering:
+ *   Rally      → Motorsport list, rally leagues only
+ *   Motorsport → Motorsport list, rally leagues excluded (circuit racing)
+ *   others     → straight pass-through
+ */
+async function tsdbEventsForChip(sport: string | null, date: string): Promise<SportsEvent[]> {
+  if (sport === 'Rally') {
+    const list = await sportsEventsDay('Motorsport', date);
+    return list.filter(isRallyEvent);
+  }
+  if (sport === 'Motorsport') {
+    const list = await sportsEventsDay('Motorsport', date);
+    return list.filter((e) => !isRallyEvent(e));
+  }
+  return sport ? sportsEventsDay(sport, date) : sportsEventsAllSports(date);
 }
 
 /**
@@ -74,8 +94,11 @@ export async function GET(request: Request) {
   }
 
   const [espn, tsdb] = await Promise.all([
-    espnEventsDay(date, sport ?? undefined),
-    sport ? sportsEventsDay(sport, date) : sportsEventsAllSports(date),
+    // ESPN covers no rally series — skip the network entirely for that chip.
+    sport === 'Rally'
+      ? Promise.resolve([] as SportsEvent[])
+      : espnEventsDay(date, sport ?? undefined),
+    tsdbEventsForChip(sport ?? null, date),
   ]);
   const events = mergeAndDedupe(espn, tsdb);
 
