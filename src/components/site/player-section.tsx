@@ -119,6 +119,31 @@ export function PlayerSection({
     watchId !== 0,
   );
   const manualPickRef = useRef(false);
+  /**
+   * Mirror of manualPickRef for rendering (status line wording). Keyed by
+   * title+season+episode so the derived flag expires exactly when the ref
+   * resets — no setState-in-effect needed.
+   */
+  const [manualPickKey, setManualPickKey] = useState<string | null>(null);
+  const watchKey = `${imdbId ?? `t${tmdbId ?? 0}`}:${season}:${episode}`;
+  const manualPick = manualPickKey !== null && manualPickKey === watchKey;
+  const rememberManualPick = useCallback(() => setManualPickKey(watchKey), [watchKey]);
+  /**
+   * Dub-capable sources that already failed for THIS title this session
+   * (user skipped away from them) — the FI dub chip won't re-offer those.
+   * Keyed "${watchId}:${providerId}".
+   */
+  const [failedDubs, setFailedDubs] = useState<Set<string>>(() => new Set());
+  const markDubFailed = useCallback(
+    (providerId: string) => {
+      setFailedDubs((prev) => {
+        const next = new Set(prev);
+        next.add(`${watchId}:${providerId}`);
+        return next.size === prev.size ? prev : next;
+      });
+    },
+    [watchId],
+  );
   /** Provider ids the watchdog has already tried for the current title/episode. */
   const triedRef = useRef<string[]>([]);
 
@@ -140,16 +165,23 @@ export function PlayerSection({
   );
 
   /**
-   * Auto-play order — health first (online > bot-blocked > dead), then trust
-   * tier within each bucket: proven .cc/.skin/.sh cluster, then the maybe
-   * mirrors (VidSrc.cc/.su), then last-resort (Videasy — loads but has shown
-   * black screens). Probe speed breaks ties inside the same tier.
-   *
+   * Auto-play order — health/trust mixed:
+   *   1. online proven + maybe mirrors (.cc/.skin/.sh/.su, fastest first)
+   *   2. bot-blocked "unknown" (VidSrc.cc — CF wall for probes, often plays)
+   *   3. online last-resort (Videasy — probes ok but black-screen-prone)
+   *   4. dead rows
    * A 200 probe is NOT proof of playback, so an online last-resort source
-   * still ranks BELOW a bot-blocked proven mirror.
+   * ranks BELOW a bot-blocked mirror.
    */
   const candidates = useMemo(() => {
-    const weight = (r: ScanResult) => (r.ok ? 0 : r.status === 403 ? 1 : 2);
+    const weight = (r: ScanResult) =>
+      r.ok
+        ? reliabilityRank(r.providerId) < 2
+          ? 0
+          : 2
+        : r.status === 403
+          ? 1
+          : 3;
     return [...(scanQuery.data ?? [])]
       .sort(
         (a, b) =>
@@ -244,6 +276,8 @@ export function PlayerSection({
       if (!triedRef.current.includes(server)) {
         triedRef.current = [...triedRef.current, server];
       }
+      // Leaving a dub-capable source that never loaded counts as a dub failure.
+      if (dubLang && supportsDub(server)) markDubFailed(server);
       const nextId = candidates.find((id) => id !== server && !triedRef.current.includes(id));
       const total = Math.max(candidates.length, PROVIDERS.length);
 
@@ -267,7 +301,7 @@ export function PlayerSection({
       }
     }, failoverTimeoutMs);
     return () => clearTimeout(timer);
-  }, [embedUrl, nonce, loaded, scanQuery.data, candidates, server, provider.name, watchId, setServerTransient, settings.autoFailover, failoverTimeoutMs]);
+  }, [embedUrl, nonce, loaded, scanQuery.data, candidates, server, provider.name, watchId, setServerTransient, settings.autoFailover, failoverTimeoutMs, dubLang, markDubFailed]);
 
   const navigateTo = (nextSeason: number, nextEpisode: number) => {
     const params = new URLSearchParams({
@@ -307,20 +341,22 @@ export function PlayerSection({
     }
     // Don't set manualPickRef — keep auto-failover enabled so if this new
     // source ALSO fails to load, the watchdog still cycles automatically.
+    // Leaving a dub-capable source behind counts as a dub failure for it.
+    if (dubLang && supportsDub(server)) markDubFailed(server);
     setServerTransient(nextId);
     setLoaded(null);
     setFailover(null);
     toast(`Switched to ${getProvider(nextId).name}`, {
       description: 'If it still shows an error, hit Skip again.',
     });
-  }, [scanQuery.data, candidates, server, provider.name, setServerTransient, setLoaded, setFailover]);
+  }, [scanQuery.data, candidates, server, provider.name, setServerTransient, setLoaded, setFailover, dubLang, markDubFailed]);
 
   // ---------------------------------------------------------------------------
-  // "Stuck?" escape hatch — a black-screen player still fires onLoad, so the
-  // watchdog sees it as fine. After 18s on a loaded source, float a small
-  // "Not playing? → next server" pill over the player; it auto-hides and
-  // stays dismissed for that source. Visibility is DERIVED from the URL the
-  // pill was shown for, so a source switch clears it without extra renders.
+  // "Stuck?" escape hatch — a black-screen or provider error page still fires
+  // onLoad, so the watchdog sees it as fine. After 15s on a loaded source,
+  // float a small "Not playing? → next server" pill over the player (auto-hides
+  // at 45s; stays dismissed for that source). Visibility is DERIVED from the
+  // URL the pill was shown for, so a source switch clears it without renders.
   // ---------------------------------------------------------------------------
   const [stuckShownFor, setStuckShownFor] = useState<string | null>(null);
   const stuckDismissedRef = useRef<string | null>(null);
@@ -328,10 +364,10 @@ export function PlayerSection({
     if (!iframeReady) return;
     const showT = setTimeout(() => {
       if (stuckDismissedRef.current !== embedUrl) setStuckShownFor(embedUrl);
-    }, 18_000);
+    }, 15_000);
     const hideT = setTimeout(() => {
       setStuckShownFor((cur) => (cur === embedUrl ? null : cur));
-    }, 32_000);
+    }, 45_000);
     return () => {
       clearTimeout(showT);
       clearTimeout(hideT);
@@ -344,24 +380,31 @@ export function PlayerSection({
     setStuckShownFor(null);
   }, [embedUrl]);
 
-  /** Dub-capable mirror that responded (ok preferred, then bot-blocked). */
+  /**
+   * Dub-capable mirror that responded (ok preferred, then bot-blocked).
+   * Sources the user already skipped away from for this title are excluded,
+   * so a dead dub mirror isn't re-offered after it proved useless.
+   */
   const dubSource = useMemo(() => {
     if (!dubLang) return null;
-    const rows = (scanQuery.data ?? []).filter((r) => supportsDub(r.providerId));
+    const rows = (scanQuery.data ?? []).filter(
+      (r) => supportsDub(r.providerId) && !failedDubs.has(`${watchId}:${r.providerId}`),
+    );
     return rows.find((r) => r.ok) ?? rows.find((r) => r.status === 403) ?? null;
-  }, [scanQuery.data, dubLang]);
+  }, [scanQuery.data, dubLang, failedDubs, watchId]);
 
   const switchToDubSource = useCallback(() => {
     if (!dubSource) return;
     // Manual intent: auto-pick must not yank the user straight back.
     manualPickRef.current = true;
+    rememberManualPick();
     setServerTransient(dubSource.providerId);
     setLoaded(null);
     setFailover(null);
     toast(`${getProvider(dubSource.providerId).name} · ${dubLang?.toUpperCase()} dub`, {
-      description: 'Unproven source — hit Skip if the picture stays black.',
+      description: 'Unproven source — use Skip / “Not playing?” if it stays blank.',
     });
-  }, [dubSource, dubLang, setServerTransient, setLoaded, setFailover]);
+  }, [dubSource, dubLang, setServerTransient, setLoaded, setFailover, rememberManualPick]);
 
   // ---------------------------------------------------------------------------
   // Keyboard shortcuts — R reload · S skip source · T theater · N/P episodes.
@@ -499,6 +542,7 @@ export function PlayerSection({
                       title={p.name}
                       onClick={() => {
                         manualPickRef.current = true;
+                        rememberManualPick();
                         setServer(p.id);
                       }}
                       className={
@@ -577,9 +621,9 @@ export function PlayerSection({
               ? `Scanning ${PROVIDERS.length} sources…`
               : scanQuery.data
                 ? onlineCount > 0
-                  ? `${onlineCount}/${scanQuery.data.length} online — auto ${provider.name}${
-                      dubLang && supportsDub(server) ? ' · dub' : ''
-                    }`
+                  ? `${onlineCount}/${scanQuery.data.length} online — ${
+                      manualPick ? 'picked' : 'auto'
+                    } ${provider.name}${dubLang && supportsDub(server) ? ' · dub' : ''}`
                   : 'No mirror responded yet'
                 : 'Source scan'}
           </span>

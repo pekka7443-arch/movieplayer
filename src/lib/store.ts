@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { DEFAULT_LANGUAGE } from '@/lib/languages';
-import { DEFAULT_PROVIDER } from '@/lib/providers';
+import { DEFAULT_PROVIDER, sanitizePreferredServer } from '@/lib/providers';
 import { getSettings, updateSettings } from '@/lib/settings';
 
 interface CinedeckState {
@@ -58,11 +58,18 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
     set({ server: providerId });
   },
   resetServer: () => {
-    set({ server: getSettings().preferredServer ?? DEFAULT_PROVIDER });
+    set({ server: sanitizePreferredServer(getSettings().preferredServer) });
   },
   hydrateFromSettings: () => {
     const s = getSettings();
-    set({ language: s.language, contentType: s.contentType, server: s.preferredServer ?? DEFAULT_PROVIDER });
+    set({
+      language: s.language,
+      contentType: s.contentType,
+      // sanitizePreferredServer drops last-resort sources (e.g. Videasy) that
+      // an old session may have persisted as the preference — they are
+      // black-screen-prone and must never take autoplay on a fresh load.
+      server: sanitizePreferredServer(s.preferredServer),
+    });
   },
   settingsOpen: false,
   openSettings: () => set({ settingsOpen: true }),

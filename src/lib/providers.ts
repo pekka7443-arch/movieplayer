@@ -201,6 +201,19 @@ export const AUTO_PICK_PROVIDERS: ProviderId[] = PROVIDERS.filter(
   (p) => p.reliability === 'proven',
 ).map((p) => p.id);
 
+/**
+ * Guard for the PERSISTED preferred-server preference. Old sessions could
+ * store a last-resort source (Videasy) before trust tiers existed — restoring
+ * it on every page load made the black-screen-prone player take autoplay.
+ * Anything that is not last-resort passes through; unknown/last-resort ids
+ * fall back to the default.
+ */
+export function sanitizePreferredServer(stored: string | null | undefined): ProviderId {
+  if (!stored) return DEFAULT_PROVIDER;
+  const provider = getProvider(stored);
+  return provider.reliability === 'lastresort' ? DEFAULT_PROVIDER : provider.id;
+}
+
 export function getProvider(providerId: string): Provider {
   return PROVIDERS.find((p) => p.id === providerId) ?? PROVIDERS[0];
 }
