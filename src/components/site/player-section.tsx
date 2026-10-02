@@ -139,8 +139,8 @@ export function PlayerSection({
   /**
    * Auto-play order: confirmed-online sources first (fastest response wins),
    * then bot-blocked-but-maybe-working (403), then everything else. With dub
-   * audio enabled, dub-capable sources (VidSrc XYZ / VIP) jump ahead of the
-   * other online mirrors so the user actually GETS the requested dub.
+   * audio enabled, dub-capable sources (Videasy) jump ahead of the other
+   * online mirrors so the user actually GETS the requested dub.
    */
   const candidates = useMemo(() => {
     const rows = scanQuery.data ?? [];
@@ -810,7 +810,9 @@ export function PlayerSection({
       <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-600">
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
-          CineDeck scans all {PROVIDERS.length} mirrors (7× 2Embed + 5× VidSrc + 2 others), plays the healthiest one
+          CineDeck scans all {PROVIDERS.length} mirrors ({PROVIDERS.filter((p) => p.group === 'twoembed').length}× 2Embed +{' '}
+          {PROVIDERS.filter((p) => p.group === 'vidsrc').length}× VidSrc +{' '}
+          {PROVIDERS.filter((p) => p.group === 'other').length} other), plays the healthiest one
           and auto-switches if a source stalls — tune it all under{' '}
           <strong className="font-semibold text-brand">Settings</strong> above. Shortcuts:{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">R</kbd> reload ·{' '}

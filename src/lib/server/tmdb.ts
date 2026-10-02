@@ -254,6 +254,8 @@ export interface TmdbMediaDetails {
   trailerKey: string | null;
   similar: TmdbSimilarItem[];
   providers: TmdbProvider[];
+  /** TMDB original_language ("fi", "en", …) — Finnish-title detection. */
+  originalLanguage: string;
 }
 
 export interface TmdbTvDetails extends TmdbMediaDetails {
@@ -449,6 +451,7 @@ export function normalizeMediaDetails(
     trailerKey: pickTrailerKey(asArray(asRecord(detail.videos).results)),
     similar,
     providers: extractProviders(detail["watch/providers"]),
+    originalLanguage: toStr(detail.original_language),
   };
 }
 

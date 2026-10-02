@@ -391,7 +391,7 @@ export function HeroSection({
                   className="cd-float pointer-events-none absolute -left-5 -top-5 hidden items-center gap-2 rounded-xl border border-zinc-200/80 bg-white/80 px-3 py-2 text-[11px] font-semibold text-zinc-700 shadow-lg shadow-black/5 backdrop-blur-md lg:inline-flex dark:border-zinc-700/70 dark:bg-zinc-900/80 dark:text-zinc-200"
                 >
                   <Server className="size-3.5 text-brand" aria-hidden />
-                  14 servers · auto-failover
+                  Hand-picked servers · auto-failover
                 </motion.span>
                 <motion.span
                   initial={reduceMotion ? undefined : { opacity: 0, scale: 0.7, y: 10 }}
@@ -437,7 +437,7 @@ export function HeroSection({
           },
           {
             icon: Server,
-            value: 14,
+            value: 5,
             suffix: '',
             label: 'auto-scan + failover',
           },

@@ -55,6 +55,8 @@ export interface MediaDetails {
   trailerKey: string | null;
   similar: SimilarItem[];
   providers: ProviderItem[];
+  /** TMDB original_language (e.g. "fi") — Finnish-title detection. */
+  originalLanguage?: string | null;
 }
 
 export interface SeasonSummary {

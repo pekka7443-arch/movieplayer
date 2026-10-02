@@ -1,30 +1,22 @@
 export type ProviderId =
-  // 2Embed cluster (user-confirmed working — listed first as fallback chain)
+  // Confirmed-working cluster (user-tested in browser + server-reachable):
+  // .cc / .skin / .sh domains are the ones that actually play video.
   | 'twoembed_cc'
   | 'twoembed_skin'
-  | 'twoembed_to'
-  | 'twoembed_org'
-  | 'twoembed_live'
-  | 'twoembed_pro'
-  | 'twoembed_net'
-  // VidSrc cluster
-  | 'vidsrc'
   | 'vidsrc_sh'
   | 'vidsrc_cc'
-  | 'vidsrcxyz'
-  | 'vidsrcvip'
-  // Other public providers (kept as last-resort alternates)
-  | 'superembed'
-  | 'embedsu';
+  // Modern modern player — server-reachable, built-in subtitle language
+  // selector, accepts a `language` param to preselect audio/subtitle locale.
+  | 'videasy';
 
 /**
- * Provider grouping for the player UI — keeps the long server list scannable.
+ * Provider grouping for the player UI — keeps the server list scannable.
  * Order matches the cluster order in PROVIDERS below.
  */
 export const PROVIDER_GROUPS: { id: string; label: string }[] = [
   { id: 'twoembed', label: '2Embed' },
   { id: 'vidsrc', label: 'VidSrc' },
-  { id: 'other', label: 'Other' },
+  { id: 'other', label: 'Extra' },
 ];
 
 export interface Provider {
@@ -36,7 +28,7 @@ export interface Provider {
   group: 'twoembed' | 'vidsrc' | 'other';
   /**
    * Query parameter name this provider uses to request a DUBBED audio track
-   * (e.g. "ds_lang" → &ds_lang=fi). Null/undefined = no dub support — the
+   * (e.g. "language" → &language=fi). Null/undefined = no dub support — the
    * player's own audio menu is the only way to switch languages there.
    */
   dubParam?: string | null;
@@ -50,13 +42,14 @@ export interface Provider {
 // ---------------------------------------------------------------------------
 // All providers below share the SAME URL shape as their canonical originals:
 //   2Embed  : /embed/{tmdb}                /embedtv/{tmdb}&s={s}&e={e}
-//   2Embed IMDB : /embed/{imdbId}          /embedtv/{imdbId}&s={s}&e={e}
-//   VidSrc.to: /embed/movie/{id}           /embed/tv/{id}/{s}/{e}
-//   VidSrc.sh: /embed/movie/{id}           /embed/tv/{id}/{s}/{e}  (mirror of VidSrc)
-//   VidSrc.cc: /embed/movie/{id}           /embed/tv/{id}/{s}/{e}  (Cloudflare-protected mirror)
-//   VidSrc.xyz: /embed/movie?tmdb={id}    /embed/tv?tmdb={id}&season={s}&episode={e}
-//   SuperEmbed: /{id}                       /{id}?s={s}&e={e}
-//   EmbedSU: /embed/movie/{id}             /embed/tv/{id}/{s}/{e}
+//   VidSrc.sh: /embed/movie/{id}           /embed/tv/{id}/{s}/{e}
+//   VidSrc.cc: /embed/movie/{id}           /embed/tv/{id}/{s}/{e}  (Cloudflare-protected mirror —
+//              the server probe sees a 403 challenge but real browsers load it fine,
+//              so the scan reports it as "unknown" and the player still tries it)
+//   Videasy : /movie/{id}                  /tv/{id}/{s}/{e}   (player.videasy.to)
+//
+// Dead domains measured and removed (2026-10): 2embed.to/.org/.live/.pro/.net,
+// vidsrc.to/.xyz/.vip, vidsrc.me (=redirect to .sh), superembed, embed.su.
 // ---------------------------------------------------------------------------
 
 const twoEmbedMovie = (base: string) => (id: number | string) => `${base}/embed/${id}`;
@@ -90,68 +83,8 @@ export const PROVIDERS: Provider[] = [
     movieImdb: twoEmbedMovieImdb('https://2embed.skin'),
     tvImdb: twoEmbedTvImdb('https://2embed.skin'),
   },
-  {
-    id: 'twoembed_to',
-    name: '2Embed.to',
-    short: '.to',
-    group: 'twoembed',
-    movie: twoEmbedMovie('https://www.2embed.to'),
-    tv: twoEmbedTv('https://www.2embed.to'),
-    movieImdb: twoEmbedMovieImdb('https://www.2embed.to'),
-    tvImdb: twoEmbedTvImdb('https://www.2embed.to'),
-  },
-  {
-    id: 'twoembed_org',
-    name: '2Embed.org',
-    short: '.org',
-    group: 'twoembed',
-    movie: twoEmbedMovie('https://www.2embed.org'),
-    tv: twoEmbedTv('https://www.2embed.org'),
-    movieImdb: twoEmbedMovieImdb('https://www.2embed.org'),
-    tvImdb: twoEmbedTvImdb('https://www.2embed.org'),
-  },
-  {
-    id: 'twoembed_live',
-    name: '2Embed.live',
-    short: '.live',
-    group: 'twoembed',
-    movie: twoEmbedMovie('https://www.2embed.live'),
-    tv: twoEmbedTv('https://www.2embed.live'),
-    movieImdb: twoEmbedMovieImdb('https://www.2embed.live'),
-    tvImdb: twoEmbedTvImdb('https://www.2embed.live'),
-  },
-  {
-    id: 'twoembed_pro',
-    name: '2Embed.pro',
-    short: '.pro',
-    group: 'twoembed',
-    movie: twoEmbedMovie('https://www.2embed.pro'),
-    tv: twoEmbedTv('https://www.2embed.pro'),
-    movieImdb: twoEmbedMovieImdb('https://www.2embed.pro'),
-    tvImdb: twoEmbedTvImdb('https://www.2embed.pro'),
-  },
-  {
-    id: 'twoembed_net',
-    name: '2Embed.net',
-    short: '.net',
-    group: 'twoembed',
-    movie: twoEmbedMovie('https://www.2embed.net'),
-    tv: twoEmbedTv('https://www.2embed.net'),
-    movieImdb: twoEmbedMovieImdb('https://www.2embed.net'),
-    tvImdb: twoEmbedTvImdb('https://www.2embed.net'),
-  },
 
   // ----- VidSrc cluster -----
-  {
-    id: 'vidsrc',
-    name: 'VidSrc.to',
-    short: '.to',
-    group: 'vidsrc',
-    movie: vidsrcMovie('https://vidsrc.to'),
-    tv: vidsrcTv('https://vidsrc.to'),
-    movieImdb: vidsrcMovie('https://vidsrc.to'),
-    tvImdb: vidsrcTv('https://vidsrc.to'),
-  },
   {
     id: 'vidsrc_sh',
     name: 'VidSrc.sh',
@@ -172,51 +105,20 @@ export const PROVIDERS: Provider[] = [
     movieImdb: vidsrcMovie('https://vidsrc.cc'),
     tvImdb: vidsrcTv('https://vidsrc.cc'),
   },
-  {
-    id: 'vidsrcxyz',
-    name: 'VidSrc XYZ',
-    short: 'xyz',
-    group: 'vidsrc',
-    // ds_lang = default (dub) audio language, documented by vidsrc.xyz.
-    dubParam: 'ds_lang',
-    movie: (id) => `https://vidsrc.xyz/embed/movie?tmdb=${id}`,
-    tv: (id, s, e) => `https://vidsrc.xyz/embed/tv?tmdb=${id}&season=${s}&episode=${e}`,
-    movieImdb: (imdb) => `https://vidsrc.xyz/embed/movie?imdb=${imdb}`,
-    tvImdb: (imdb, s, e) => `https://vidsrc.xyz/embed/tv?imdb=${imdb}&season=${s}&episode=${e}`,
-  },
-  {
-    id: 'vidsrcvip',
-    name: 'VidSrc VIP',
-    short: 'vip',
-    group: 'vidsrc',
-    // Same embed API family as VidSrc XYZ (same query shape + ds_lang dub).
-    dubParam: 'ds_lang',
-    movie: (id) => `https://vidsrc.vip/embed/movie?tmdb=${id}`,
-    tv: (id, s, e) => `https://vidsrc.vip/embed/tv?tmdb=${id}&season=${s}&episode=${e}`,
-    movieImdb: (imdb) => `https://vidsrc.vip/embed/movie?imdb=${imdb}`,
-    tvImdb: (imdb, s, e) => `https://vidsrc.vip/embed/tv?imdb=${imdb}&season=${s}&episode=${e}`,
-  },
 
-  // ----- Other public providers (kept as last-resort alternates) -----
+  // ----- Extra (modern alternative player) -----
   {
-    id: 'superembed',
-    name: 'SuperEmbed',
-    short: 'SE',
+    id: 'videasy',
+    name: 'Videasy',
+    short: 'VDS',
     group: 'other',
-    movie: (id) => `https://superembed.cc/${id}`,
-    tv: (id, s, e) => `https://superembed.cc/${id}?s=${s}&e=${e}`,
-    movieImdb: (imdb) => `https://superembed.cc/${imdb}`,
-    tvImdb: (imdb, s, e) => `https://superembed.cc/${imdb}?s=${s}&e=${e}`,
-  },
-  {
-    id: 'embedsu',
-    name: 'EmbedSU',
-    short: 'SU',
-    group: 'other',
-    movie: (id) => `https://embed.su/embed/movie/${id}`,
-    tv: (id, s, e) => `https://embed.su/embed/tv/${id}/${s}/${e}`,
-    movieImdb: (imdb) => `https://embed.su/embed/movie/${imdb}`,
-    tvImdb: (imdb, s, e) => `https://embed.su/embed/tv/${imdb}/${s}/${e}`,
+    // Videasy's player accepts a language locale and has a built-in
+    // subtitle/audio language selector — best-effort dub support.
+    dubParam: 'language',
+    movie: (id) => `https://player.videasy.to/movie/${id}`,
+    tv: (id, s, e) => `https://player.videasy.to/tv/${id}/${s}/${e}`,
+    movieImdb: (imdb) => `https://player.videasy.to/movie/imdb/${imdb}`,
+    tvImdb: (imdb, s, e) => `https://player.videasy.to/tv/imdb/${imdb}/${s}/${e}`,
   },
 ];
 
@@ -242,7 +144,7 @@ export function isImdbId(value: number | string): value is string {
  *
  * `dubLang` — optional 2-letter language code (e.g. "fi"). When set and the
  * provider supports dubbing (dubParam), the code is appended so the provider
- * player starts with that dubbed audio track preselected.
+ * player starts with that dubbed audio/subtitle track preselected.
  */
 export function getEmbedUrl(
   providerId: string,
@@ -258,7 +160,7 @@ export function getEmbedUrl(
 
   const build = (url: string): string =>
     dubLang && provider.dubParam
-      ? `${url}&${provider.dubParam}=${encodeURIComponent(dubLang)}`
+      ? `${url}${url.includes('?') ? '&' : '?'}${provider.dubParam}=${encodeURIComponent(dubLang)}`
       : url;
 
   if (isImdbId(tmdbOrImdbId)) {

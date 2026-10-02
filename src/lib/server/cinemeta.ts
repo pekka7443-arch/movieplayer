@@ -349,6 +349,7 @@ interface CinemetaFullMeta {
     background?: string | null;
     description?: string;
     releaseInfo?: string;
+    country?: string;
     genres?: string[];
     genre?: string | string[];
     cast?: string[];
@@ -406,6 +407,7 @@ export async function cinemetaDetails(
     runtime: parseRuntime(meta.runtime),
     voteAverage: Number.parseFloat(meta.imdbRating ?? '') || 0,
     trailerKey: trailer?.source ?? null,
+    country: meta.country ?? null,
   };
 
   cacheSet(key, details, 30 * 60 * 1000);

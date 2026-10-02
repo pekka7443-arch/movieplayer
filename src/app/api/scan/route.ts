@@ -9,7 +9,7 @@ import type { ScanResult } from "@/lib/meta";
 // source ("scan all sites and play"). Results are cached briefly per URL so
 // episode switches don't re-hit every provider.
 //
-// When &dub=XX is set, dub-capable providers (VidSrc XYZ / VIP) are probed
+// When &dub=XX is set, dub-capable providers (Videasy) are probed
 // with the dub parameter appended — so the health ranking reflects exactly
 // the URL the player will load — and those rows carry lang=XX.
 export const dynamic = "force-dynamic";

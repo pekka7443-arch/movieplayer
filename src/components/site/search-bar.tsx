@@ -266,6 +266,28 @@ export function SearchBar() {
 
   const showDropdown = open && text.trim().length > 0;
 
+  /** YLE Areena escape hatch — the only real source for Finnish films/series
+   * (embed servers don't carry them). Shown whenever a query is active. */
+  const areenaRow = trimmed.length >= 2 && (
+    <a
+      href={`https://areena.yle.fi/haku?q=${encodeURIComponent(trimmed)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2.5 rounded-lg border-t border-zinc-200/70 px-3 py-2.5 text-[12px] text-zinc-600 transition-colors hover:bg-sky-50 hover:text-sky-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 dark:border-zinc-800/70 dark:text-zinc-400 dark:hover:bg-sky-950/30 dark:hover:text-sky-300"
+    >
+      <Tv className="size-3.5 shrink-0 text-sky-500" aria-hidden />
+      <span className="min-w-0 flex-1">
+        Can’t find it here? Search “{trimmed}” on YLE Areena
+        <span className="block text-[10px] text-zinc-400 dark:text-zinc-600">
+          Free &amp; legal — the home of Finnish movies and series
+        </span>
+      </span>
+      <span aria-hidden className="rounded border border-zinc-300 px-1 font-mono text-[9px] dark:border-zinc-700">
+        ↗
+      </span>
+    </a>
+  );
+
   /** Small banner shown when the global type filter is active in search. */
   const filterBanner = contentType !== 'all' && (
     <div className="flex items-center gap-2 border-b border-zinc-200/70 px-3 pb-2 pt-2 text-[11px] text-zinc-500 dark:border-zinc-800/70 dark:text-zinc-400">
@@ -427,6 +449,7 @@ export function SearchBar() {
         >
           {filterBanner}
           {body}
+          {areenaRow}
           {visible.length > 0 && (
             <p className="flex items-center justify-end gap-3 border-t border-zinc-200/70 px-3 pb-1.5 pt-2 text-[10px] font-medium text-zinc-400 dark:border-zinc-800/70 dark:text-zinc-600">
               <span className="inline-flex items-center gap-1">

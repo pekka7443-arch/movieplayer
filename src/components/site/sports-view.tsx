@@ -391,10 +391,29 @@ function useNow(intervalMs = 1000): number {
   return now;
 }
 
+/** Sport-specific Sportsurge sections (their per-sport pages list every
+ * live stream they aggregate — works in a real browser, one tap away). */
+const SPORTSURGE_SLUGS: Record<string, string> = {
+  Soccer: 'soccer',
+  'Ice Hockey': 'hockey',
+  Basketball: 'basketball',
+  'American Football': 'nfl',
+  Baseball: 'mlb',
+  Motorsport: 'motorsport',
+  Rally: 'motorsport',
+  Fighting: 'mma',
+};
+
 const WATCH_LINKS = (event: SportsEvent): { label: string; href: string }[] => {
   const q = encodeURIComponent(`${eventTitle(event)} live stream`);
+  const slug = SPORTSURGE_SLUGS[event.sport];
   const links = [
-    { label: 'Sportsurge', href: 'https://sportsurge.net/' },
+    {
+      label: 'Sportsurge',
+      href: slug
+        ? `https://sportsurge.net/${slug}/`
+        : 'https://sportsurge.net/',
+    },
     { label: 'Reddit streams', href: `https://www.reddit.com/search/?q=${q}` },
     { label: 'Google', href: `https://www.google.com/search?q=${q}` },
   ];

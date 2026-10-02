@@ -125,12 +125,12 @@ function probePlaylist(url: string, deadlineAt: number, depth = 0): Promise<bool
 
 /** Channel-name keywords per sport (lowercased substring matches). */
 const SPORT_KEYWORDS: Record<string, string[]> = {
-  Soccer: ['soccer', 'football', 'fifa', 'uefa', 'premier', 'laliga', 'bundesliga', 'serie', 'ligue', 'mls', 'bein', 'calcio', 'futbol'],
-  'Ice Hockey': ['hockey', 'nhl', 'shl', 'liiga', 'khl', 'ice'],
+  Soccer: ['soccer', 'football', 'fifa', 'uefa', 'premier', 'laliga', 'bundesliga', 'serie', 'ligue', 'mls', 'bein', 'calcio', 'futbol', 'veikkausliiga', 'champions', 'europa'],
+  'Ice Hockey': ['hockey', 'nhl', 'shl', 'liiga', 'khl', 'ice', 'iihf', 'junior', 'del', 'extraliga'],
   Basketball: ['basketball', 'nba', 'euroleague', 'fiba', 'wnba'],
-  'American Football': ['nfl', 'football', 'gridiron', 'cbs sports', 'fox sports', 'espn'],
-  Baseball: ['baseball', 'mlb'],
-  Motorsport: ['f1', 'formula', 'motorsport', 'motor', 'racing', 'nascar', 'motogp', 'eurosport', 'speed'],
+  'American Football': ['nfl', 'football', 'gridiron', 'cbs sports', 'fox sports', 'espn', 'ncaa'],
+  Baseball: ['baseball', 'mlb', 'npb'],
+  Motorsport: ['f1', 'formula', 'motorsport', 'motor', 'racing', 'nascar', 'motogp', 'eurosport', 'speed', 'wrc', 'rally', 'dakar', 'gp'],
   Fighting: ['fight', 'ufc', 'wwe', 'boxing', 'mma', 'wrestling'],
 };
 

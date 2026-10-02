@@ -171,8 +171,9 @@ export function PlayerSettingsMenu() {
             </SelectContent>
           </Select>
           <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-600">
-            Requests a dubbed track on VidSrc XYZ / VIP (marked FI etc. above) — the scan then
-            prefers those sources. Other mirrors: switch audio in the player's own ⚙ menu.
+            Requests a dubbed track on Videasy (marked FI etc. above) — the scan then prefers
+            that source. Best-effort: availability depends on the title. Other mirrors: switch
+            audio/subtitles in the player's own ⚙ / CC menu.
           </p>
         </div>
 

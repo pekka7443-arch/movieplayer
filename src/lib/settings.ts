@@ -25,7 +25,7 @@ export interface CinedeckSettings {
   /**
    * Dubbed audio preference for the player. 'original' = don't request dubs;
    * otherwise a 2-letter code ("fi", "de", …) appended to dub-capable sources
-   * (VidSrc XYZ / VIP `ds_lang`) so they start with that audio track.
+   * (Videasy `language`) so they start with that audio/subtitle track.
    */
   dubLanguage: string;
   /** Global home/browse filter: show everything, only movies, or only series. */

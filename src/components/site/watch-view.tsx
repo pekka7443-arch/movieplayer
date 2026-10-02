@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookmarkCheck, BookmarkPlus, ChevronLeft } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, ChevronLeft, ExternalLink, Tv } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { PlayerSection } from '@/components/site/player-section';
@@ -40,6 +40,10 @@ function metaToMediaDetails(meta: MetaDetails, mediaType: MediaType): MediaDetai
     trailerKey: meta.trailerKey,
     similar: [],
     providers: [],
+    // Cinemeta gives production countries ("Finland, Belgium, …") instead of a
+    // language code — normalize Finland → "fi" so the Areena banner logic is
+    // uniform across both metadata modes.
+    originalLanguage: meta.country?.toLowerCase().includes('finland') ? 'fi' : null,
   };
 }
 
@@ -90,6 +94,14 @@ export function WatchView({
     : detailsQuery.data;
   const detailsLoading = isImdbMode ? metaQuery.isPending : detailsQuery.isPending;
   const saveHistory = useSaveHistory();
+
+  // Finnish titles: embed servers (2Embed/VidSrc) almost never carry Finnish
+  // films or Finnish audio — surface YLE Areena (free, legal, in Finland)
+  // as the honest way to actually watch them.
+  const isFinnishTitle =
+    details?.originalLanguage === 'fi' ||
+    Boolean(metaQuery.data?.country?.toLowerCase().includes('finland'));
+  const watchTitle = details?.title ?? (isImdbMode ? (metaQuery.data?.title ?? '') : '');
 
   // My List toggle (TMDB-mode titles only — keyless IMDB mode has no tmdbId).
   const watchlistQuery = useWatchlist();
@@ -199,6 +211,48 @@ export function WatchView({
         detailsLoading={detailsLoading}
         hasKey={hasKey}
       />
+
+      {isFinnishTitle && (
+        <section
+          aria-label="Finnish content — YLE Areena suggestion"
+          className="mt-4 rounded-2xl border border-sky-300/60 bg-sky-50/80 p-4 backdrop-blur-sm sm:p-5 dark:border-sky-700/50 dark:bg-sky-950/25"
+        >
+          <div className="flex flex-wrap items-start gap-3">
+            <span
+              aria-hidden
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400"
+            >
+              <Tv className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold text-sky-900 dark:text-sky-200">
+                Finnish production — watch it on YLE Areena (free)
+              </h2>
+              <p className="mt-1 text-[13px] leading-relaxed text-sky-900/80 dark:text-sky-200/80">
+                Embed servers like 2Embed and VidSrc rarely carry Finnish films or Finnish
+                audio, so playback here may come up empty. YLE Areena streams nearly every
+                Finnish movie and series for free — search for it with the Finnish title.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild size="sm" className="h-auto max-w-full whitespace-normal py-1.5 text-left text-xs font-semibold">
+                  <a
+                    href={`https://areena.yle.fi/haku?q=${encodeURIComponent(watchTitle)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="gap-1.5 bg-sky-600 text-white hover:bg-sky-500"
+                  >
+                    <Tv className="size-3.5 shrink-0" aria-hidden />
+                    <span>
+                      Search “{watchTitle}” on YLE Areena
+                      <ExternalLink className="ml-1 inline size-3 opacity-70" aria-hidden />
+                    </span>
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {isImdbMode ? (
         metaQuery.data ? (

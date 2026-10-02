@@ -69,6 +69,10 @@ export interface MetaDetails {
   runtime: number | null;
   voteAverage: number;
   trailerKey: string | null;
+  /** Production countries, comma-separated (Cinemeta `country`), e.g.
+   * "Finland, Belgium, Iceland" — used to detect Finnish titles and surface
+   * YLE Areena as the honest source for them. */
+  country?: string | null;
 }
 
 export interface ScanResult {
