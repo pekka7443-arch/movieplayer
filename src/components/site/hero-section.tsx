@@ -22,6 +22,7 @@ import { tmdbImg } from '@/lib/languages';
 import { useCinedeckStore } from '@/lib/store';
 import { yearOf, type MediaType, type SearchItem } from '@/lib/tmdb';
 import type { MetaSearchItem } from '@/lib/meta';
+import { PROVIDERS } from '@/lib/providers';
 
 type HeroTrendingItem = SearchItem | MetaSearchItem;
 
@@ -437,7 +438,7 @@ export function HeroSection({
           },
           {
             icon: Server,
-            value: 5,
+            value: PROVIDERS.length,
             suffix: '',
             label: 'auto-scan + failover',
           },

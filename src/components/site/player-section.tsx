@@ -9,6 +9,7 @@ import {
   Clock,
   ExternalLink,
   Info,
+  Languages,
   Loader2,
   Maximize2,
   Minimize2,
@@ -17,6 +18,7 @@ import {
   SkipForward,
   Star,
   Unplug,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +34,8 @@ import {
 import { Fragment } from 'react';
 import { useSeason } from '@/hooks/use-media';
 import { useServerScan, useTvmazeShow } from '@/hooks/use-meta';
-import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl, supportsDub, dubCodeOf } from '@/lib/providers';
+import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl, supportsDub, dubCodeOf, isProven, reliabilityRank } from '@/lib/providers';
+import type { ScanResult } from '@/lib/meta';
 import { useCinedeckStore } from '@/lib/store';
 import { useSettings } from '@/lib/settings';
 import { PlayerSettingsMenu } from '@/components/site/player-settings';
@@ -137,31 +140,54 @@ export function PlayerSection({
   );
 
   /**
-   * Auto-play order: confirmed-online sources first (fastest response wins),
-   * then bot-blocked-but-maybe-working (403), then everything else. With dub
-   * audio enabled, dub-capable sources (Videasy) jump ahead of the other
-   * online mirrors so the user actually GETS the requested dub.
+   * Auto-play order — health first (online > bot-blocked > dead), then trust
+   * tier within each bucket: proven .cc/.skin/.sh cluster, then the maybe
+   * mirrors (VidSrc.cc/.su), then last-resort (Videasy — loads but has shown
+   * black screens). Probe speed breaks ties inside the same tier.
+   *
+   * A 200 probe is NOT proof of playback, so an online last-resort source
+   * still ranks BELOW a bot-blocked proven mirror.
    */
   const candidates = useMemo(() => {
-    const rows = scanQuery.data ?? [];
-    const rank = (ids: string[]) =>
-      dubLang
-        ? [...ids.filter(supportsDub), ...ids.filter((id) => !supportsDub(id))]
-        : ids;
-    const ok = rank(rows.filter((r) => r.ok).sort((a, b) => a.ms - b.ms).map((r) => r.providerId));
-    const unknown = rows.filter((r) => !r.ok && r.status === 403).map((r) => r.providerId);
-    const rest = rows.filter((r) => !r.ok && r.status !== 403).map((r) => r.providerId);
-    return [...ok, ...unknown, ...rest];
-  }, [scanQuery.data, dubLang]);
+    const weight = (r: ScanResult) => (r.ok ? 0 : r.status === 403 ? 1 : 2);
+    return [...(scanQuery.data ?? [])]
+      .sort(
+        (a, b) =>
+          weight(a) - weight(b) ||
+          reliabilityRank(a.providerId) - reliabilityRank(b.providerId) ||
+          a.ms - b.ms,
+      )
+      .map((r) => r.providerId);
+  }, [scanQuery.data]);
 
-  // The scan outranked the current server → move on (unless the user picked
-  // manually or disabled auto-pick in playback settings).
+  /**
+   * The scan outranked the current server → move on (unless the user picked
+   * manually or disabled auto-pick in playback settings).
+   *
+   * Two triggers:
+   *  1. the current source is DEAD (health=false) → best candidate takes over;
+   *  2. the current source is alive but UNPROVEN (e.g. persisted Videasy that
+   *     probes ok yet shows a black screen) → hand autoplay back to the best
+   *     PROVEN mirror that responded.
+   */
   useEffect(() => {
     if (!settings.autoPickSource) return;
     if (!scanQuery.data || manualPickRef.current) return;
-    if (healthMap.get(server) !== false) return;
-    const best = candidates[0];
-    if (best && best !== server) setServerTransient(best);
+    const currentHealth = healthMap.get(server);
+    if (currentHealth !== false && isProven(server)) return;
+    const best =
+      currentHealth === false
+        ? candidates[0]
+        : candidates.find((id) => isProven(id) && healthMap.get(id) !== false);
+    if (best && best !== server) {
+      const demoted = currentHealth !== false;
+      setServerTransient(best);
+      toast(`${getProvider(best).name} takes over`, {
+        description: demoted
+          ? `${getProvider(server).name} loads but isn't a proven player — the tested pool plays first.`
+          : `${getProvider(server).name} didn't respond — auto-switched sources.`,
+      });
+    }
   }, [settings.autoPickSource, scanQuery.data, healthMap, candidates, server, setServerTransient]);
 
   const provider = getProvider(server);
@@ -267,16 +293,12 @@ export function PlayerSection({
 
   /** Jump to the next candidate source — shared by the Skip button + "S" key. */
   const skipSource = useCallback(() => {
-    // Prefer online sources (scan-complete case). Fall back to cycling through
-    // PROVIDERS in order if scan isn't done yet — better to let the user try
-    // ANY mirror than to show a dead-end toast while the scan is still running.
-    const onlineRows = (scanQuery.data ?? []).filter((r) => r.ok);
-    const candidateIds =
-      onlineRows.length > 0
-        ? onlineRows.map((r) => r.providerId)
-        : PROVIDERS.map((p) => p.id);
-    const currentIdx = candidateIds.indexOf(server);
-    const nextId = candidateIds[(currentIdx + 1) % candidateIds.length] ?? candidateIds[0];
+    // Follow the full scan-ranked order (online proven → online mirrors →
+    // bot-blocked → dead). Without scan data, cycle through PROVIDERS as-is.
+    const order =
+      scanQuery.data && candidates.length > 0 ? candidates : PROVIDERS.map((p) => p.id);
+    const currentIdx = order.indexOf(server);
+    const nextId = order[(currentIdx + 1) % order.length] ?? order[0];
     if (!nextId || nextId === server) {
       toast(`${provider.name} is the only option`, {
         description: 'Hit Rescan to re-probe all sources.',
@@ -291,7 +313,55 @@ export function PlayerSection({
     toast(`Switched to ${getProvider(nextId).name}`, {
       description: 'If it still shows an error, hit Skip again.',
     });
-  }, [scanQuery.data, server, provider.name, setServerTransient]);
+  }, [scanQuery.data, candidates, server, provider.name, setServerTransient, setLoaded, setFailover]);
+
+  // ---------------------------------------------------------------------------
+  // "Stuck?" escape hatch — a black-screen player still fires onLoad, so the
+  // watchdog sees it as fine. After 18s on a loaded source, float a small
+  // "Not playing? → next server" pill over the player; it auto-hides and
+  // stays dismissed for that source. Visibility is DERIVED from the URL the
+  // pill was shown for, so a source switch clears it without extra renders.
+  // ---------------------------------------------------------------------------
+  const [stuckShownFor, setStuckShownFor] = useState<string | null>(null);
+  const stuckDismissedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!iframeReady) return;
+    const showT = setTimeout(() => {
+      if (stuckDismissedRef.current !== embedUrl) setStuckShownFor(embedUrl);
+    }, 18_000);
+    const hideT = setTimeout(() => {
+      setStuckShownFor((cur) => (cur === embedUrl ? null : cur));
+    }, 32_000);
+    return () => {
+      clearTimeout(showT);
+      clearTimeout(hideT);
+    };
+  }, [iframeReady, embedUrl]);
+  const stuckHint = iframeReady && stuckShownFor === embedUrl;
+
+  const stuckDismiss = useCallback(() => {
+    stuckDismissedRef.current = embedUrl;
+    setStuckShownFor(null);
+  }, [embedUrl]);
+
+  /** Dub-capable mirror that responded (ok preferred, then bot-blocked). */
+  const dubSource = useMemo(() => {
+    if (!dubLang) return null;
+    const rows = (scanQuery.data ?? []).filter((r) => supportsDub(r.providerId));
+    return rows.find((r) => r.ok) ?? rows.find((r) => r.status === 403) ?? null;
+  }, [scanQuery.data, dubLang]);
+
+  const switchToDubSource = useCallback(() => {
+    if (!dubSource) return;
+    // Manual intent: auto-pick must not yank the user straight back.
+    manualPickRef.current = true;
+    setServerTransient(dubSource.providerId);
+    setLoaded(null);
+    setFailover(null);
+    toast(`${getProvider(dubSource.providerId).name} · ${dubLang?.toUpperCase()} dub`, {
+      description: 'Unproven source — hit Skip if the picture stays black.',
+    });
+  }, [dubSource, dubLang, setServerTransient, setLoaded, setFailover]);
 
   // ---------------------------------------------------------------------------
   // Keyboard shortcuts — R reload · S skip source · T theater · N/P episodes.
@@ -478,6 +548,20 @@ export function PlayerSection({
           })}
         </div>
 
+        {/* Dub requested but the active server can't carry it → one-tap handoff
+            to the dub-capable mirror (manual intent, auto-pick won't undo it). */}
+        {dubLang && dubSource && dubSource.providerId !== server && (
+          <button
+            type="button"
+            onClick={switchToDubSource}
+            title={`Switch to ${getProvider(dubSource.providerId).name} with ${dubLang.toUpperCase()} dubbed audio`}
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 text-xs font-medium text-sky-600 transition-colors hover:bg-sky-500/20 dark:text-sky-400"
+          >
+            <Languages className="size-3.5" aria-hidden />
+            {dubLang.toUpperCase()} dub on {getProvider(dubSource.providerId).short}
+          </button>
+        )}
+
         <div className="ml-auto flex items-center gap-1.5">
           {/* Source scan status + rescan */}
           <span
@@ -493,7 +577,9 @@ export function PlayerSection({
               ? `Scanning ${PROVIDERS.length} sources…`
               : scanQuery.data
                 ? onlineCount > 0
-                  ? `${onlineCount}/${scanQuery.data.length} online — auto ${provider.name}${dubLang ? ' · dub' : ''}`
+                  ? `${onlineCount}/${scanQuery.data.length} online — auto ${provider.name}${
+                      dubLang && supportsDub(server) ? ' · dub' : ''
+                    }`
                   : 'No mirror responded yet'
                 : 'Source scan'}
           </span>
@@ -798,6 +884,35 @@ export function PlayerSection({
               )}
             </div>
           )}
+          {/* Black-screen escape hatch — appears once the source has "loaded"
+              but might silently not be playing (cross-origin, we can't peek). */}
+          {iframeReady && stuckHint && (
+            <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1 rounded-full border border-zinc-200/80 bg-white/90 py-1 pl-3 pr-1.5 text-xs shadow-lg backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/90">
+              <span className="text-zinc-600 dark:text-zinc-300">Not playing?</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  stuckDismiss();
+                  skipSource();
+                }}
+                className="h-6 gap-1 rounded-full px-2 text-xs font-medium text-brand hover:bg-brand-soft hover:text-brand dark:text-brand dark:hover:bg-brand-soft dark:hover:text-brand"
+              >
+                <SkipForward className="size-3" aria-hidden />
+                Next server
+              </Button>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                title="Dismiss"
+                onClick={stuckDismiss}
+                className="flex size-6 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-200/70 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              >
+                <X className="size-3.5" aria-hidden />
+              </button>
+            </div>
+          )}
         </div>
         {theater && (
           <p className="mt-2 text-center text-[11px] text-zinc-500 dark:text-zinc-600">
@@ -812,9 +927,9 @@ export function PlayerSection({
         <span>
           CineDeck scans all {PROVIDERS.length} mirrors ({PROVIDERS.filter((p) => p.group === 'twoembed').length}× 2Embed +{' '}
           {PROVIDERS.filter((p) => p.group === 'vidsrc').length}× VidSrc +{' '}
-          {PROVIDERS.filter((p) => p.group === 'other').length} other), plays the healthiest one
-          and auto-switches if a source stalls — tune it all under{' '}
-          <strong className="font-semibold text-brand">Settings</strong> above. Shortcuts:{' '}
+          {PROVIDERS.filter((p) => p.group === 'other').length} other) and auto-plays a
+          proven server first — the rest stay one tap away if the proven pool stalls. Tune it
+          all under <strong className="font-semibold text-brand">Settings</strong> above. Shortcuts:{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">R</kbd> reload ·{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">S</kbd> skip ·{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">T</kbd> theater ·{' '}

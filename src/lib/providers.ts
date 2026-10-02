@@ -5,9 +5,45 @@ export type ProviderId =
   | 'twoembed_skin'
   | 'vidsrc_sh'
   | 'vidsrc_cc'
-  // Modern modern player — server-reachable, built-in subtitle language
+  // VidSrc.su — same embed family as .sh, live player shell (2026-10 probe).
+  | 'vidsrc_su'
+  // Modern player — server-reachable, built-in subtitle/audio language
   // selector, accepts a `language` param to preselect audio/subtitle locale.
+  // Probes OK but the user hit a black screen on it — manual/last-resort only.
   | 'videasy';
+
+/**
+ * How much we trust a source to actually PLAY (a 200 health probe is not
+ * proof — some players load as a black screen):
+ *
+ *  - 'proven'     — user-confirmed playback (.cc / .skin / .sh cluster).
+ *                   Auto-pick ONLY lands here while any of these is online.
+ *  - 'maybe'      — alive, same trusted family or browser-only playable
+ *                   (Cloudflare-gated .cc). Tried after the proven pool.
+ *  - 'lastresort' — loads but reported broken/black by the user (Videasy).
+ *                   Manual pick or literally-last candidate.
+ */
+export type Reliability = 'proven' | 'maybe' | 'lastresort';
+
+const RELIABILITY_ORDER: Record<Reliability, number> = {
+  proven: 0,
+  maybe: 1,
+  lastresort: 2,
+};
+
+export function reliabilityOf(providerId: string): Reliability {
+  return getProvider(providerId).reliability;
+}
+
+/** Numeric rank for sorting candidates (lower = more trustworthy). */
+export function reliabilityRank(providerId: string): number {
+  return RELIABILITY_ORDER[reliabilityOf(providerId)];
+}
+
+/** True when this provider is user-proven to play — auto-pick eligible. */
+export function isProven(providerId: string): boolean {
+  return reliabilityOf(providerId) === 'proven';
+}
 
 /**
  * Provider grouping for the player UI — keeps the server list scannable.
@@ -26,6 +62,8 @@ export interface Provider {
   short: string;
   /** Cluster this provider belongs to ('twoembed' | 'vidsrc' | 'other'). */
   group: 'twoembed' | 'vidsrc' | 'other';
+  /** Playback trust tier — drives auto-pick + failover order (see above). */
+  reliability: Reliability;
   /**
    * Query parameter name this provider uses to request a DUBBED audio track
    * (e.g. "language" → &language=fi). Null/undefined = no dub support — the
@@ -46,10 +84,12 @@ export interface Provider {
 //   VidSrc.cc: /embed/movie/{id}           /embed/tv/{id}/{s}/{e}  (Cloudflare-protected mirror —
 //              the server probe sees a 403 challenge but real browsers load it fine,
 //              so the scan reports it as "unknown" and the player still tries it)
+//   VidSrc.su:/embed/movie/{id}            /embed/tv/{id}/{s}/{e}  (same family as .sh)
 //   Videasy : /movie/{id}                  /tv/{id}/{s}/{e}   (player.videasy.to)
 //
 // Dead domains measured and removed (2026-10): 2embed.to/.org/.live/.pro/.net,
-// vidsrc.to/.xyz/.vip, vidsrc.me (=redirect to .sh), superembed, embed.su.
+// vidsrc.to/.xyz/.vip/.in/.nl, vidlink.org, embed.su, vidjoy.pro (parked),
+// superembed/multiembed.mov (hard CF wall), spencerdevs.xyz (site, not embed API).
 // ---------------------------------------------------------------------------
 
 const twoEmbedMovie = (base: string) => (id: number | string) => `${base}/embed/${id}`;
@@ -68,6 +108,7 @@ export const PROVIDERS: Provider[] = [
     name: '2Embed.cc',
     short: '.cc',
     group: 'twoembed',
+    reliability: 'proven',
     movie: twoEmbedMovie('https://www.2embed.cc'),
     tv: twoEmbedTv('https://www.2embed.cc'),
     movieImdb: twoEmbedMovieImdb('https://www.2embed.cc'),
@@ -78,6 +119,7 @@ export const PROVIDERS: Provider[] = [
     name: '2Embed.skin',
     short: '.skin',
     group: 'twoembed',
+    reliability: 'proven',
     movie: twoEmbedMovie('https://2embed.skin'),
     tv: twoEmbedTv('https://2embed.skin'),
     movieImdb: twoEmbedMovieImdb('https://2embed.skin'),
@@ -90,6 +132,7 @@ export const PROVIDERS: Provider[] = [
     name: 'VidSrc.sh',
     short: '.sh',
     group: 'vidsrc',
+    reliability: 'proven',
     movie: vidsrcMovie('https://vidsrc.sh'),
     tv: vidsrcTv('https://vidsrc.sh'),
     movieImdb: vidsrcMovie('https://vidsrc.sh'),
@@ -100,10 +143,27 @@ export const PROVIDERS: Provider[] = [
     name: 'VidSrc.cc',
     short: '.cc',
     group: 'vidsrc',
+    // Cloudflare-protected mirror — the server probe sees a 403 challenge but
+    // real browsers load it fine, so the scan reports "unknown" and the player
+    // still tries it after the proven pool.
+    reliability: 'maybe',
     movie: vidsrcMovie('https://vidsrc.cc'),
     tv: vidsrcTv('https://vidsrc.cc'),
     movieImdb: vidsrcMovie('https://vidsrc.cc'),
     tvImdb: vidsrcTv('https://vidsrc.cc'),
+  },
+  {
+    id: 'vidsrc_su',
+    name: 'VidSrc.su',
+    short: '.su',
+    group: 'vidsrc',
+    // Same embed family as VidSrc.sh — live player shell confirmed by probe,
+    // actual playback unverified → tried after the proven trio.
+    reliability: 'maybe',
+    movie: vidsrcMovie('https://vidsrc.su'),
+    tv: vidsrcTv('https://vidsrc.su'),
+    movieImdb: vidsrcMovie('https://vidsrc.su'),
+    tvImdb: vidsrcTv('https://vidsrc.su'),
   },
 
   // ----- Extra (modern alternative player) -----
@@ -112,6 +172,9 @@ export const PROVIDERS: Provider[] = [
     name: 'Videasy',
     short: 'VDS',
     group: 'other',
+    // Probes healthy but the user got a black screen on it — never auto-picked
+    // while a proven/maybe source is online; reachable via the dub hint chip.
+    reliability: 'lastresort',
     // Videasy's player accepts a language locale and has a built-in
     // subtitle/audio language selector — best-effort dub support.
     dubParam: 'language',
@@ -128,6 +191,15 @@ export const PROVIDERS: Provider[] = [
  * auto-failover watchdog will silently move on if this specific mirror stalls.
  */
 export const DEFAULT_PROVIDER: ProviderId = 'twoembed_cc';
+
+/**
+ * The providers auto-pick is allowed to land on while they are online —
+ * the user-verified .cc / .skin / .sh cluster. Unproven sources stay one
+ * manual tap away but never steal the first autoplay.
+ */
+export const AUTO_PICK_PROVIDERS: ProviderId[] = PROVIDERS.filter(
+  (p) => p.reliability === 'proven',
+).map((p) => p.id);
 
 export function getProvider(providerId: string): Provider {
   return PROVIDERS.find((p) => p.id === providerId) ?? PROVIDERS[0];

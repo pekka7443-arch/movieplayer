@@ -171,8 +171,10 @@ export function PlayerSettingsMenu() {
             </SelectContent>
           </Select>
           <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-600">
-            Requests a dubbed track on Videasy (marked FI etc. above) — the scan then prefers
-            that source. Best-effort: availability depends on the title. Other mirrors: switch
+            Requests a dubbed track on Videasy (marked FI etc. above) — the watch page then
+            shows a one-tap “FI dub on VDS” chip. Auto-pick still starts on the proven
+            servers; only the dub source carries the audio request. Best-effort:
+            availability depends on the title. Other mirrors: switch
             audio/subtitles in the player's own ⚙ / CC menu.
           </p>
         </div>
