@@ -48,7 +48,7 @@ export function LanguageMenu() {
               aria-selected={lang.code === language}
             >
               <span className="flex-1">{lang.label}</span>
-              <span className="text-[10px] uppercase text-zinc-500 dark:text-zinc-600">{lang.code.slice(0, 2)}</span>
+              <span className="text-[10px] uppercase text-zinc-500 dark:text-zinc-400">{lang.code.slice(0, 2)}</span>
               {lang.code === language && <Check className="size-4 text-amber-500 dark:text-amber-400" aria-hidden />}
             </DropdownMenuItem>
           ))}

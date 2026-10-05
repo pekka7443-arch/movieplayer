@@ -75,7 +75,7 @@ export function WatchRating({ tmdbId, mediaType }: { tmdbId: number; mediaType: 
                   <Star
                     className={
                       'size-4 transition-colors ' +
-                      (active ? 'fill-amber-400 text-amber-400' : 'text-zinc-300 dark:text-zinc-600')
+                      (active ? 'fill-amber-400 text-amber-400' : 'text-zinc-300 dark:text-zinc-400')
                     }
                     aria-hidden
                   />

@@ -143,6 +143,24 @@ export function enforceRateLimit(
   bucket: RateLimitBucket,
   spec?: RateLimitSpec,
 ): Response | null {
+  // E2E escape hatch — scoped to ALL of: non-production runtime, a loopback
+  // client, and the shared dev-only secret header. Rate limits stay fully
+  // intact for the preview panel and any deployed environment.
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    isLoopbackClient(request) &&
+    process.env.E2E_RATELIMIT_BYPASS &&
+    request.headers.get('x-cinedeck-e2e') === process.env.E2E_RATELIMIT_BYPASS
+  ) {
+    return null;
+  }
   const decision = checkRateLimit(request, bucket, spec);
   return decision.ok ? null : rateLimitResponse(decision.retryAfterSec);
+}
+
+/** True when the direct peer (or forwarded chain) is loopback — Playwright
+ *  runs on the same host; proxied preview traffic carries a forwarded IP. */
+function isLoopbackClient(request: Request): boolean {
+  const ip = clientIpOf(request);
+  return ip === 'local' || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 }

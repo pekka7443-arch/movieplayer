@@ -64,7 +64,7 @@ export function PlayerSettingsMenu() {
           <Zap className="size-4 text-brand" aria-hidden />
           Playback
         </p>
-        <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-600">
+        <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
           Saved automatically in your browser.
         </p>
 
@@ -74,7 +74,7 @@ export function PlayerSettingsMenu() {
             <Label htmlFor="pset-autopick" className="text-[13px] leading-tight">
               Auto-play healthiest source
             </Label>
-            <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-600">
+            <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
               Jump to the fastest mirror after each scan.
             </p>
           </div>
@@ -92,7 +92,7 @@ export function PlayerSettingsMenu() {
             <Label htmlFor="pset-failover" className="text-[13px] leading-tight">
               Auto-failover
             </Label>
-            <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-600">
+            <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
               Switch sources automatically when one stalls.
             </p>
           </div>
@@ -170,7 +170,7 @@ export function PlayerSettingsMenu() {
               })}
             </SelectContent>
           </Select>
-          <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-600">
+          <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
             Requests a dubbed track on Videasy (marked FI etc. above) — the watch page then
             shows a one-tap “FI dub on VDS” chip. Auto-pick still starts on the proven
             servers; only the dub source carries the audio request. Best-effort:

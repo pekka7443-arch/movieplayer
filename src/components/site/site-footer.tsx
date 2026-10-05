@@ -40,7 +40,7 @@ export function SiteFooter() {
                 Cine<span className="text-brand">Deck</span>
               </span>
             </div>
-            <p className="mt-3 max-w-xs text-xs leading-relaxed text-zinc-500">
+            <p className="mt-3 max-w-xs text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
               Search a title, press play — CineDeck scans every stream source and picks the
               healthiest one. Keyless metadata from Cinemeta &amp; TVmaze; TMDB layer optional.
             </p>
@@ -56,9 +56,9 @@ export function SiteFooter() {
                   <button
                     type="button"
                     onClick={action}
-                    className="group flex items-center gap-2 rounded-md py-0.5 text-xs text-zinc-500 transition-colors hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:text-zinc-500 dark:hover:text-brand"
+                    className="group flex items-center gap-2 rounded-md py-0.5 text-xs text-zinc-500 transition-colors hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:text-zinc-400 dark:hover:text-brand"
                   >
-                    <Icon className="size-3.5 text-zinc-400 transition-colors group-hover:text-brand dark:text-zinc-600" aria-hidden />
+                    <Icon className="size-3.5 text-zinc-400 transition-colors group-hover:text-brand dark:text-zinc-400" aria-hidden />
                     {label}
                   </button>
                 </li>
@@ -70,7 +70,7 @@ export function SiteFooter() {
             <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-600 dark:text-zinc-400">
               Data sources
             </h3>
-            <ul className="mt-3 space-y-1.5 text-xs leading-relaxed text-zinc-500">
+            <ul className="mt-3 space-y-1.5 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
               <li>
                 <span className="font-medium text-zinc-600 dark:text-zinc-400">Cinemeta</span> — search,
                 catalogs &amp; details (no key)
@@ -98,7 +98,7 @@ export function SiteFooter() {
             <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-600 dark:text-zinc-400">
               Disclaimer
             </h3>
-            <p className="mt-3 max-w-xs text-xs leading-relaxed text-zinc-500">
+            <p className="mt-3 max-w-xs text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
               For educational purposes only — CineDeck hosts no video. All streams are served by
               third-party providers. This product uses the TMDB API but is not endorsed or
               certified by TMDB.
@@ -106,7 +106,7 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-4 text-[11px] text-zinc-500 dark:border-zinc-800/60 dark:text-zinc-600">
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-4 text-[11px] text-zinc-500 dark:border-zinc-800/60 dark:text-zinc-400">
           <p>© {new Date().getFullYear()} CineDeck — movies &amp; shows, one press away.</p>
           <p className="flex items-center gap-2">
             <span className="relative flex size-1.5" aria-hidden>

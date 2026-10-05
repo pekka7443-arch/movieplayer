@@ -187,7 +187,7 @@ export function AccountSecurity() {
         >
           {passwordBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : 'Update password'}
         </Button>
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-600">
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
           Changing the password signs out every other device.
         </p>
       </div>
@@ -200,7 +200,7 @@ export function AccountSecurity() {
             Two-factor authentication
           </p>
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-zinc-500 dark:text-zinc-500">
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
               {user.totpEnabled ? 'On' : 'Off'}
             </span>
             <Switch
@@ -288,7 +288,7 @@ export function AccountSecurity() {
         )}
 
         {!totpSecret && (
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-600">
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
             Adds a 6-digit code from your authenticator app on top of your password.
           </p>
         )}
@@ -315,7 +315,7 @@ export function AccountSecurity() {
         {sessionsQuery.isPending ? (
           <Loader2 className="size-4 animate-spin text-zinc-400" aria-label="Loading devices" />
         ) : sessions.length === 0 ? (
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-600">No active sessions.</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">No active sessions.</p>
         ) : (
           <ul className="space-y-1.5">
             {sessions.map((session) => (
@@ -331,14 +331,14 @@ export function AccountSecurity() {
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-500">
+                <span className="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">
                   {timeAgo(session.lastSeenAt)}
                 </span>
               </li>
             ))}
           </ul>
         )}
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-600">
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
           Sessions stay alive for 30 days and quietly renew while you use CineDeck.
         </p>
       </div>

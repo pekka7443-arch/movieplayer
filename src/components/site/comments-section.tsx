@@ -115,7 +115,7 @@ export function CommentsSection({ tmdbId, mediaType }: { tmdbId: number; mediaTy
         <h2 className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
           Discussion
         </h2>
-        <span className="text-xs text-zinc-500 dark:text-zinc-500">
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
           {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
         </span>
       </header>
@@ -146,7 +146,7 @@ export function CommentsSection({ tmdbId, mediaType }: { tmdbId: number; mediaTy
           </div>
         </div>
       ) : (
-        <p className="rounded-xl border border-dashed border-zinc-200 px-3 py-4 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
+        <p className="rounded-xl border border-dashed border-zinc-200 px-3 py-4 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
           Sign in to join the discussion.
         </p>
       )}

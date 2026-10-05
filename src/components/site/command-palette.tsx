@@ -195,7 +195,7 @@ export function CommandPalette() {
           </div>
 
           <Command.List className="max-h-[55vh] overflow-y-auto p-2">
-            <Command.Empty className="px-3 py-6 text-center text-sm text-zinc-500 dark:text-zinc-500">
+            <Command.Empty className="px-3 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
               {query.trim().length >= 2 ? 'Nothing found.' : 'Type to search or pick an action below.'}
             </Command.Empty>
 

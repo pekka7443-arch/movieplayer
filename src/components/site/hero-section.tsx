@@ -15,7 +15,6 @@ import { toast } from 'sonner';
 import { Dices, Play, Server, Sparkles, Star, Clapperboard, Undo2, Users, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConnectCard } from '@/components/site/connect-card';
 import { tmdbImg } from '@/lib/languages';
@@ -180,7 +179,7 @@ export function HeroSection({
   const featuredUrl = featured ? watchUrlOf(featured) : null;
   const featuredBackdrop =
     'backdropPath' in (featured ?? {})
-      ? tmdbImg((featured as SearchItem).backdropPath ?? (featured as SearchItem).posterPath, 'w1280')
+      ? tmdbImg((featured as SearchItem).backdropPath ?? (featured as SearchItem).posterPath, 'w780')
       : featuredMeta?.backdrop ?? featuredMeta?.poster ?? null;
 
   const fadeUp = (delay: number) => ({
@@ -221,26 +220,30 @@ export function HeroSection({
             {...fadeUp(0.12)}
             className="mt-6 rounded-xl border border-zinc-200 bg-white/70 p-4 sm:p-5 dark:border-zinc-800/60 dark:bg-zinc-900/60"
           >
-            <Tabs
-              value={mediaType}
-              onValueChange={(v) => setMediaType(v as MediaType)}
+            <div
+              role="group"
               aria-label="Media type"
+              className="flex h-9 items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-950/60"
             >
-              <TabsList className="h-9 rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-950/60">
-                <TabsTrigger
-                  value="movie"
-                  className="h-7 rounded-md px-4 text-xs font-medium data-[state=active]:bg-brand data-[state=active]:text-brand-foreground"
+              {([
+                { value: 'movie' as MediaType, label: 'Movie' },
+                { value: 'tv' as MediaType, label: 'TV Show' },
+              ]).map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={mediaType === value}
+                  onClick={() => setMediaType(value)}
+                  className={`h-7 rounded-md px-4 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                    mediaType === value
+                      ? 'bg-brand text-brand-foreground'
+                      : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  }`}
                 >
-                  Movie
-                </TabsTrigger>
-                <TabsTrigger
-                  value="tv"
-                  className="h-7 rounded-md px-4 text-xs font-medium data-[state=active]:bg-brand data-[state=active]:text-brand-foreground"
-                >
-                  TV Show
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+                  {label}
+                </button>
+              ))}
+            </div>
 
             <div className="mt-4 flex flex-wrap items-end gap-3">
               <div className="min-w-40 flex-1 space-y-1.5">
@@ -307,7 +310,7 @@ export function HeroSection({
                 <Dices className="size-4 text-brand transition-transform duration-300 hover:rotate-12" aria-hidden />
                 Surprise me
               </Button>
-              <span className="text-[11px] text-zinc-500 dark:text-zinc-600">
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
                 {hasKey
                   ? 'Works instantly — no API key needed for playback.'
                   : 'Surprise me picks from the live Cinemeta top catalog.'}
@@ -328,12 +331,13 @@ export function HeroSection({
               <button
                 type="button"
                 onClick={() => router.push(featuredUrl, { scroll: false })}
-                aria-label={`Play ${featuredTitle}`}
                 className="group relative block w-full overflow-hidden rounded-xl border border-zinc-200 text-left shadow-2xl shadow-black/10 transition-shadow duration-500 focus-visible:outline-none hover:shadow-[0_24px_70px_-18px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)] dark:border-zinc-800/60 dark:shadow-black/50"
               >
                 <motion.img
                   src={featuredBackdrop}
                   alt={`${featuredTitle} backdrop`}
+                  loading="eager"
+                  fetchPriority="high"
                   style={reduceMotion ? undefined : { x: imgX, y: imgY }}
                   className="aspect-video w-full scale-[1.07] object-cover"
                 />
@@ -376,7 +380,7 @@ export function HeroSection({
             ) : !hasKey ? (
               <ConnectCard />
             ) : (
-              <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/40 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-600">
+              <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/40 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
                 Trending is unavailable right now.
               </div>
             )}
@@ -470,7 +474,7 @@ export function HeroSection({
               <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                 {value !== null ? <CountUp value={value} suffix={suffix} /> : text}
               </span>
-              <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-500">{label}</span>
+              <span className="block truncate text-[11px] text-zinc-600 dark:text-zinc-400">{label}</span>
             </span>
           </motion.div>
         ))}

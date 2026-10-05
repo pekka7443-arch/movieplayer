@@ -342,7 +342,7 @@ export function AuthDialog() {
                       />
                     ))}
                   </div>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-500">
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                     Strength: {strength.label}
                     {strength.problems.length > 0 ? ` — ${strength.problems[0]}` : ''}
                   </p>
@@ -404,7 +404,7 @@ export function AuthDialog() {
                   Forgot your password?
                 </button>
               )}
-              <p className="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-600">
+              <p className="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                 <ShieldCheck className="size-3" aria-hidden />
                 Guests keep everything on this device — sign up any time to sync.
               </p>
@@ -507,7 +507,7 @@ export function AuthDialog() {
               If <span className="font-semibold text-zinc-800 dark:text-zinc-200">{email}</span> has a CineDeck
               account, a password-reset link is on its way. It expires in 30 minutes.
             </p>
-            <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-600">
+            <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
               Running the dev server? The link is printed in the server console (console mail adapter).
             </p>
             <Button

@@ -31,6 +31,7 @@ import {
   type MediaCardItem,
 } from '@/components/site/media-card';
 import { MediaRow } from '@/components/site/media-row';
+import { useNearViewport } from '@/hooks/use-near-viewport';
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCinedeckStore } from '@/lib/store';
@@ -98,7 +99,7 @@ function SectionHeading({
         <Icon className="size-5 text-brand" aria-hidden />
         {title}
       </h2>
-      {hint && <span className="text-xs text-zinc-500 dark:text-zinc-600">{hint}</span>}
+      {hint && <span className="text-xs text-zinc-500 dark:text-zinc-400">{hint}</span>}
     </div>
   );
 }
@@ -259,7 +260,7 @@ function HistoryCard({ item }: { item: HistoryItem }) {
         <span className="mt-2 block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-amber-600 dark:text-zinc-200 dark:group-hover:text-amber-300">
           {item.title}
         </span>
-        <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-600">
+        <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">
           {item.durationSeconds != null && item.durationSeconds > 0
             ? `${Math.min(100, Math.round((item.positionSeconds / item.durationSeconds) * 100))}% watched`
             : item.positionSeconds > 0
@@ -318,7 +319,7 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
         <span className="mt-2 block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-amber-600 dark:text-zinc-200 dark:group-hover:text-amber-300">
           {item.title}
         </span>
-        <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-600">In My List</span>
+        <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">In My List</span>
       </button>
       <button
         type="button"
@@ -340,7 +341,7 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
 
 function RowEmptyState({ text }: { text: string }) {
   return (
-    <div className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/30 text-sm text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:text-zinc-600">
+    <div className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/30 text-sm text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:text-zinc-400">
       {text}
     </div>
   );
@@ -362,7 +363,11 @@ function CatalogRow({
   enabled: boolean;
   priorityCount?: number;
 }) {
-  const query = useCatalog(params, enabled);
+  // Below-fold rows defer BOTH their fetch and their ~20-card hydration until
+  // they scroll near the viewport (800px) — the skeleton keeps the layout
+  // stable in the meantime. Above-the-fold rows start near=true immediately.
+  const { ref, near } = useNearViewport<HTMLDivElement>();
+  const query = useCatalog(params, enabled && near);
   const items = query.data;
   const reduceMotion = useReducedMotion();
   const reveal = {
@@ -373,9 +378,9 @@ function CatalogRow({
   };
 
   return (
-    <motion.div {...reveal}>
+    <motion.div {...reveal} ref={ref}>
       <SectionHeading icon={icon} title={title} hint={hint} />
-      {query.isPending || (!enabled && !items) ? (
+      {!near || query.isPending || (!enabled && !items) ? (
         <RowSkeletonStripe />
       ) : query.isError ? (
         <RowEmptyState text="This row is unavailable right now." />
@@ -405,8 +410,10 @@ function FinnishSection() {
   const reduceMotion = useReducedMotion();
   const wantMovies = contentType !== 'tv';
   const wantTv = contentType !== 'movie';
-  const moviesQuery = useFinnishCatalog('movie', wantMovies);
-  const tvQuery = useFinnishCatalog('tv', wantTv);
+  // Deferred like CatalogRow: fetch + hydrate only when near the viewport.
+  const { ref, near } = useNearViewport<HTMLElement>();
+  const moviesQuery = useFinnishCatalog('movie', wantMovies && near);
+  const tvQuery = useFinnishCatalog('tv', wantTv && near);
 
   // Interleave movies and series (movies first) so the row mixes both —
   // the global browse filter decides which of the two lists contributes.
@@ -439,7 +446,7 @@ function FinnishSection() {
   };
 
   return (
-    <motion.section {...reveal} aria-labelledby="finnish-picks">
+    <motion.section {...reveal} ref={ref} aria-labelledby="finnish-picks">
       <div id="finnish-picks" className="scroll-mt-24">
         <SectionHeading
           icon={Flag}
@@ -447,7 +454,7 @@ function FinnishSection() {
           hint="Finnish originals — Yle Areena fallback on every title page"
         />
       </div>
-      {loading ? (
+      {loading || !near ? (
         <RowSkeletonStripe />
       ) : items.length > 0 ? (
         <MediaRow label={title}>
@@ -478,7 +485,7 @@ const EXPLORE_GENRES = [
   'Thriller',
 ] as const;
 
-export function HomeView() {
+export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem[] }) {
   const router = useRouter();
   const language = useCinedeckStore((s) => s.language);
   const openSettings = useCinedeckStore((s) => s.openSettings);
@@ -501,7 +508,7 @@ export function HomeView() {
   // the hooks themselves). When the user has a TMDB key, the data comes from
   // TMDB; without a key, it comes from Cinemeta's public catalogs so the
   // home view shows real content instead of "Connect TMDB" prompts.
-  const trendingQuery = useTrending(language, true);
+  const trendingQuery = useTrending(language, true, initialTrending);
   const popularMoviesQuery = usePopularMovies(language, true);
   const popularTVQuery = usePopularTV(language, true);
   const historyQuery = useHistory();
@@ -619,7 +626,7 @@ export function HomeView() {
               );
             })}
           </div>
-          <span className="ml-auto hidden text-[11px] text-zinc-500 md:inline dark:text-zinc-600">
+          <span className="ml-auto hidden text-[11px] text-zinc-500 md:inline dark:text-zinc-400">
             {contentType === 'all'
               ? 'Showing everything — pick Movies or TV Series to filter every row'
               : `Showing ${contentType === 'movie' ? 'movies only' : 'series only'} — every row, the hero and search respect this`}
@@ -651,7 +658,7 @@ export function HomeView() {
               </span>
               Live Sports
             </span>
-            <span className="block truncate text-xs text-zinc-500 dark:text-zinc-500">
+            <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
               Live scores, schedules, replays &amp; 280+ free sports TV channels — keyless.
             </span>
           </span>

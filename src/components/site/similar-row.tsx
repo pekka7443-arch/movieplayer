@@ -38,7 +38,7 @@ export function SimilarRow({
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/30 text-sm text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:text-zinc-600">
+        <div className="flex h-28 items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/30 text-sm text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:text-zinc-400">
           <Film className="mr-2 size-4" aria-hidden />
           No recommendations available.
         </div>
@@ -87,7 +87,7 @@ export function MetaSimilarRow({
         className="mb-3 flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-100"
       >
         More like this
-        <span className="rounded bg-zinc-200/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500 dark:bg-zinc-800/70 dark:text-zinc-500">
+        <span className="rounded bg-zinc-200/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500 dark:bg-zinc-800/70 dark:text-zinc-400">
           Cinemeta
         </span>
       </h2>

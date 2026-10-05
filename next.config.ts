@@ -71,6 +71,20 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  // ---------------------------------------------------------------------------
+  // Isolated artifact dirs — dev and build never share .next anymore.
+  //
+  // WHY: `next build` while `next dev` is live (the platform publish flow)
+  // made Turbopack emit HTML/chunks referencing chunk hashes the build later
+  // pruned — the deployed app 500'd on 3 static chunks (ChunkLoadError).
+  // - `bun run dev`  → NEXT_DEV_DIST_DIR=.next-dev (preview keeps its own tree,
+  //   immune to publish builds; builds must own .next exclusively)
+  // - `bun run build` → plain `next build` into .next (the platform's
+  //   .zscripts/build.sh hard-codes .next/standalone + .next/static paths).
+  // ---------------------------------------------------------------------------
+  distDir: process.env.NEXT_DEV_DIST_DIR
+    ? `${process.env.NEXT_DEV_DIST_DIR}`
+    : ".next",
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "image.tmdb.org" },

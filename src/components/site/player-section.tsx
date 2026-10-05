@@ -577,7 +577,7 @@ export function PlayerSection({
                 </Badge>
               ))}
               {!hasKey && !imdbId && (
-                <span className="text-xs text-zinc-500 dark:text-zinc-600">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
                   Connect a TMDB key to see titles, ratings and genres here.
                 </span>
               )}
@@ -600,7 +600,7 @@ export function PlayerSection({
               <Fragment key={group.id}>
                 <span
                   aria-hidden
-                  className="px-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-600"
+                  className="px-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-400"
                 >
                   {group.label}
                 </span>
@@ -904,7 +904,7 @@ export function PlayerSection({
           )}
 
           {(hasKey ? episodes.length === 0 && seasonQuery.isFetching : tvmazeQuery.isPending) && (
-            <Loader2 className="size-4 animate-spin text-zinc-500 dark:text-zinc-600" aria-label="Loading episodes" />
+            <Loader2 className="size-4 animate-spin text-zinc-500 dark:text-zinc-400" aria-label="Loading episodes" />
           )}
 
           <div className="ml-auto flex items-center gap-1.5">
@@ -983,7 +983,7 @@ export function PlayerSection({
                     <Unplug className="size-6 text-red-500 dark:text-red-400" aria-hidden />
                   </span>
                   <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">No mirror responded</p>
-                  <p className="max-w-sm text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
+                  <p className="max-w-sm text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
                     All {failover.total} mirrors timed out for this title. Hit Reload to retry,
                     or pick a server above — some sources block datacenter scans but still play in browsers.
                   </p>
@@ -999,11 +999,11 @@ export function PlayerSection({
                       : `Connecting to ${provider.name}${dubLang && supportsDub(server) ? ` · ${dubLang.toUpperCase()} dub` : ''}…`}
                   </p>
                   {failover?.forUrl === embedUrl && failover.toId ? (
-                    <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-600">
+                    <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
                       {failover.fromName} timed out · attempt {failover.tried + 1}/{failover.total}
                     </p>
                   ) : (
-                    <p className="font-mono text-xs text-zinc-500 dark:text-zinc-600">
+                    <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                       {imdbId ?? `TMDB ${tmdbId}`}
                     </p>
                   )}
@@ -1042,14 +1042,14 @@ export function PlayerSection({
           )}
         </div>
         {theater && (
-          <p className="mt-2 text-center text-[11px] text-zinc-500 dark:text-zinc-600">
+          <p className="mt-2 text-center text-[11px] text-zinc-500 dark:text-zinc-400">
             Theater mode — press <kbd className="font-mono font-semibold">T</kbd> or hit the
             Theater button to go back
           </p>
         )}
       </div>
 
-      <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-600">
+      <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
           CineDeck scans all {PROVIDERS.length} mirrors ({PROVIDERS.filter((p) => p.group === 'twoembed').length}× 2Embed +{' '}

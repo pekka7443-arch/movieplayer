@@ -334,7 +334,7 @@ function StatusPill({ event }: { event: SportsEvent }) {
     return (
       <Badge
         variant="outline"
-        className="border-zinc-300 bg-transparent text-[10px] uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-500"
+        className="border-zinc-300 bg-transparent text-[10px] uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
       >
         FT
       </Badge>
@@ -354,7 +354,7 @@ function StatusPill({ event }: { event: SportsEvent }) {
   return (
     <Badge
       variant="outline"
-      className="border-zinc-300 bg-transparent text-[10px] uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-500"
+      className="border-zinc-300 bg-transparent text-[10px] uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
     >
       TBD
     </Badge>
@@ -366,7 +366,7 @@ function RowStatus({ event }: { event: SportsEvent }) {
   if (event.state === 'live') return <StatusPill event={event} />;
   if (event.state === 'finished') {
     return (
-      <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-600">
+      <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-400">
         FT
       </span>
     );
@@ -378,7 +378,7 @@ function RowStatus({ event }: { event: SportsEvent }) {
       </span>
     );
   }
-  return <span className="text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-600">TBD</span>;
+  return <span className="text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-400">TBD</span>;
 }
 
 /** Countdown ticker — ticks only while an upcoming event is selected. */
@@ -428,7 +428,7 @@ function LinksRow({ event, dense }: { event: SportsEvent; dense?: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {!dense && (
-        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-600">
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
           More places to watch
         </span>
       )}
@@ -512,7 +512,7 @@ function ScheduleRow({
                 className={cn(
                   'min-w-0 flex-1 truncate text-[13px] font-semibold',
                   event.state === 'finished'
-                    ? 'text-zinc-500 dark:text-zinc-500'
+                    ? 'text-zinc-500 dark:text-zinc-400'
                     : 'text-zinc-900 dark:text-zinc-100',
                 )}
               >
@@ -548,7 +548,7 @@ function ScheduleRow({
                 className={cn(
                   'min-w-0 flex-1 truncate text-[13px] font-semibold',
                   event.state === 'finished'
-                    ? 'text-zinc-500 dark:text-zinc-500'
+                    ? 'text-zinc-500 dark:text-zinc-400'
                     : 'text-zinc-900 dark:text-zinc-100',
                 )}
               >
@@ -575,7 +575,7 @@ function ScheduleRow({
                 className={cn(
                   'min-w-0 flex-1 truncate text-sm font-semibold',
                   event.state === 'finished'
-                    ? 'text-zinc-500 dark:text-zinc-500'
+                    ? 'text-zinc-500 dark:text-zinc-400'
                     : 'text-zinc-900 dark:text-zinc-100',
                 )}
               >
@@ -600,7 +600,7 @@ function ScheduleRow({
               className={cn(
                 'min-w-0 flex-1 truncate text-right text-sm font-semibold',
                 event.state === 'finished'
-                  ? 'text-zinc-500 dark:text-zinc-500'
+                  ? 'text-zinc-500 dark:text-zinc-400'
                   : 'text-zinc-900 dark:text-zinc-100',
               )}
             >
@@ -618,13 +618,13 @@ function ScheduleRow({
                 {event.homeScore}–{event.awayScore}
               </span>
             ) : (
-              <span className="shrink-0 text-[11px] text-zinc-400 dark:text-zinc-600">vs</span>
+              <span className="shrink-0 text-[11px] text-zinc-400 dark:text-zinc-400">vs</span>
             )}
             <span
               className={cn(
                 'min-w-0 flex-1 truncate text-sm font-semibold',
                 event.state === 'finished'
-                  ? 'text-zinc-500 dark:text-zinc-500'
+                  ? 'text-zinc-500 dark:text-zinc-400'
                   : 'text-zinc-900 dark:text-zinc-100',
               )}
             >
@@ -648,7 +648,7 @@ function ScheduleRow({
           </span>
         </button>
 
-        <span className="hidden w-40 shrink-0 truncate text-[11px] text-zinc-400 lg:block dark:text-zinc-600">
+        <span className="hidden w-40 shrink-0 truncate text-[11px] text-zinc-400 lg:block dark:text-zinc-400">
           {event.venue ?? ''}
         </span>
 
@@ -727,7 +727,7 @@ function ScheduleList({
             <h2 className="truncate text-[13px] font-bold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">
               {league || 'Other events'}
             </h2>
-            <span className="text-[11px] text-zinc-400 dark:text-zinc-600">
+            <span className="text-[11px] text-zinc-400 dark:text-zinc-400">
               {SPORT_LABELS[sport] ?? sport} · {list.length}
             </span>
             <span aria-hidden className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800/70" />
@@ -1233,7 +1233,7 @@ function FeedList({
       <header className="flex items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800/70">
         <ListOrdered className="size-4 shrink-0 text-brand" aria-hidden />
         <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Live feeds</h3>
-        <span className="hidden truncate text-[11px] text-zinc-500 sm:inline dark:text-zinc-500">
+        <span className="hidden truncate text-[11px] text-zinc-500 sm:inline dark:text-zinc-400">
           {loading
             ? 'Checking which feeds are alive…'
             : candidates.length > 0
@@ -1285,7 +1285,7 @@ function FeedList({
                   <span className="block truncate text-[13px] font-semibold text-zinc-800 dark:text-zinc-200">
                     {c.name}
                   </span>
-                  <span className="block truncate text-[10px] text-zinc-500 dark:text-zinc-600">
+                  <span className="block truncate text-[10px] text-zinc-500 dark:text-zinc-400">
                     {c.group}
                   </span>
                 </span>
@@ -1300,14 +1300,14 @@ function FeedList({
           ))}
         </ul>
       ) : (
-        <p className="px-4 py-4 text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
+        <p className="px-4 py-4 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
           {loading
             ? 'Scanning every free sports channel for this match…'
             : 'No ranked feeds available right now — browse all TV channels instead.'}
         </p>
       )}
       <footer className="flex items-center justify-between gap-2 border-t border-zinc-200 px-4 py-2.5 dark:border-zinc-800/70">
-        <span className="text-[11px] text-zinc-400 dark:text-zinc-600">
+        <span className="text-[11px] text-zinc-400 dark:text-zinc-400">
           Free-to-air channels via iptv-org · auto-failover keeps the picture alive
         </span>
         <Button
@@ -1845,7 +1845,7 @@ function ReplayPlayer({ event }: { event: SportsEvent }) {
         <header className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800/70">
           <History className="size-4 shrink-0 text-brand" aria-hidden />
           <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Replays</h3>
-          <span className="hidden text-[11px] text-zinc-500 sm:inline dark:text-zinc-500">
+          <span className="hidden text-[11px] text-zinc-500 sm:inline dark:text-zinc-400">
             Found on YouTube · full replays &amp; highlights · seek with the bar or ←/→
           </span>
           <div className="ml-auto flex items-center gap-1">
@@ -1914,7 +1914,7 @@ function ReplayPlayer({ event }: { event: SportsEvent }) {
                     <span className="line-clamp-2 text-[13px] font-semibold leading-snug text-zinc-800 dark:text-zinc-200">
                       {v.title}
                     </span>
-                    <span className="mt-0.5 block truncate text-[11px] text-zinc-500 dark:text-zinc-600">
+                    <span className="mt-0.5 block truncate text-[11px] text-zinc-500 dark:text-zinc-400">
                       {v.channel}
                       {v.views ? ` · ${fmtViews(v.views)} views` : ''}
                       {v.published ? ` · ${fmtPublished(v.published)}` : ''}
@@ -1931,7 +1931,7 @@ function ReplayPlayer({ event }: { event: SportsEvent }) {
             ))}
           </ul>
         ) : (
-          <p className="px-4 py-4 text-xs leading-relaxed text-zinc-500 dark:text-zinc-500">
+          <p className="px-4 py-4 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
             {videosQuery.isPending
               ? 'Searching YouTube for full replays and highlights…'
               : videos.length === 0
@@ -2024,11 +2024,11 @@ function WatchPage({
             <Trophy className="size-6 text-brand" aria-hidden />
           )}
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
+            <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               {event.league}
               {event.round ? ` · Round ${event.round}` : ''}
             </p>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-600">
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
               {[SPORT_LABELS[event.sport] ?? event.sport, event.venue, event.start ? `${dayFmt.format(new Date(event.start))} · ${timeFmt.format(new Date(event.start))}` : null]
                 .filter(Boolean)
                 .join(' · ')}
@@ -2072,7 +2072,7 @@ function WatchPage({
               {event.homeScore}–{event.awayScore}
             </span>
           ) : (
-            <span className="shrink-0 text-sm text-zinc-400 dark:text-zinc-600">vs</span>
+            <span className="shrink-0 text-sm text-zinc-400 dark:text-zinc-400">vs</span>
           )}
           <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
             {event.awayBadge ? (
@@ -2320,7 +2320,7 @@ export function SportsView() {
             <p className="mt-2 text-sm font-semibold text-zinc-800 dark:text-zinc-200">
               Event not found
             </p>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               It may have been removed from the schedule.
             </p>
             <Button
@@ -2356,11 +2356,11 @@ export function SportsView() {
               </Badge>
             )}
           </h1>
-          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">
+          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
             The full day&apos;s schedule — press Watch on any event and it starts playing instantly.
           </p>
         </div>
-        <span className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-600">
+        <span className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
           <RefreshCw className={'size-3' + (eventsQuery.isFetching ? ' animate-spin' : '')} aria-hidden />
           Auto-refreshes every 60s
         </span>
@@ -2476,12 +2476,12 @@ export function SportsView() {
             ))}
           </div>
         ) : eventsQuery.isError ? (
-          <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-500">
+          <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
             The sports schedule didn&apos;t load right now — TheSportsDB may be briefly unreachable.
             It will retry automatically.
           </p>
         ) : events.length === 0 ? (
-          <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-500">
+          <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
             No {sport !== 'All' ? SPORT_LABELS[sport] ?? sport : ''} events listed for this day.
             Try another day or check the Upcoming tab.
           </p>
@@ -2498,7 +2498,7 @@ export function SportsView() {
             ))}
           </div>
         ) : upcomingQuery.isError || (upcomingQuery.data ?? []).length === 0 ? (
-          <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-500">
+          <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
             No upcoming fixtures available right now — check back later.
           </p>
         ) : (
@@ -2525,7 +2525,7 @@ export function SportsView() {
                 className="h-10 rounded-xl border-zinc-200 bg-white/80 pl-9 text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:border-brand/60 focus-visible:ring-brand/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:placeholder:text-zinc-600"
               />
             </div>
-            <span className="text-xs text-zinc-500 dark:text-zinc-600">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
               {channelsQuery.isPending
                 ? 'Loading channels…'
                 : `${filteredChannels.length} channels · free-to-air via iptv-org`}
@@ -2539,12 +2539,12 @@ export function SportsView() {
               ))}
             </div>
           ) : channelsQuery.isError ? (
-            <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-500">
+            <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
               The channel list didn&apos;t load — iptv-org may be briefly unreachable. It will retry
               automatically.
             </p>
           ) : filteredChannels.length === 0 ? (
-            <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-500">
+            <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
               No channels match “{channelQuery}”.
             </p>
           ) : (
@@ -2581,7 +2581,7 @@ export function SportsView() {
                       <span className="block truncate text-[13px] font-semibold text-zinc-800 dark:text-zinc-200">
                         {c.name}
                       </span>
-                      <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-600">
+                      <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">
                         {c.group}
                       </span>
                     </span>

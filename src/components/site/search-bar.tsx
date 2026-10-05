@@ -278,7 +278,7 @@ export function SearchBar() {
       <Tv className="size-3.5 shrink-0 text-sky-500" aria-hidden />
       <span className="min-w-0 flex-1">
         Can’t find it here? Search “{trimmed}” on YLE Areena
-        <span className="block text-[10px] text-zinc-400 dark:text-zinc-600">
+        <span className="block text-[10px] text-zinc-400 dark:text-zinc-400">
           Free &amp; legal — the home of Finnish movies and series
         </span>
       </span>
@@ -324,14 +324,14 @@ export function SearchBar() {
     } else if (metaResults.length === 0) {
       body = (
         <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
-          <SearchX className="size-4 text-zinc-500 dark:text-zinc-600" aria-hidden />
+          <SearchX className="size-4 text-zinc-500 dark:text-zinc-400" aria-hidden />
           No results for “{trimmed}”
         </div>
       );
     } else if (visible.length === 0) {
       body = (
         <div className="flex flex-col items-center gap-2 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
-          <SearchX className="size-4 text-zinc-500 dark:text-zinc-600" aria-hidden />
+          <SearchX className="size-4 text-zinc-500 dark:text-zinc-400" aria-hidden />
           <span>
             Only {contentType === 'movie' ? 'series' : 'movies'} matched “{trimmed}” — the{' '}
             {contentType === 'movie' ? 'Movies' : 'TV Series'} filter is hiding them.
@@ -359,7 +359,7 @@ export function SearchBar() {
               />
             );
           })}
-          <p className="flex items-center gap-1.5 px-2 pb-1 pt-1.5 text-[11px] text-zinc-500 dark:text-zinc-600">
+          <p className="flex items-center gap-1.5 px-2 pb-1 pt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
             <Database className="size-3" aria-hidden />
             Keyless mode — plays via IMDB · add a TMDB key for the full library
           </p>
@@ -382,14 +382,14 @@ export function SearchBar() {
   } else if (results.length === 0) {
     body = (
       <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
-        <SearchX className="size-4 text-zinc-500 dark:text-zinc-600" aria-hidden />
+        <SearchX className="size-4 text-zinc-500 dark:text-zinc-400" aria-hidden />
         No results for “{trimmed}”
       </div>
     );
   } else if (visible.length === 0) {
     body = (
       <div className="flex flex-col items-center gap-2 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
-        <SearchX className="size-4 text-zinc-500 dark:text-zinc-600" aria-hidden />
+        <SearchX className="size-4 text-zinc-500 dark:text-zinc-400" aria-hidden />
         <span>
           Only {contentType === 'movie' ? 'series' : 'movies'} matched “{trimmed}” — the{' '}
           {contentType === 'movie' ? 'Movies' : 'TV Series'} filter is hiding them.
@@ -424,7 +424,7 @@ export function SearchBar() {
   return (
     <div ref={wrapRef} className="relative w-full md:w-72 lg:w-80">
       <Search
-        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500 dark:text-zinc-600"
+        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500 dark:text-zinc-400"
         aria-hidden
       />
       <Input
@@ -451,7 +451,7 @@ export function SearchBar() {
           {body}
           {areenaRow}
           {visible.length > 0 && (
-            <p className="flex items-center justify-end gap-3 border-t border-zinc-200/70 px-3 pb-1.5 pt-2 text-[10px] font-medium text-zinc-400 dark:border-zinc-800/70 dark:text-zinc-600">
+            <p className="flex items-center justify-end gap-3 border-t border-zinc-200/70 px-3 pb-1.5 pt-2 text-[10px] font-medium text-zinc-400 dark:border-zinc-800/70 dark:text-zinc-400">
               <span className="inline-flex items-center gap-1">
                 <kbd className="rounded border border-zinc-300 px-1 font-mono text-[9px] dark:border-zinc-700">↑↓</kbd>
                 browse

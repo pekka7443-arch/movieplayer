@@ -92,7 +92,7 @@ function StatCard({ icon: Icon, label, value, hint }: { icon: typeof Clock; labe
         {label}
       </div>
       <p className="mt-2 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">{value}</p>
-      {hint && <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-500">{hint}</p>}
+      {hint && <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">{hint}</p>}
     </div>
   );
 }
@@ -111,14 +111,14 @@ function Achievement({ icon: Icon, title, earned, hint }: { icon: typeof Trophy;
       <span
         className={
           'flex size-9 shrink-0 items-center justify-center rounded-xl ' +
-          (earned ? 'bg-brand text-brand-foreground' : 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500')
+          (earned ? 'bg-brand text-brand-foreground' : 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400')
         }
       >
         <Icon className="size-4" aria-hidden />
       </span>
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-200">{title}</p>
-        <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-500">{hint}</p>
+        <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400">{hint}</p>
       </div>
     </div>
   );

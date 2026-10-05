@@ -84,7 +84,7 @@ export function PwaBootstrap() {
               type="button"
               onClick={dismiss}
               aria-label="Dismiss install suggestion"
-              className="flex items-center justify-center rounded-lg text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              className="flex size-11 items-center justify-center rounded-lg text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
             >
               <X className="size-3" aria-hidden />
               Later

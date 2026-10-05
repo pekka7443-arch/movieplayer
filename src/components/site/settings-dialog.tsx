@@ -212,7 +212,7 @@ function SettingsBody() {
           </Button>
         </div>
 
-        <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-600">
+        <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
           Free at{' '}
           <a
             href="https://www.themoviedb.org/settings/api"
@@ -330,7 +330,7 @@ function SettingsBody() {
             Reset
           </button>
         </div>
-        <p className="text-xs text-zinc-500 dark:text-zinc-600">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
           Recolors the logo, buttons, links, active tabs and highlights across the entire app — live.
         </p>
       </section>
@@ -361,7 +361,7 @@ function SettingsBody() {
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-zinc-500 dark:text-zinc-600">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
           Applies to titles, overviews and other TMDB metadata.
         </p>
       </section>
@@ -396,7 +396,7 @@ function SettingsBody() {
             className="data-[state=checked]:bg-brand"
           />
         </div>
-        <p className="text-xs text-zinc-500 dark:text-zinc-600">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
           Tracks what you watch so you can continue where you left off.
         </p>
       </section>
@@ -424,7 +424,7 @@ function SettingsBody() {
             <AlertDialogContent className="z-[70] max-w-sm border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
               <AlertDialogHeader>
                 <AlertDialogTitle>Clear watch history?</AlertDialogTitle>
-                <AlertDialogDescription className="text-zinc-500 dark:text-zinc-500">
+                <AlertDialogDescription className="text-zinc-500 dark:text-zinc-400">
                   This removes every entry from “Continue watching”. This cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -457,7 +457,7 @@ function SettingsBody() {
             <AlertDialogContent className="z-[70] max-w-sm border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
               <AlertDialogHeader>
                 <AlertDialogTitle>Clear your watchlist?</AlertDialogTitle>
-                <AlertDialogDescription className="text-zinc-500 dark:text-zinc-500">
+                <AlertDialogDescription className="text-zinc-500 dark:text-zinc-400">
                   This removes every saved title from “My List”. This cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -584,7 +584,7 @@ function LibraryIO() {
           />
         </label>
       </div>
-      <p className="text-xs text-zinc-500 dark:text-zinc-600">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
         Exports include My List, history, ratings and custom lists. Letterboxd CSVs import up to
         200 titles (best TMDB match per row).
       </p>
@@ -695,7 +695,7 @@ function ProfilesManager() {
           </Button>
         </div>
       )}
-      <p className="text-xs text-zinc-500 dark:text-zinc-600">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
         Up to 5 profiles per account. Kids profiles hide Horror, Thriller, Crime, War, Documentary
         and Mystery from the browse rows.
       </p>

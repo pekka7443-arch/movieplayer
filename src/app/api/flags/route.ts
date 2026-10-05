@@ -22,6 +22,10 @@ export const GET = withApi('flags', async () => {
     announcement: announcement
       ? { id: announcement.id, message: announcement.message, createdAt: announcement.createdAt.toISOString() }
       : null,
+  }, {
+    // Global, cookie-independent payload — safe to share-cache briefly;
+    // admin publishes invalidate it within a minute via the short TTL.
+    headers: { 'cache-control': 'public, max-age=0, s-maxage=15, stale-while-revalidate=60' },
   });
 });
 

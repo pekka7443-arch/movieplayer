@@ -37,7 +37,11 @@ import { useHasTmdbKey } from '@/lib/settings';
 // TMDB (library mode)
 // ---------------------------------------------------------------------------
 
-export function useTrending(language: string, enabled: boolean) {
+export function useTrending(
+  language: string,
+  enabled: boolean,
+  initialData?: MetaSearchItem[],
+) {
   const hasKey = useHasTmdbKey();
   return useQuery<SearchItem[] | MetaSearchItem[], ApiError>({
     // When a TMDB key is present, query TMDB trending; otherwise fall back to
@@ -47,6 +51,9 @@ export function useTrending(language: string, enabled: boolean) {
     queryKey: ['tmdb', 'trending', language, hasKey ? 'key' : 'keyless'],
     queryFn: () => (hasKey ? fetchTrending(language) : fetchPopularMeta('all')),
     enabled,
+    // Server-streamed hero data (page.tsx) paints the LCP image immediately;
+    // it is marked stale-on-arrival so the client still refreshes in background.
+    ...(initialData && initialData.length > 0 ? { initialData, initialDataUpdatedAt: 0 } : {}),
     staleTime: 5 * 60 * 1000,
     retry: (failureCount, error) => {
       if (error instanceof ApiError && error.code === 'tmdb_key') return false;

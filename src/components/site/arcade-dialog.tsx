@@ -234,7 +234,7 @@ function EmojiQuiz() {
           <span className="inline-flex items-center gap-1" aria-label={`Streak: ${streak}`}>
             <Flame
               className={
-                'size-3.5 ' + (streak > 0 ? 'text-amber-500 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-600')
+                'size-3.5 ' + (streak > 0 ? 'text-amber-500 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-400')
               }
               aria-hidden
             />
@@ -279,7 +279,7 @@ function EmojiQuiz() {
             {round?.item.emojis}
           </motion.p>
         </AnimatePresence>
-        <p className="mt-3 text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-zinc-500">
+        <p className="mt-3 text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
           Which title is this?
         </p>
       </div>
@@ -301,7 +301,7 @@ function EmojiQuiz() {
                   'border-red-500/70 bg-red-400/10 text-red-700 dark:border-red-400/60 dark:bg-red-400/10 dark:text-red-400';
               } else {
                 style =
-                  'border-zinc-200 bg-white/50 text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/40 dark:text-zinc-600';
+                  'border-zinc-200 bg-white/50 text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/40 dark:text-zinc-400';
               }
             }
             return (
@@ -445,14 +445,14 @@ function Roulette() {
               ? 'text-amber-600 dark:text-amber-300'
               : spinning
                 ? 'text-zinc-500 dark:text-zinc-400'
-                : 'text-zinc-400 dark:text-zinc-600')
+                : 'text-zinc-400 dark:text-zinc-400')
           }
           role="status"
           aria-live="polite"
         >
           {reel ?? 'Press SPIN and let fate decide'}
         </p>
-        <p className="mt-2 text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-zinc-500">
+        <p className="mt-2 text-xs font-medium uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
           {spinning ? 'Rolling…' : 'Tonight\u2019s pick'}
         </p>
       </div>
@@ -501,7 +501,7 @@ function Roulette() {
         )}
       </AnimatePresence>
 
-      <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-zinc-500 dark:text-zinc-600">
+      <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-zinc-500 dark:text-zinc-400">
         <Rocket className="size-3" aria-hidden />
         Curated picks with real TMDB IDs — the player opens even without a TMDB key.
       </p>

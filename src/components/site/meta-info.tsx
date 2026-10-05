@@ -8,7 +8,7 @@ import type { MetaDetails, TvmazeShow } from '@/lib/meta';
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-zinc-200/60 px-2.5 py-1.5 dark:bg-zinc-800/60">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-500">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
         {label}
       </p>
       <p className="mt-0.5 text-xs font-medium text-zinc-800 dark:text-zinc-200">{value}</p>
@@ -62,7 +62,7 @@ export function MetaInfo({
           <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400">
             <Star className="size-3.5 fill-brand text-brand" aria-hidden />
             {details.voteAverage.toFixed(1)}
-            <span className="text-zinc-500 dark:text-zinc-600">· IMDb rating</span>
+            <span className="text-zinc-500 dark:text-zinc-400">· IMDb rating</span>
           </p>
         )}
 
@@ -102,7 +102,7 @@ export function MetaInfo({
                 <ExternalLink className="size-3" aria-hidden />
               </a>
             )}
-            <span className="inline-flex items-center px-1 text-[10px] uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
+            <span className="inline-flex items-center px-1 text-[10px] uppercase tracking-widest text-zinc-400 dark:text-zinc-400">
               via TVmaze
             </span>
           </div>
@@ -134,7 +134,7 @@ export function MetaInfo({
         )}
 
         {details.director && (
-          <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-600">
+          <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
             Director: <span className="font-medium text-zinc-700 dark:text-zinc-300">{details.director}</span>
           </p>
         )}

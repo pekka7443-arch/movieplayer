@@ -30,7 +30,7 @@ export function SectionHeadingBar({
         {title}
       </h2>
       {hint && (
-        <span className="text-xs text-zinc-500 dark:text-zinc-600">{hint}</span>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">{hint}</span>
       )}
     </div>
   );

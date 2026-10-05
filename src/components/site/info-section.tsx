@@ -43,7 +43,7 @@ function CastAvatar({ name, character, profilePath }: { name: string; character:
         {profile ? (
           <img src={profile} alt={name} loading="lazy" className="size-full object-cover" />
         ) : (
-          <span className="flex size-full items-center justify-center text-lg font-semibold text-zinc-500 dark:text-zinc-600">
+          <span className="flex size-full items-center justify-center text-lg font-semibold text-zinc-500 dark:text-zinc-400">
             {initials || '?'}
           </span>
         )}
@@ -115,7 +115,7 @@ export function InfoSection({
       <div className="mt-8 grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className="flex aspect-[2/3] w-full max-w-56 flex-col items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white/70 lg:max-w-none dark:border-zinc-800/60 dark:bg-zinc-900/60">
           <Film className="size-10 text-zinc-400 dark:text-zinc-700" aria-hidden />
-          <span className="font-mono text-lg text-zinc-500 dark:text-zinc-600">#{tmdbId}</span>
+          <span className="font-mono text-lg text-zinc-500 dark:text-zinc-400">#{tmdbId}</span>
           <span className="text-[11px] uppercase tracking-widest text-zinc-500 dark:text-zinc-700">
             {mediaType === 'tv' ? 'TV Show' : 'Movie'}
           </span>
@@ -208,7 +208,7 @@ export function InfoSection({
           ) : (
             <div className="flex size-full flex-col items-center justify-center gap-3">
               <Film className="size-10 text-zinc-400 dark:text-zinc-700" aria-hidden />
-              <span className="font-mono text-lg text-zinc-500 dark:text-zinc-600">#{tmdbId}</span>
+              <span className="font-mono text-lg text-zinc-500 dark:text-zinc-400">#{tmdbId}</span>
             </div>
           )}
         </div>
@@ -222,14 +222,14 @@ export function InfoSection({
         {details.overview ? (
           <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{details.overview}</p>
         ) : (
-          <p className="text-sm italic text-zinc-500 dark:text-zinc-600">No overview available in this language.</p>
+          <p className="text-sm italic text-zinc-500 dark:text-zinc-400">No overview available in this language.</p>
         )}
 
         {/* Meta grid */}
         <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-3">
           {details.director && (
             <div>
-              <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-600">
+              <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 <User className="size-3" aria-hidden />
                 Director
               </dt>
@@ -238,7 +238,7 @@ export function InfoSection({
           )}
           {details.releaseDate && (
             <div>
-              <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-600">
+              <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 <Calendar className="size-3" aria-hidden />
                 Release
               </dt>
@@ -247,7 +247,7 @@ export function InfoSection({
           )}
           {details.runtime ? (
             <div>
-              <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-600">
+              <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 <Clock className="size-3" aria-hidden />
                 Runtime
               </dt>
@@ -256,7 +256,7 @@ export function InfoSection({
           ) : null}
           {details.genres.length > 0 && (
             <div className="sm:col-span-3">
-              <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-600">
+              <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 <Star className="size-3" aria-hidden />
                 Genres
               </dt>

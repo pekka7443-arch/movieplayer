@@ -87,7 +87,7 @@ export function NotificationsButton() {
           Notifications
         </p>
         {items.length === 0 ? (
-          <p className="px-2.5 py-6 text-center text-sm text-zinc-500 dark:text-zinc-500">
+          <p className="px-2.5 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
             Nothing yet — save shows to My List and CineDeck will tell you when new episodes drop.
           </p>
         ) : (

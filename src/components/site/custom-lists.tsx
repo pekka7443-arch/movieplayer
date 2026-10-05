@@ -228,7 +228,7 @@ export function CustomLists() {
       {listsQuery.isPending ? (
         <p className="py-3 text-sm text-zinc-500">Loading lists…</p>
       ) : (listsQuery.data ?? []).length === 0 ? (
-        <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
+        <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
           No custom lists yet — create one above (e.g. “Nordic noir night”) and curate it from My List.
         </p>
       ) : (

@@ -71,3 +71,7 @@ server.log
 # worklog backups
 worklog*.bak
 *.worklog.bak
+
+# isolated build/dev artifact dirs
+/.next-build/
+/.next-dev/

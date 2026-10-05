@@ -300,7 +300,7 @@ export function WatchView({
             episodeCount={tvmazeQuery.data?.episodes.length}
           />
         ) : metaQuery.isError ? (
-          <p className="mt-8 text-sm text-zinc-500 dark:text-zinc-600">
+          <p className="mt-8 text-sm text-zinc-500 dark:text-zinc-400">
             Details are unavailable right now — the player above should still work.
           </p>
         ) : null
