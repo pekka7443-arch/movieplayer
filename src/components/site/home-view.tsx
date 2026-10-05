@@ -11,6 +11,7 @@ import {
   Clapperboard,
   Compass,
   Film,
+  Flag,
   History,
   LayoutGrid,
   Play,
@@ -47,6 +48,7 @@ import {
 import { type HistoryItem, type SearchItem, type WatchlistItem } from '@/lib/tmdb';
 import { tmdbImg } from '@/lib/languages';
 import type { MetaSearchItem } from '@/lib/meta';
+import { useFinnishCatalog } from '@/hooks/use-meta';
 
 type AnyRowItem = SearchItem | MetaSearchItem;
 
@@ -367,6 +369,75 @@ function CatalogRow({
         <RowEmptyState text="Nothing here right now." />
       )}
     </motion.div>
+  );
+}
+
+/**
+ * "Suomalaista sisältöä" — Finnish movies & series row. Works fully keyless:
+ * a curated catalog of Finnish originals resolved to IMDB+TMDB ids via
+ * Cinemeta (with a TMDB key the backend uses TMDB discover instead). Every
+ * item carries BOTH ids so the player scan can try whichever id form the
+ * embed servers actually index the title under.
+ */
+function FinnishSection() {
+  const contentType = useCinedeckStore((s) => s.contentType);
+  const reduceMotion = useReducedMotion();
+  const wantMovies = contentType !== 'tv';
+  const wantTv = contentType !== 'movie';
+  const moviesQuery = useFinnishCatalog('movie', wantMovies);
+  const tvQuery = useFinnishCatalog('tv', wantTv);
+
+  // Interleave movies and series (movies first) so the row mixes both —
+  // the global browse filter decides which of the two lists contributes.
+  // (A disabled query keeps its cached data — respect the flag, not the cache.)
+  const items = useMemo(() => {
+    const m = wantMovies ? (moviesQuery.data ?? []) : [];
+    const t = wantTv ? (tvQuery.data ?? []) : [];
+    const out: MetaSearchItem[] = [];
+    const max = Math.max(m.length, t.length);
+    for (let i = 0; i < max; i++) {
+      if (m[i]) out.push(m[i]);
+      if (t[i]) out.push(t[i]);
+    }
+    return out;
+  }, [wantMovies, wantTv, moviesQuery.data, tvQuery.data]);
+
+  const loading = (wantMovies && moviesQuery.isPending) || (wantTv && tvQuery.isPending);
+  const title =
+    contentType === 'movie'
+      ? 'Suomalaiset elokuvat'
+      : contentType === 'tv'
+        ? 'Suomalaiset sarjat'
+        : 'Suomalaista sisältöä';
+
+  const reveal = {
+    initial: reduceMotion ? undefined : { opacity: 0, y: 22 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, margin: '-70px' },
+    transition: { duration: 0.5, ease: 'easeOut' as const },
+  };
+
+  return (
+    <motion.section {...reveal} aria-labelledby="finnish-picks">
+      <div id="finnish-picks" className="scroll-mt-24">
+        <SectionHeading
+          icon={Flag}
+          title={title}
+          hint="Finnish originals — Yle Areena fallback on every title page"
+        />
+      </div>
+      {loading ? (
+        <RowSkeletonStripe />
+      ) : items.length > 0 ? (
+        <MediaRow label={title}>
+          {items.map((item, index) => (
+            <MediaCard key={rowKeyOf(item)} item={toCardItem(item)} priority={index < 4} index={index} />
+          ))}
+        </MediaRow>
+      ) : (
+        <RowEmptyState text="Finnish catalog is unavailable right now." />
+      )}
+    </motion.section>
   );
 }
 
@@ -705,6 +776,11 @@ export function HomeView() {
         )}
       </motion.section>
       )}
+
+      {/* Suomalainen sisältö — the home-turf row. Embed servers rarely index
+          Finnish titles, so every item carries both IMDB + TMDB ids and the
+          scan tries both; title pages surface Yle Areena as fallback. */}
+      <FinnishSection />
 
       {/* Top Rated — keyless imdbRating catalog, type follows the browse filter */}
       <LazySection id="top-rated" label="Top rated">

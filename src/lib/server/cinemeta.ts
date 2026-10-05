@@ -51,9 +51,11 @@ async function cinemetaFetch<T>(path: string): Promise<T> {
 interface CinemetaSearchMeta {
   id: string;
   imdb_id?: string;
+  moviedb_id?: number;
   name: string;
   type: string;
   poster?: string | null;
+  background?: string | null;
   releaseInfo?: string;
   imdbRating?: string;
 }
@@ -288,6 +290,36 @@ export async function cinemetaSimilar(
   return run();
 }
 
+/**
+ * Raw normalized search results incl. every id Cinemeta carries (IMDB + TMDB
+ * `moviedb_id`) and the backdrop image. Used by the Finnish catalog resolver,
+ * which needs both id forms so the player can try either index.
+ */
+export async function cinemetaSearchRaw(
+  mediaType: 'movie' | 'tv',
+  query: string,
+  limit = 25,
+): Promise<MetaSearchItem[]> {
+  const encoded = encodeURIComponent(query);
+  const data = await cinemetaFetch<CinemetaCatalogResponse>(
+    `/catalog/${mediaType === 'tv' ? 'series' : 'movie'}/top/search=${encoded}.json`,
+  );
+
+  return (data.metas ?? [])
+    .filter((m) => typeof m.id === 'string' && /^tt\d+$/.test(m.id))
+    .slice(0, limit)
+    .map((m) => ({
+      imdbId: m.id,
+      title: m.name,
+      year: (m.releaseInfo ?? '').match(/\d{4}/)?.[0] ?? '',
+      poster: m.poster ?? null,
+      backdrop: m.background ?? null,
+      mediaType: normalizeType(m.type),
+      voteAverage: Number.parseFloat(m.imdbRating ?? '') || 0,
+      tmdbId: typeof m.moviedb_id === 'number' ? m.moviedb_id : undefined,
+    }));
+}
+
 export async function cinemetaSearch(
   mediaType: 'movie' | 'tv',
   query: string,
@@ -296,22 +328,9 @@ export async function cinemetaSearch(
   const cached = cacheGet<MetaSearchItem[]>(key);
   if (cached) return cached;
 
-  const encoded = encodeURIComponent(query).replace(/%20/g, '%20');
-  const data = await cinemetaFetch<CinemetaCatalogResponse>(
-    `/catalog/${mediaType === 'tv' ? 'series' : 'movie'}/top/search=${encoded}.json`,
+  const items = (await cinemetaSearchRaw(mediaType, query, 12)).map(
+    ({ backdrop: _backdrop, ...rest }) => rest,
   );
-
-  const items = (data.metas ?? [])
-    .filter((m) => typeof m.id === 'string' && /^tt\d+$/.test(m.id))
-    .slice(0, 12)
-    .map((m) => ({
-      imdbId: m.id,
-      title: m.name,
-      year: (m.releaseInfo ?? '').match(/\d{4}/)?.[0] ?? '',
-      poster: m.poster ?? null,
-      mediaType: normalizeType(m.type),
-      voteAverage: Number.parseFloat(m.imdbRating ?? '') || 0,
-    }));
 
   cacheSet(key, items, 10 * 60 * 1000);
   return items;

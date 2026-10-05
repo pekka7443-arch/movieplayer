@@ -223,7 +223,18 @@ export function PlayerSection({
   }, [settings.autoPickSource, scanQuery.data, healthMap, candidates, server, setServerTransient]);
 
   const provider = getProvider(server);
-  const embedUrl = getEmbedUrl(server, mediaType, watchId, isTv ? season : undefined, isTv ? episode : undefined, dubLang);
+  const builtUrl = getEmbedUrl(server, mediaType, watchId, isTv ? season : undefined, isTv ? episode : undefined, dubLang);
+  // Prefer the scan-VERIFIED url. The scan tries every provider under BOTH id
+  // forms (IMDB + TMDB) — rare titles (Finnish films, Nordic series) are often
+  // indexed under only one of them, and the form that answered may be the one
+  // we would never build from the primary watch id. Loading the probed URL
+  // verbatim guarantees the player opens exactly what the scan proved alive.
+  const scannedUrl = useMemo(
+    () =>
+      (scanQuery.data ?? []).find((r) => r.providerId === server && r.ok && r.url)?.url ?? null,
+    [scanQuery.data, server],
+  );
+  const embedUrl = scannedUrl ?? builtUrl;
   // The player iframe is loaded via /api/player-proxy — a wrapper page that
   // contains the real provider iframe WITHOUT sandbox. The OUTER iframe
   // (this one) is sandboxed, which blocks pop-ups and top-level redirects

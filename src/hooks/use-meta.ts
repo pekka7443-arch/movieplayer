@@ -71,15 +71,19 @@ export interface ScanParams {
 export function useServerScan(params: ScanParams, enabled: boolean) {
   const { imdb, tmdb, mediaType, season, episode, dub } = params;
   return useQuery<ScanResult[], MetaError>({
-    queryKey: ['scan', mediaType, imdb ?? tmdb, season, episode, dub ?? 'orig'],
+    // Both ids are part of the key — the scan probes both id forms and the
+    // player may load whichever one actually answered.
+    queryKey: ['scan', mediaType, imdb ?? null, tmdb ?? null, season, episode, dub ?? 'orig'],
     queryFn: async () => {
       const search = new URLSearchParams({
         type: mediaType,
         s: String(season),
         e: String(episode),
       });
+      // Send BOTH ids when known — rare titles (Finnish films etc.) are often
+      // indexed under only one id form per provider.
       if (imdb) search.set('imdb', imdb);
-      else if (tmdb) search.set('tmdb', String(tmdb));
+      if (tmdb) search.set('tmdb', String(tmdb));
       if (dub) search.set('dub', dub);
       const data = await getJson<{ results: ScanResult[] }>(`/api/scan?${search.toString()}`);
       return data.results;
@@ -137,5 +141,27 @@ export function useMetaSimilar(
     enabled: enabled && imdbId !== null,
     staleTime: 30 * 60 * 1000,
     retry: 0,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Finnish catalog — "Suomalaiset elokuvat & sarjat" home row. Works fully
+// keyless (curated catalog via Cinemeta); with a TMDB key the backend uses
+// TMDB discover instead. Items carry IMDB ids (+ TMDB ids when known) so the
+// player can scan both id forms.
+// ---------------------------------------------------------------------------
+
+export function useFinnishCatalog(mediaType: 'movie' | 'tv', enabled: boolean) {
+  return useQuery<MetaSearchItem[], MetaError>({
+    queryKey: ['meta', 'finnish', mediaType],
+    queryFn: async () => {
+      const data = await getJson<{ results: MetaSearchItem[] }>(
+        `/api/meta/finnish?type=${mediaType}`,
+      );
+      return data.results;
+    },
+    enabled,
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
   });
 }

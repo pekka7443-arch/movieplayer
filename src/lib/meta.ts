@@ -83,4 +83,12 @@ export interface ScanResult {
   ms: number;
   /** 2-letter dub code the probed embed URL requested (null = original audio). */
   lang?: string | null;
+  /**
+   * The exact embed URL this row was probed with. The scan now tries BOTH id
+   * forms (IMDB + TMDB) per provider — rare titles (Finnish films etc.) are
+   * often indexed under only one of them. When the alternate form is the one
+   * that answered, `url` carries it and the player loads it verbatim instead
+   * of rebuilding a URL from the primary watch id.
+   */
+  url?: string;
 }
