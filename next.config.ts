@@ -27,6 +27,22 @@ function playerFrameHosts(): string[] {
   return [...hosts];
 }
 
+// ---------------------------------------------------------------------------
+// Framing allowlist — the z.ai platform preview (and the published site's
+// dashboard) embed this app inside an iframe on chat.z.ai / *.z.ai /
+// *.space-z.ai. Blocking those ancestors breaks the platform's preview and
+// Publish flow, so they must stay allowed. Everything else is still denied.
+// NOTE: no X-Frame-Options header is emitted anywhere — it cannot express
+// multiple origins and would conflict with frame-ancestors.
+// ---------------------------------------------------------------------------
+const FRAME_ANCESTORS = [
+  "'self'",
+  "https://*.z.ai",
+  "https://chat.z.ai",
+  "https://*.space-z.ai",
+  "http://localhost:*",
+].join(" ");
+
 const CSP = [
   "default-src 'self'",
   // Next.js injects inline bootstrap scripts and dev needs eval — scoped as
@@ -38,8 +54,11 @@ const CSP = [
   "font-src 'self' data:",
   "connect-src 'self'",
   `frame-src 'self' ${playerFrameHosts().join(" ")}`,
-  // The app must not be framed by third parties (clickjacking).
-  "frame-ancestors 'self'",
+  // hls.js spins up blob: workers for some transmuxing paths; the service
+  // worker shell is same-origin.
+  "worker-src 'self' blob:",
+  // Allow the platform preview iframe + same-origin nesting, nothing else.
+  `frame-ancestors ${FRAME_ANCESTORS}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -73,16 +92,20 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
           },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // X-Frame-Options deliberately omitted: it cannot express the
+          // multi-origin allowlist the platform preview needs — CSP
+          // frame-ancestors above is the single source of truth.
           { key: "X-DNS-Prefetch-Control", value: "on" },
         ],
       },
       {
-        // The player proxy page nests provider iframes — it must stay
-        // frameable by our own page only.
+        // The player proxy page nests provider iframes. Its frame-ancestors
+        // must match the main app's: frame-ancestors validates the FULL
+        // ancestor chain, so when the app itself is embedded in the platform
+        // preview iframe, the proxy page's ancestors include chat.z.ai too.
         source: "/api/player-proxy",
         headers: [
-          { key: "Content-Security-Policy", value: `frame-src 'self' ${playerFrameHosts().join(" ")}; frame-ancestors 'self'; object-src 'none'; base-uri 'none'` },
+          { key: "Content-Security-Policy", value: `frame-src 'self' ${playerFrameHosts().join(" ")}; frame-ancestors ${FRAME_ANCESTORS}; object-src 'none'; base-uri 'none'` },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "no-referrer" },
         ],

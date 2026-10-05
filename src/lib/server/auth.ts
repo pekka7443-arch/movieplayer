@@ -20,6 +20,8 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { db } from '@/lib/db';
 
@@ -32,30 +34,61 @@ export const GUEST_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year
 export const SESSION_ROTATE_AFTER_SECONDS = 60 * 60 * 24;
 
 // ---------------------------------------------------------------------------
-// AUTH_SECRET — required in production, random ephemeral fallback in dev
+// AUTH_SECRET — required only under PUBLISH_STRICT; otherwise self-healed:
+// a stable random secret is generated and persisted into .env on first run
+// (best effort — read-only filesystems fall back to a per-process secret).
 // ---------------------------------------------------------------------------
 
 let devSecret: string | null = null;
 
 /**
- * Stateful-token signing secret. In production a missing/short AUTH_SECRET
- * throws at first use (startup of any route) — fail fast, never fall back to
- * a guessable constant. In development a random per-process secret keeps
- * things safe without setup; a real secret lives in .env (see .env.example).
+ * Persist a freshly generated AUTH_SECRET into .env so it survives restarts.
+ * Replaces an existing invalid (too-short/placeholder) line if present.
+ * Returns the secret that should be used for this process.
+ */
+function persistAuthSecret(): string {
+  const generated = randomBytes(32).toString('hex');
+  try {
+    const envPath = path.join(process.cwd(), '.env');
+    let content = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
+    const line = new RegExp(`^AUTH_SECRET=.*$`, 'm');
+    if (line.test(content)) {
+      content = content.replace(line, `AUTH_SECRET=${generated}`);
+      writeFileSync(envPath, content);
+    } else {
+      if (content.length > 0 && !content.endsWith('\n')) content += '\n';
+      appendFileSync(envPath, `${content}AUTH_SECRET=${generated}\n`);
+    }
+    console.warn(
+      '[auth] AUTH_SECRET was missing — generated a stable random secret and wrote it to .env. ' +
+        'Set an explicit AUTH_SECRET via `openssl rand -hex 32` for production.',
+    );
+  } catch {
+    console.warn(
+      '[auth] AUTH_SECRET was missing and .env is not writable — using an ephemeral ' +
+        'per-process secret (stateless auth links reset on restart).',
+    );
+  }
+  return generated;
+}
+
+/**
+ * Stateful-token signing secret. Hard-fails ONLY when NODE_ENV=production AND
+ * PUBLISH_STRICT=1 (explicit operator opt-in) — a missing secret must never
+ * crash the platform's publish/preview flow, so every other environment
+ * self-heals: the secret is generated and persisted to .env on first use.
  */
 export function authSecret(): string {
   const secret = process.env.AUTH_SECRET;
   if (secret && secret.length >= 32) return secret;
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production' && process.env.PUBLISH_STRICT === '1') {
     throw new Error(
-      'AUTH_SECRET is missing or too short. Generate one with `openssl rand -hex 32` and set it in the environment.',
+      'AUTH_SECRET is missing or too short (PUBLISH_STRICT=1). Generate one with `openssl rand -hex 32` and set it in the environment.',
     );
   }
   if (!devSecret) {
-    devSecret = randomBytes(32).toString('hex');
-    console.warn(
-      '[auth] AUTH_SECRET not set — using an ephemeral dev secret (stateless auth links reset on restart).',
-    );
+    devSecret = persistAuthSecret();
+    process.env.AUTH_SECRET = devSecret;
   }
   return devSecret;
 }

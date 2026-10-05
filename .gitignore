@@ -61,9 +61,11 @@ server.log
 *.db
 *.db-journal
 
-# runtime/user artifacts
-/upload/
-/download/
+# runtime/user artifacts (keep the directories themselves via .gitkeep)
+/upload/*
+!/upload/.gitkeep
+/download/*
+!/download/.gitkeep
 /tool-results/
 
 # worklog backups
