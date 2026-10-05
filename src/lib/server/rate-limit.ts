@@ -126,10 +126,10 @@ export function checkRateLimit(
   return store.hit(`${bucket}:${clientIpOf(request)}`, spec.limit, spec.windowSec);
 }
 
-/** 429 response with the mandatory Retry-After header. */
+/** 429 response with the mandatory Retry-After header (standard error shape). */
 export function rateLimitResponse(retryAfterSec: number): Response {
   return Response.json(
-    { error: 'rate_limited', message: 'Too many requests — slow down a little.' },
+    { error: { code: 'rate_limited', message: 'Too many requests — slow down a little.' } },
     { status: 429, headers: { 'retry-after': String(Math.max(1, retryAfterSec)) } },
   );
 }

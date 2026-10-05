@@ -1,6 +1,8 @@
 // Server-side TMDB v3 proxy helpers.
 // Server-only module — never import from client components.
 
+import { withRetries } from "@/lib/server/http";
+
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const TMDB_TIMEOUT_MS = 8_000;
 const CACHE_MAX_ENTRIES = 200;
@@ -123,36 +125,42 @@ export async function tmdbFetch<T = unknown>(
   const cached = cacheGet(url);
   if (cached.hit) return cached.value as T;
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      signal: AbortSignal.timeout(TMDB_TIMEOUT_MS),
-      headers: { accept: "application/json" },
-      cache: "no-store",
-    });
-  } catch {
-    throw new TmdbApiError("tmdb_unreachable", 502, "Could not reach TMDB");
-  }
+  // Retries with backoff on network errors / 5xx / 429; 4xx fail fast
+  // (see withRetries status duck-typing on TmdbApiError).
+  const { data } = await withRetries(
+    async () => {
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          signal: AbortSignal.timeout(TMDB_TIMEOUT_MS),
+          headers: { accept: "application/json" },
+          cache: "no-store",
+        });
+      } catch {
+        throw new TmdbApiError("tmdb_unreachable", 502, "Could not reach TMDB");
+      }
 
-  if (response.status === 401) {
-    throw new TmdbApiError("tmdb_key", 503, TMDB_KEY_MESSAGE);
-  }
-  if (response.status === 404) {
-    throw new TmdbApiError("not_found", 404, "Not found");
-  }
-  if (response.status >= 400 && response.status < 500) {
-    throw new TmdbApiError("bad_request", 400, `TMDB responded with ${response.status}`);
-  }
-  if (!response.ok) {
-    throw new TmdbApiError("server_error", 500, `TMDB responded with ${response.status}`);
-  }
+      if (response.status === 401) {
+        throw new TmdbApiError("tmdb_key", 503, TMDB_KEY_MESSAGE);
+      }
+      if (response.status === 404) {
+        throw new TmdbApiError("not_found", 404, "Not found");
+      }
+      if (response.status >= 400 && response.status < 500) {
+        throw new TmdbApiError("bad_request", 400, `TMDB responded with ${response.status}`);
+      }
+      if (!response.ok) {
+        throw new TmdbApiError("server_error", 500, `TMDB responded with ${response.status}`);
+      }
 
-  let data: unknown;
-  try {
-    data = await response.json();
-  } catch {
-    throw new TmdbApiError("tmdb_unreachable", 502, "Invalid response from TMDB");
-  }
+      try {
+        return { data: (await response.json()) as unknown };
+      } catch {
+        throw new TmdbApiError("tmdb_unreachable", 502, "Invalid response from TMDB");
+      }
+    },
+    { attempts: 2 },
+  );
 
   cacheSet(url, data);
   return data as T;

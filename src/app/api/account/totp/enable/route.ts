@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { db } from '@/lib/db';
 import { resolveOwner } from '@/lib/server/auth';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit } from '@/lib/server/rate-limit';
 import { verifyTotp } from '@/lib/server/totp';
@@ -23,23 +23,23 @@ export const POST = withApi('account/totp/enable', async (request) => {
 
   const body = await readJsonBody(request);
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return Response.json({ error: 'bad_request' }, { status: 400 });
+  if (!parsed.success) return apiError(400, 'bad_request');
 
   const owner = await resolveOwner(request);
-  if (!owner.userId) return Response.json({ error: 'unauthorized' }, { status: 401 });
+  if (!owner.userId) return apiError(401, 'unauthorized');
 
   const user = await db.user.findUnique({
     where: { id: owner.userId },
     select: { totpSecret: true, totpEnabled: true },
   });
   if (!user?.totpSecret) {
-    return Response.json({ error: 'totp_not_setup' }, { status: 400 });
+    return apiError(400, 'totp_not_setup');
   }
   if (user.totpEnabled) {
-    return Response.json({ error: 'totp_already_enabled' }, { status: 409 });
+    return apiError(409, 'totp_already_enabled');
   }
   if (!verifyTotp(user.totpSecret, parsed.data.code)) {
-    return Response.json({ error: 'invalid_code' }, { status: 401 });
+    return apiError(401, 'invalid_code');
   }
 
   await db.user.update({ where: { id: owner.userId }, data: { totpEnabled: true } });

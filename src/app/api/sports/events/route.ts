@@ -9,6 +9,7 @@ import {
   type SportsEvent,
 } from '@/lib/server/thesportsdb';
 import { espnEventById, espnEventsDay, espnUpcoming } from '@/lib/server/espn';
+import { apiError } from '@/lib/server/api';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -85,12 +86,12 @@ export async function GET(request: Request) {
 
   const date = searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
   if (!DATE_RE.test(date)) {
-    return NextResponse.json({ error: 'bad_request' }, { status: 400 });
+    return apiError(400, 'bad_request');
   }
 
   const sport = searchParams.get('sport');
   if (sport && !SPORTS.includes(sport as (typeof SPORTS)[number])) {
-    return NextResponse.json({ error: 'bad_request' }, { status: 400 });
+    return apiError(400, 'bad_request');
   }
 
   const [espn, tsdb] = await Promise.all([

@@ -4,6 +4,7 @@
 
 import type { MetaDetails, MetaSearchItem } from '@/lib/meta';
 import { withCache } from '@/lib/server/cache';
+import { withRetries } from '@/lib/server/http';
 
 const CINEMETA_BASE = 'https://v3-cinemeta.strem.io';
 const TIMEOUT_MS = 9_000;
@@ -36,13 +37,18 @@ function cacheSet(key: string, value: unknown, ttlMs: number): void {
 }
 
 async function cinemetaFetchUncached<T>(path: string): Promise<T> {
-  const res = await fetch(`${CINEMETA_BASE}${path}`, {
-    headers: { accept: 'application/json' },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`cinemeta_${res.status}`);
-  return (await res.json()) as T;
+  return withRetries(
+    async () => {
+      const res = await fetch(`${CINEMETA_BASE}${path}`, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        cache: 'no-store',
+      });
+      if (!res.ok) throw new Error(`cinemeta_${res.status}`);
+      return (await res.json()) as T;
+    },
+    { attempts: 2 },
+  );
 }
 
 /**

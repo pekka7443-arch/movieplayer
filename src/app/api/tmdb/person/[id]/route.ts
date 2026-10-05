@@ -3,6 +3,7 @@ import {
   tmdbErrorResponse,
   tmdbFetch,
 } from "@/lib/server/tmdb";
+import { apiError } from '@/lib/server/api';
 
 // GET /api/tmdb/person/:id?language=
 // Person details + combined filmography (cast + crew credits, newest first).
@@ -65,7 +66,7 @@ export async function GET(
   const { id: rawId } = await params;
   const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) {
-    return Response.json({ error: "bad_request" }, { status: 400 });
+    return apiError(400, 'bad_request');
   }
   const language = languageParam(new URL(request.url).searchParams);
 

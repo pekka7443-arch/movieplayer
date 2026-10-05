@@ -1,4 +1,5 @@
 import { cinemetaSimilar } from "@/lib/server/cinemeta";
+import { apiError } from '@/lib/server/api';
 
 // GET /api/meta/similar?type=movie|tv&imdb=tt1375666&genre=Thriller&language=fi
 //
@@ -16,13 +17,13 @@ export async function GET(request: Request) {
   void language; // accepted for parity with the TMDB route; Cinemeta is EN-only
 
   if (!/^tt\d+$/.test(imdb)) {
-    return Response.json({ error: "bad_id" }, { status: 400 });
+    return apiError(400, 'bad_id');
   }
 
   try {
     const results = await cinemetaSimilar(type, imdb, genre || null);
     return Response.json({ results });
   } catch {
-    return Response.json({ error: "meta_unreachable" }, { status: 502 });
+    return apiError(502, 'meta_unreachable');
   }
 }

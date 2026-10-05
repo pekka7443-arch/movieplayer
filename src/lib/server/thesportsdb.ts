@@ -6,6 +6,7 @@
 // Never import from client components.
 
 import https from 'node:https';
+import { withRetries } from '@/lib/server/http';
 
 const BASE = 'https://www.thesportsdb.com/api/v1/json/3';
 const TIMEOUT_MS = 9_000;
@@ -14,7 +15,15 @@ const TIMEOUT_MS = 9_000;
  * Same IPv4-pinned node:https fetch as tvmaze.ts — undici prefers IPv6 which
  * never falls back in this sandbox. Graceful failure everywhere.
  */
-function httpsJson<T>(url: string, depth = 0): Promise<{ status: number; body: unknown } | null> {
+// Retry transient 5xx with backoff; 4xx responses pass through unchanged.
+function httpsJson<T>(url: string): Promise<{ status: number; body: unknown } | null> {
+  return withRetries(() => httpsJsonOnce<T>(url), {
+    attempts: 2,
+    retryIf: (v) => v !== null && v.status >= 500,
+  });
+}
+
+function httpsJsonOnce<T>(url: string, depth = 0): Promise<{ status: number; body: unknown } | null> {
   return new Promise((resolve) => {
     if (depth > 3) {
       resolve(null);
@@ -35,7 +44,7 @@ function httpsJson<T>(url: string, depth = 0): Promise<{ status: number; body: u
         const location = res.headers.location;
         if (status >= 300 && status < 400 && location) {
           res.resume();
-          resolve(httpsJson<T>(new URL(location, url).toString(), depth + 1));
+          resolve(httpsJsonOnce<T>(new URL(location, url).toString(), depth + 1));
           return;
         }
         const chunks: Buffer[] = [];

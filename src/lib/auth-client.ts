@@ -50,10 +50,19 @@ export const AUTH_ERROR_TEXT: Record<AuthErrorCode, string> = {
 
 interface AuthResponsePayload {
   user?: AuthUser | null;
-  error?: string;
+  // Standard API error shape: { error: { code, message }, problems? }
+  error?: { code?: string; message?: string } | string;
   problems?: string[];
   totpRequired?: boolean;
   pendingToken?: string;
+}
+
+/** Read the machine error code out of an API response body — accepts the
+ *  standard nested shape ({ error: { code } }) and tolerates flat strings. */
+function payloadErrorCode(payload: AuthResponsePayload): string | undefined {
+  const err = payload.error;
+  if (!err) return undefined;
+  return typeof err === 'string' ? err : err.code;
 }
 
 async function authFetch(path: string, body: unknown): Promise<AuthUser | AuthTotpPending> {
@@ -92,8 +101,8 @@ async function authFetch(path: string, body: unknown): Promise<AuthUser | AuthTo
       'bad_request',
       'weak_password',
     ];
-    const code = (known as readonly string[]).includes(payload.error ?? '')
-      ? (payload.error as AuthErrorCode)
+    const code = (known as readonly string[]).includes(payloadErrorCode(payload) ?? '')
+      ? (payloadErrorCode(payload) as AuthErrorCode)
       : 'unknown';
     throw new AuthError(code, AUTH_ERROR_TEXT[code], payload.problems);
   }
@@ -154,11 +163,41 @@ export async function logoutAccount(): Promise<void> {
  *    transient blip is never cached as "logged out";
  *  - 429 also throws (retryable) but is not a server bug.
  */
+// Last-known-user cache — a network error must never render the app as
+// "logged out", so the last successfully fetched user is persisted here and
+// used as optimistic initial data on the next page load. Only a real
+// 200-with-null response (or explicit logout) clears it.
+const CACHED_USER_KEY = 'cinedeck.user.last';
+
+export function readCachedUser(): AuthUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(CACHED_USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AuthUser | null;
+    return parsed && typeof parsed.id === 'string' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUser(user: AuthUser | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (user) window.localStorage.setItem(CACHED_USER_KEY, JSON.stringify(user));
+    else window.localStorage.removeItem(CACHED_USER_KEY);
+  } catch {
+    /* storage unavailable — optimistic cache is best-effort */
+  }
+}
+
 export async function fetchMe(): Promise<AuthUser | null> {
   let response: Response;
   try {
     response = await fetch('/api/auth/me', { headers: { accept: 'application/json' } });
   } catch {
+    // Network failure: throw so React Query retries — the cached user above
+    // keeps the UI signed in. Never resolve to "logged out" on an error.
     throw new AuthError('network', AUTH_ERROR_TEXT.network);
   }
   if (response.status >= 500) {
@@ -169,9 +208,11 @@ export async function fetchMe(): Promise<AuthUser | null> {
   }
   if (!response.ok) {
     // Unexpected 4xx — treat as signed out rather than wedging the app.
+    writeCachedUser(null);
     return null;
   }
   const data = (await response.json()) as { user: AuthUser | null };
+  writeCachedUser(data.user ?? null);
   return data.user ?? null;
 }
 
@@ -221,9 +262,10 @@ export async function submitPasswordReset(token: string, password: string): Prom
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, password }),
   });
-  const data = (await res.json().catch(() => ({}))) as { error?: string; problems?: string[] };
+  const data = (await res.json().catch(() => ({}))) as { error?: { code?: string } | string; problems?: string[] };
   if (!res.ok) {
-    const code = (data.error ?? 'unknown') as AuthErrorCode;
+    const raw = typeof data.error === 'string' ? data.error : data.error?.code;
+    const code = (raw ?? 'unknown') as AuthErrorCode;
     throw new AuthError(code, AUTH_ERROR_TEXT[code] ?? AUTH_ERROR_TEXT.unknown, data.problems);
   }
 }
@@ -238,9 +280,10 @@ export async function changePassword(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ currentPassword, newPassword, totpCode }),
   });
-  const data = (await res.json().catch(() => ({}))) as { error?: string; problems?: string[] };
+  const data = (await res.json().catch(() => ({}))) as { error?: { code?: string } | string; problems?: string[] };
   if (!res.ok) {
-    const code = (data.error ?? 'unknown') as AuthErrorCode;
+    const raw = typeof data.error === 'string' ? data.error : data.error?.code;
+    const code = (raw ?? 'unknown') as AuthErrorCode;
     throw new AuthError(code, AUTH_ERROR_TEXT[code] ?? AUTH_ERROR_TEXT.unknown, data.problems);
   }
 }

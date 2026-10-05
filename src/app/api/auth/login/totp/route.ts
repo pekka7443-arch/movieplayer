@@ -9,7 +9,7 @@ import {
   sessionCookieValue,
   verifyStatelessToken,
 } from '@/lib/server/auth';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit, clientIpOf } from '@/lib/server/rate-limit';
 import { verifyTotp } from '@/lib/server/totp';
@@ -32,12 +32,12 @@ export const POST = withApi('auth/login/totp', async (request) => {
   const body = await readJsonBody(request);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
-    return Response.json({ error: 'invalid_code' }, { status: 400 });
+    return apiError(400, 'invalid_code');
   }
 
   const payload = verifyStatelessToken(parsed.data.pendingToken, 'totp');
   if (!payload) {
-    return Response.json({ error: 'pending_expired' }, { status: 401 });
+    return apiError(401, 'pending_expired');
   }
 
   const user = await db.user.findUnique({
@@ -53,11 +53,11 @@ export const POST = withApi('auth/login/totp', async (request) => {
     },
   });
   if (!user || !user.totpEnabled || !user.totpSecret) {
-    return Response.json({ error: 'invalid_code' }, { status: 401 });
+    return apiError(401, 'invalid_code');
   }
 
   if (!verifyTotp(user.totpSecret, parsed.data.code)) {
-    return Response.json({ error: 'invalid_code' }, { status: 401 });
+    return apiError(401, 'invalid_code');
   }
 
   const owner = await resolveOwner(request);

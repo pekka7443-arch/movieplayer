@@ -7,7 +7,7 @@ import {
   revokeSessionByToken,
   sessionTokenOf,
 } from '@/lib/server/auth';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit } from '@/lib/server/rate-limit';
 
@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 export const GET = withApi('auth/sessions', async (request) => {
   const owner = await resolveOwner(request);
   if (!owner.userId || !owner.session) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
+    return apiError(401, 'unauthorized');
   }
 
   const rows = await db.session.findMany({
@@ -60,13 +60,13 @@ export const DELETE = withApi('auth/sessions-delete', async (request) => {
 
   const owner = await resolveOwner(request);
   if (!owner.userId || !owner.session) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
+    return apiError(401, 'unauthorized');
   }
 
   const body = await readJsonBody(request);
   const parsed = deleteSchema.safeParse(body ?? {});
   if (!parsed.success) {
-    return Response.json({ error: 'bad_request' }, { status: 400 });
+    return apiError(400, 'bad_request');
   }
 
   if (parsed.data.all) {
@@ -82,7 +82,7 @@ export const DELETE = withApi('auth/sessions-delete', async (request) => {
     return Response.json({ ok: true });
   }
 
-  return Response.json({ error: 'bad_request' }, { status: 400 });
+  return apiError(400, 'bad_request');
 });
 
 /** POST — revoke every OTHER device (keep this browser signed in). */
@@ -94,7 +94,7 @@ export const POST = withApi('auth/sessions-others', async (request) => {
 
   const owner = await resolveOwner(request);
   if (!owner.userId || !owner.session) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
+    return apiError(401, 'unauthorized');
   }
 
   const result = await db.session.deleteMany({

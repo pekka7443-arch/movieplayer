@@ -8,7 +8,7 @@ import {
   resolveOwner,
   sessionCookieValue,
 } from '@/lib/server/auth';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit, clientIpOf } from '@/lib/server/rate-limit';
 import { checkPassword } from '@/lib/password';
@@ -42,7 +42,7 @@ export const POST = withApi('auth/register', async (request) => {
   const body = await readJsonBody(request);
   const parsed = registerSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json({ error: 'bad_request' }, { status: 400 });
+    return apiError(400, 'bad_request');
   }
   const { name, email, password } = parsed.data;
 
@@ -63,7 +63,7 @@ export const POST = withApi('auth/register', async (request) => {
       // Same generic answer as a fresh signup — no existence leak.
       return Response.json({ ok: true, verificationRequired: true });
     }
-    return Response.json({ error: 'email_taken' }, { status: 409 });
+    return apiError(409, 'email_taken');
   }
 
   const isFirstUser = (await db.user.count()) === 0;

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { db } from '@/lib/db';
 import { hashPassword, revokeAllSessionsForUser, verifyStatelessToken } from '@/lib/server/auth';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit } from '@/lib/server/rate-limit';
 import { checkPassword } from '@/lib/password';
@@ -27,12 +27,12 @@ export const POST = withApi('auth/reset', async (request) => {
   const body = await readJsonBody(request);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
-    return Response.json({ error: 'bad_request' }, { status: 400 });
+    return apiError(400, 'bad_request');
   }
 
   const payload = verifyStatelessToken(parsed.data.token, 'reset');
   if (!payload) {
-    return Response.json({ error: 'invalid_token' }, { status: 400 });
+    return apiError(400, 'invalid_token');
   }
 
   const verdict = checkPassword(parsed.data.password);
@@ -45,7 +45,7 @@ export const POST = withApi('auth/reset', async (request) => {
 
   const user = await db.user.findUnique({ where: { id: payload.userId } });
   if (!user) {
-    return Response.json({ error: 'invalid_token' }, { status: 400 });
+    return apiError(400, 'invalid_token');
   }
 
   await db.$transaction([

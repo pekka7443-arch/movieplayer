@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,14 +7,14 @@ export const dynamic = 'force-dynamic';
 // IS the capability. Private lists are 404 even with the token.
 export const GET = withApi('list-share', async (request) => {
   const token = new URL(request.url).searchParams.get('token') ?? '';
-  if (!token) return Response.json({ error: 'bad_request' }, { status: 400 });
+  if (!token) return apiError(400, 'bad_request');
 
   const list = await db.list.findUnique({
     where: { shareToken: token },
     select: { name: true, description: true, isPublic: true, updatedAt: true },
   });
   if (!list || !list.isPublic) {
-    return Response.json({ error: 'not_found' }, { status: 404 });
+    return apiError(404, 'not_found');
   }
 
   const items = await db.listMember.findMany({

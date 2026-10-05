@@ -9,7 +9,7 @@ import {
   sessionCookieValue,
   verifyPassword,
 } from '@/lib/server/auth';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit, clientIpOf } from '@/lib/server/rate-limit';
 import { signStatelessToken } from '@/lib/server/auth';
@@ -35,7 +35,7 @@ export const POST = withApi('auth/login', async (request) => {
   const body = await readJsonBody(request);
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json({ error: 'invalid_credentials' }, { status: 401 });
+    return apiError(401, 'invalid_credentials');
   }
   const { email, password } = parsed.data;
 
@@ -48,7 +48,7 @@ export const POST = withApi('auth/login', async (request) => {
   }
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
-    return Response.json({ error: 'invalid_credentials' }, { status: 401 });
+    return apiError(401, 'invalid_credentials');
   }
 
   // Carry the guest device's watchlist + history into the account.

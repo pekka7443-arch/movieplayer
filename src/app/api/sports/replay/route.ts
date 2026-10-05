@@ -3,6 +3,7 @@
 // → { videos: ReplayVideo[] }  (best first — the player autoplays videos[0])
 
 import { findReplays } from '@/lib/server/replay';
+import { apiError } from '@/lib/server/api';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
   const date = (searchParams.get('date') ?? '').trim();
 
   if (!home) {
-    return Response.json({ error: 'home_required' }, { status: 400 });
+    return apiError(400, 'home_required');
   }
 
   const videos = await findReplays({ sport, league, home, away, date: date || null });

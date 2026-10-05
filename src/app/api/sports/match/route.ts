@@ -4,6 +4,7 @@
 // player auto-plays candidates[0] and watchdogs through the rest.)
 
 import { matchChannelsForEvent } from '@/lib/server/sports-match';
+import { apiError } from '@/lib/server/api';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -13,12 +14,12 @@ export async function GET(request: Request) {
   const away = (searchParams.get('away') ?? '').trim();
 
   if (!sport || !home || !away) {
-    return Response.json({ error: 'sport_home_away_required' }, { status: 400 });
+    return apiError(400, 'sport_home_away_required');
   }
 
   const candidates = await matchChannelsForEvent({ sport, league, home, away });
   if (candidates === null) {
-    return Response.json({ error: 'channels_unreachable' }, { status: 502 });
+    return apiError(502, 'channels_unreachable');
   }
 
   return Response.json(

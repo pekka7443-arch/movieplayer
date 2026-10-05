@@ -1,4 +1,5 @@
 import { cinemetaCatalog } from '@/lib/server/cinemeta';
+import { apiError } from '@/lib/server/api';
 
 // GET /api/meta/catalog?type=movie|tv&sort=top|imdbRating&genre=Action&year=2026
 //
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
 
   const type = (searchParams.get('type') ?? 'movie').trim().toLowerCase();
   if (type !== 'movie' && type !== 'tv') {
-    return Response.json({ error: 'type must be movie|tv' }, { status: 400 });
+    return apiError(400, 'bad_request', 'type must be movie|tv');
   }
 
   const sortParam = (searchParams.get('sort') ?? 'top').trim().toLowerCase();

@@ -1,4 +1,5 @@
 import { tvmazeFullByImdb } from "@/lib/server/tvmaze";
+import { apiError } from '@/lib/server/api';
 
 // GET /api/meta/tvmaze?imdb=tt0903747
 //
@@ -13,13 +14,13 @@ export async function GET(request: Request) {
   const imdb = (searchParams.get("imdb") ?? "").trim();
 
   if (!/^tt\d+$/.test(imdb)) {
-    return Response.json({ error: "bad_id" }, { status: 400 });
+    return apiError(400, 'bad_id');
   }
 
   const full = await tvmazeFullByImdb(imdb);
   if (!full) {
     // Distinguish "unknown show" (fine — degrade quietly) from upstream down.
-    return Response.json({ error: "not_found" }, { status: 404 });
+    return apiError(404, 'not_found');
   }
 
   return Response.json(full);

@@ -103,6 +103,15 @@ function refresh<T>(
       evictIfNeeded();
       return value;
     })
+    .catch((error) => {
+      // Upstream is down — fail soft: serve the last known value while it is
+      // still within the stale window instead of rejecting the callers.
+      const fallback = cache.get(key) as Entry<T> | undefined;
+      if (fallback && fallback.staleUntil > Date.now()) {
+        return fallback.value;
+      }
+      throw error;
+    })
     .finally(() => {
       inflight.delete(key);
     });

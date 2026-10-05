@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sportsChannels } from '@/lib/server/iptv';
+import { apiError } from '@/lib/server/api';
 
 /**
  * GET /api/sports/channels
@@ -11,7 +12,7 @@ import { sportsChannels } from '@/lib/server/iptv';
 export async function GET() {
   const channels = await sportsChannels();
   if (!channels) {
-    return NextResponse.json({ error: 'iptv_unreachable' }, { status: 502 });
+    return apiError(502, 'iptv_unreachable');
   }
   return NextResponse.json({ channels, count: channels.length });
 }

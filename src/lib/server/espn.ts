@@ -12,11 +12,18 @@
 import https from 'node:https';
 import type { SportsEvent } from '@/lib/server/thesportsdb';
 import { withCache } from '@/lib/server/cache';
+import { withRetries } from '@/lib/server/http';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports';
 const TIMEOUT_MS = 8_000;
 
-function httpsJson<T>(url: string, depth = 0): Promise<T | null> {
+// Public entry: retry transient nulls (network/timeout/5xx soft-fails) with
+// backoff before giving up — the redirect recursion stays inside the once-helper.
+function httpsJson<T>(url: string): Promise<T | null> {
+  return withRetries(() => httpsJsonOnce<T>(url), { attempts: 2, retryIf: (v) => v === null });
+}
+
+function httpsJsonOnce<T>(url: string, depth = 0): Promise<T | null> {
   return new Promise((resolve) => {
     if (depth > 2) {
       resolve(null);
@@ -45,7 +52,7 @@ function httpsJson<T>(url: string, depth = 0): Promise<T | null> {
           res.resume();
           settled = true;
           if (deadline) clearTimeout(deadline);
-          httpsJson<T>(new URL(location, url).toString(), depth + 1).then(resolve);
+          httpsJsonOnce<T>(new URL(location, url).toString(), depth + 1).then(resolve);
           return;
         }
         if (status < 200 || status >= 300) {

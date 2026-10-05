@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { db } from '@/lib/db';
 import { resolveOwner } from '@/lib/server/auth';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit } from '@/lib/server/rate-limit';
 import { generateTotpSecret } from '@/lib/server/totp';
@@ -24,16 +24,16 @@ export const POST = withApi('account/totp/setup', async (request) => {
 
   const owner = await resolveOwner(request);
   if (!owner.userId) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
+    return apiError(401, 'unauthorized');
   }
 
   const user = await db.user.findUnique({
     where: { id: owner.userId },
     select: { email: true, totpEnabled: true },
   });
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 });
+  if (!user) return apiError(401, 'unauthorized');
   if (user.totpEnabled) {
-    return Response.json({ error: 'totp_already_enabled' }, { status: 409 });
+    return apiError(409, 'totp_already_enabled');
   }
 
   const { secret, otpauthUrl } = generateTotpSecret(user.email);

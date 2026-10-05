@@ -11,10 +11,15 @@ export { fetchHistory, fetchWatchlist };
 async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    const payload = (await res.json().catch(() => ({}))) as {
+      error?: { code?: string; message?: string } | string;
+      message?: string;
+    };
+    const rawCode = typeof payload.error === 'string' ? payload.error : payload.error?.code;
+    const rawMsg = typeof payload.error === 'object' ? payload.error?.message : undefined;
     throw new LibraryError(
-      (payload.error ?? `http_${res.status}`) as string,
-      payload.message ?? 'Request failed',
+      rawCode ?? `http_${res.status}`,
+      rawMsg ?? payload.message ?? 'Request failed',
       res.status,
     );
   }

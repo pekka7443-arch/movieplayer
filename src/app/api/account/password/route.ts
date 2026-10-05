@@ -9,7 +9,7 @@ import {
   createSession,
   verifyPassword,
 } from '@/lib/server/auth';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit, clientIpOf } from '@/lib/server/rate-limit';
 import { checkPassword } from '@/lib/password';
@@ -33,30 +33,30 @@ export const POST = withApi('account/password', async (request) => {
   if (limited) return limited;
 
   const owner = await resolveOwner(request);
-  if (!owner.userId) return Response.json({ error: 'unauthorized' }, { status: 401 });
+  if (!owner.userId) return apiError(401, 'unauthorized');
 
   const body = await readJsonBody(request);
   const parsed = schema.extend({ totpCode: z.string().min(6).max(10).optional() }).safeParse(body);
-  if (!parsed.success) return Response.json({ error: 'bad_request' }, { status: 400 });
+  if (!parsed.success) return apiError(400, 'bad_request');
   const { currentPassword, newPassword, totpCode } = parsed.data;
 
   const user = await db.user.findUnique({ where: { id: owner.userId } });
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 });
+  if (!user) return apiError(401, 'unauthorized');
 
   if (!verifyPassword(currentPassword, user.passwordHash)) {
-    return Response.json({ error: 'invalid_credentials' }, { status: 401 });
+    return apiError(401, 'invalid_credentials');
   }
 
   if (user.totpEnabled) {
     const { verifyTotp } = await import('@/lib/server/totp');
     if (!user.totpSecret || !totpCode || !verifyTotp(user.totpSecret, totpCode)) {
-      return Response.json({ error: 'invalid_code' }, { status: 401 });
+      return apiError(401, 'invalid_code');
     }
   }
 
   const verdict = checkPassword(newPassword);
   if (!verdict.acceptable) {
-    return Response.json({ error: 'weak_password', problems: verdict.problems }, { status: 400 });
+    return apiError(400, 'weak_password', undefined, { problems: verdict.problems });
   }
 
   await db.user.update({

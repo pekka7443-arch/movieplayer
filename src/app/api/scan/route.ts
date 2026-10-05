@@ -1,6 +1,6 @@
 import { PROVIDERS, getEmbedUrl, supportsDub } from "@/lib/providers";
 import type { ScanResult } from "@/lib/meta";
-import { withApi } from "@/lib/server/api";
+import { withApi, apiError } from "@/lib/server/api";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { db } from "@/lib/db";
 
@@ -126,7 +126,7 @@ export const GET = withApi('scan', async (request) => {
   const tmdbId = /^\d+$/.test(tmdbRaw) ? Number(tmdbRaw) : null;
 
   if (!imdbId && !tmdbId) {
-    return Response.json({ error: "bad_id" }, { status: 400 });
+    return apiError(400, 'bad_id');
   }
 
   const cacheKey = `${type}:${imdbId ?? "-"}:${tmdbId ?? "-"}:${season}:${episode}:${dub ?? "orig"}`;
