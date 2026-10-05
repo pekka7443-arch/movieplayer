@@ -48,7 +48,7 @@ import {
   useWatchlist,
   type CatalogParams,
 } from '@/hooks/use-media';
-import { type HistoryItem, type SearchItem, type WatchlistItem } from '@/lib/tmdb';
+import { type HistoryItem, type SearchItem, type WatchlistItem, addToWatchlist } from '@/lib/tmdb';
 import { tmdbImg } from '@/lib/languages';
 import type { MetaSearchItem } from '@/lib/meta';
 import { useFinnishCatalog } from '@/hooks/use-meta';
@@ -327,7 +327,25 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
         onClick={(e) => {
           e.stopPropagation();
           removeWatchlist.mutate(item.id, {
-            onSuccess: () => toast.success('Removed from My List'),
+            onSuccess: () =>
+              toast.success('Removed from My List', {
+                description: item.title,
+                action: {
+                  label: 'Undo',
+                  onClick: () => {
+                    void addToWatchlist({
+                      tmdbId: item.tmdbId,
+                      mediaType: item.mediaType,
+                      title: item.title,
+                      posterPath: item.posterPath,
+                      backdropPath: item.backdropPath,
+                      imdbId: item.imdbId ?? null,
+                    })
+                      .then(() => toast.success('Back in My List'))
+                      .catch(() => toast.error('Could not restore — add it again'));
+                  },
+                },
+              }),
             onError: () => toast.error('Could not remove from My List'),
           });
         }}
@@ -470,7 +488,7 @@ function FinnishSection() {
 }
 
 // Curated Cinemeta genre labels for the Explore section (all verified live).
-const EXPLORE_GENRES = [
+export const EXPLORE_GENRES = [
   'Action',
   'Adventure',
   'Animation',
@@ -496,6 +514,16 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
   const { user } = useSession();
 
   const [exploreGenre, setExploreGenre] = useState<string>('Action');
+
+  // Onboarding seeds the Explore prefilter with the user's first picked genre.
+  useEffect(() => {
+    const onSeed = (e: Event) => {
+      const genre = (e as CustomEvent<string>).detail;
+      if (typeof genre === 'string' && genre) setExploreGenre(genre);
+    };
+    window.addEventListener('cinedeck:explore-genre', onSeed);
+    return () => window.removeEventListener('cinedeck:explore-genre', onSeed);
+  }, []);
   const [localExploreType, setLocalExploreType] = useState<'movie' | 'tv'>('movie');
   // The global Movies/TV filter also drives the Explore section when active.
   const exploreType = contentType === 'all' ? localExploreType : contentType;

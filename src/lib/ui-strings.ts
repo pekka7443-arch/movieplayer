@@ -50,6 +50,7 @@ export interface UiStrings {
   achievements: string;
   rewatchPicks: string;
   admin: string;
+  search: string;
   surpriseMe: string;
 }
 
@@ -85,6 +86,7 @@ const en: UiStrings = {
   achievements: 'Achievements',
   rewatchPicks: 'Rewatch picks',
   admin: 'Admin',
+  search: 'Search',
   surpriseMe: 'Surprise me',
 };
 
@@ -120,6 +122,7 @@ const fi: UiStrings = {
   achievements: 'Saavutukset',
   rewatchPicks: 'Uudelleenkatsontaa',
   admin: 'Ylläpito',
+  search: 'Haku',
   surpriseMe: 'Yllätä minut',
 };
 
@@ -155,6 +158,7 @@ const sv: UiStrings = {
   achievements: 'Prestationer',
   rewatchPicks: 'Tittar igen',
   admin: 'Administration',
+  search: 'Sök',
   surpriseMe: 'Överraska mig',
 };
 

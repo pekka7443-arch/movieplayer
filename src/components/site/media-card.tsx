@@ -98,7 +98,7 @@ export function MediaCard({
       // No aria-label on purpose: the visible text (type chip + title + year
       // + genres) IS the accessible name — a summary label would trigger
       // label-content-name-mismatch. The card opens the watch page.
-      className="group relative block w-[130px] shrink-0 text-left focus-visible:outline-none disabled:cursor-not-allowed sm:w-[160px] md:w-[180px]"
+      className="group relative block w-[130px] shrink-0 snap-start text-left focus-visible:outline-none disabled:cursor-not-allowed sm:w-[160px] md:w-[180px]"
     >
       <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 transition-all duration-300 group-hover:border-brand/40 group-hover:shadow-[0_14px_40px_-8px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)] group-focus-visible:border-brand/60 dark:border-zinc-800/80 dark:bg-zinc-900/60">
         {poster ? (

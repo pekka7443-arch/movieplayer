@@ -15,6 +15,8 @@ import { Header } from '@/components/site/header';
 import { HomeView } from '@/components/site/home-view';
 import { PwaBootstrap } from '@/components/site/pwa-bootstrap';
 import { SiteFooter } from '@/components/site/site-footer';
+import { BottomNav } from '@/components/site/bottom-nav';
+import { OnboardingTour } from '@/components/site/onboarding-tour';
 import { useCinedeckStore, hydrateActiveProfile } from '@/lib/store';
 import { ViewSkeleton } from '@/components/site/view-skeleton';
 import type { MediaType } from '@/lib/tmdb';
@@ -176,7 +178,7 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
         <main
           id="main-content"
           tabIndex={-1}
-          className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8"
+          className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-[calc(env(safe-area-inset-bottom)+72px)] py-6 sm:px-6 sm:py-8 md:pb-8"
         >
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -205,6 +207,8 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
           </AnimatePresence>
         </main>
         <SiteFooter />
+        <BottomNav />
+        <OnboardingTour />
         <SettingsDialog />
         <ArcadeDialog />
         <AuthDialog />

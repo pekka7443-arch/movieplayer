@@ -166,7 +166,27 @@ export function HeroSection({
     router.push(url, { scroll: false });
   };
 
-  const featured = trending && trending.length > 0 ? trending[0] : null;
+  // Auto-rotating featured title — cycles the trending list every 8s,
+  // pauses on hover/focus/hidden tab, respects reduced-motion, and every
+  // change is also manual via the dots. Rotation index only, featured
+  // below stays a pure derivation.
+  const [rotateIndex, setRotateIndex] = useState(0);
+  const [rotatePaused, setRotatePaused] = useState(false);
+  const trendingCount = trending?.length ?? 0;
+  useEffect(() => {
+    if (reduceMotion || rotatePaused || trendingCount < 2) return;
+    const id = window.setInterval(
+      () => setRotateIndex((i) => (i + 1) % trendingCount),
+      8_000,
+    );
+    return () => window.clearInterval(id);
+  }, [reduceMotion, rotatePaused, trendingCount]);
+  // Clamp during render when the trending list shrinks (catalog switch, key
+  // added) — no state effect needed.
+  const safeIndex = trendingCount > 0 ? Math.min(rotateIndex, trendingCount - 1) : 0;
+
+  const featured =
+    trending && trending.length > 0 ? trending[safeIndex] : null;
   const featuredMeta = featured ? (featured as MetaSearchItem) : null;
   const featuredTitle = featured?.title ?? '';
   const featuredYear = featured
@@ -189,7 +209,15 @@ export function HeroSection({
   });
 
   return (
-    <section className="relative overflow-hidden" aria-label="Quick play" onPointerMove={onHeroPointerMove}>
+    <section
+      className="relative overflow-hidden"
+      aria-label="Quick play"
+      onPointerMove={onHeroPointerMove}
+      onPointerEnter={() => setRotatePaused(true)}
+      onPointerLeave={() => setRotatePaused(false)}
+      onFocus={() => setRotatePaused(true)}
+      onBlur={() => setRotatePaused(false)}
+    >
       {/* Ambient accent glow */}
       <div
         aria-hidden
@@ -334,6 +362,10 @@ export function HeroSection({
                 className="group relative block w-full overflow-hidden rounded-xl border border-zinc-200 text-left shadow-2xl shadow-black/10 transition-shadow duration-500 focus-visible:outline-none hover:shadow-[0_24px_70px_-18px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)] dark:border-zinc-800/60 dark:shadow-black/50"
               >
                 <motion.img
+                  key={featuredUrl ?? featuredTitle}
+                  initial={reduceMotion ? undefined : { opacity: 0.35 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
                   src={featuredBackdrop}
                   alt={`${featuredTitle} backdrop`}
                   loading="eager"
@@ -382,6 +414,39 @@ export function HeroSection({
             ) : (
               <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/40 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
                 Trending is unavailable right now.
+              </div>
+            )}
+
+            {/* Rotation dots — manual override for the auto-cycle */}
+            {!trendingLoading && trendingCount > 1 && (
+              <div
+                role="tablist"
+                aria-label="Featured titles"
+                className="mt-3 flex items-center justify-center gap-2"
+              >
+                {trending!.slice(0, Math.min(trendingCount, 6)).map((item, i) => {
+                  const active = i === safeIndex;
+                  const dotTitle =
+                    ('title' in item ? item.title : '') || `Featured ${i + 1}`;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      aria-label={`Show ${dotTitle}`}
+                      onClick={() => {
+                        setRotateIndex(i);
+                        setRotatePaused(true);
+                      }}
+                      className={`h-2.5 rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+                        active
+                          ? 'w-7 bg-brand'
+                          : 'w-2.5 bg-zinc-300 hover:bg-zinc-400 dark:bg-zinc-700 dark:hover:bg-zinc-600'
+                      }`}
+                    />
+                  );
+                })}
               </div>
             )}
 

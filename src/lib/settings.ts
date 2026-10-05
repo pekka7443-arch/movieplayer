@@ -30,6 +30,8 @@ export interface CinedeckSettings {
   dubLanguage: string;
   /** Global home/browse filter: show everything, only movies, or only series. */
   contentType: 'all' | 'movie' | 'tv';
+  /** Genre chips picked during onboarding — seed the Explore prefilter. */
+  favoriteGenres: string[];
 }
 
 export const FAILOVER_SECONDS_MIN = 6;
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: CinedeckSettings = {
   failoverSeconds: FAILOVER_SECONDS_DEFAULT,
   dubLanguage: 'original',
   contentType: 'all',
+  favoriteGenres: [],
 };
 
 function normalizeDubLanguage(value: unknown): string {
@@ -185,6 +188,9 @@ export function getSettings(): CinedeckSettings {
           failoverSeconds: clampFailoverSeconds(parsed.failoverSeconds),
           dubLanguage: normalizeDubLanguage(parsed.dubLanguage),
           contentType: normalizeContentType(parsed.contentType),
+          favoriteGenres: Array.isArray(parsed.favoriteGenres)
+            ? parsed.favoriteGenres.filter((g): g is string => typeof g === 'string').slice(0, 12)
+            : [],
         };
       }
     } catch {

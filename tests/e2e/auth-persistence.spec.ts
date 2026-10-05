@@ -13,6 +13,15 @@ const uniqueEmail = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(
 const STRONG_PASSWORD = 'glacier-harbor-42-vault';
 
 async function signUp(page: Page, email: string): Promise<void> {
+  // Returning-user state: skip the first-visit onboarding tour so it never
+  // overlaps the auth dialog.
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.setItem('cinedeck.onboarding.v1', 'done');
+    } catch {
+      /* ignore */
+    }
+  });
   await page.goto('/');
   await page.getByRole('button', { name: 'Sign up' }).click();
   await page.locator('#auth-name').fill('E2E Persistence');

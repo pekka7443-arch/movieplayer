@@ -429,6 +429,7 @@ export function SearchBar() {
       />
       <Input
         ref={inputRef}
+        id="global-search"
         type="search"
         value={text}
         onChange={(e) => {
