@@ -3,6 +3,7 @@
 // Never import from client components.
 
 import type { MetaDetails, MetaSearchItem } from '@/lib/meta';
+import { withCache } from '@/lib/server/cache';
 
 const CINEMETA_BASE = 'https://v3-cinemeta.strem.io';
 const TIMEOUT_MS = 9_000;
@@ -34,7 +35,7 @@ function cacheSet(key: string, value: unknown, ttlMs: number): void {
   cache.set(key, { value, expiresAt: Date.now() + ttlMs });
 }
 
-async function cinemetaFetch<T>(path: string): Promise<T> {
+async function cinemetaFetchUncached<T>(path: string): Promise<T> {
   const res = await fetch(`${CINEMETA_BASE}${path}`, {
     headers: { accept: 'application/json' },
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -42,6 +43,18 @@ async function cinemetaFetch<T>(path: string): Promise<T> {
   });
   if (!res.ok) throw new Error(`cinemeta_${res.status}`);
   return (await res.json()) as T;
+}
+
+/**
+ * Dedupe + SWR layer under the per-call caches above: concurrent identical
+ * requests share one promise, and popular paths get a short fresh window +
+ * long stale window (fail-soft — failures bypass the cache).
+ */
+function cinemetaFetch<T>(path: string): Promise<T> {
+  return withCache(`cinemeta:${path}`, () => cinemetaFetchUncached<T>(path), {
+    ttlMs: 60_000,
+    staleMs: 10 * 60_000,
+  });
 }
 
 // ---------------------------------------------------------------------------

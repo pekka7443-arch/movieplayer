@@ -30,10 +30,10 @@ export async function GET(request: Request) {
 
   try {
     const results = await cinemetaCatalog(type, { sort, genre, year, limit: 20 });
-    return Response.json({ results });
+    return Response.json({ results }, { headers: { "cache-control": "public, s-maxage=300, stale-while-revalidate=1800" } });
   } catch {
     // Graceful degradation — an unreachable upstream renders an empty row
     // instead of an error banner on the home page.
-    return Response.json({ results: [] });
+    return Response.json({ results: [] }, { headers: { "cache-control": "public, s-maxage=60, stale-while-revalidate=600" } });
   }
 }

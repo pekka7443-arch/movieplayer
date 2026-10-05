@@ -36,6 +36,7 @@ import { useSeason } from '@/hooks/use-media';
 import { useServerScan, useTvmazeShow } from '@/hooks/use-meta';
 import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl, supportsDub, dubCodeOf, isProven, reliabilityRank } from '@/lib/providers';
 import type { ScanResult } from '@/lib/meta';
+import { saveHistoryProgress } from '@/lib/tmdb';
 import { useCinedeckStore } from '@/lib/store';
 import { useSettings } from '@/lib/settings';
 import { PlayerSettingsMenu } from '@/components/site/player-settings';
@@ -457,6 +458,77 @@ export function PlayerSection({
     // navigateTo closes over season/episode/mediaType + router — recreated each render.
      
   }, [watchId, isTv, season, episode, maxEpisode, skipSource]);
+
+  // ---------------------------------------------------------------------------
+  // Watch-progress tracker — embed players are cross-origin so real playback
+  // position is unknowable; we track wall-clock seconds the player has been
+  // up (paused while the tab is hidden). Saved every 15s, on tab-hide and on
+  // unmount via keepalive so closing the tab never loses the session.
+  // ---------------------------------------------------------------------------
+  const watchedSecondsRef = useRef(0);
+  const lastSavedRef = useRef(0);
+  const durationSeconds = useMemo(() => {
+    if (details?.runtime && details.runtime > 0) return details.runtime * 60;
+    const ep = isTv ? episodes.find((e) => e.episodeNumber === episode) : undefined;
+    if (ep?.runtime && ep.runtime > 0) return ep.runtime * 60;
+    const tvmazeEp = isTv ? tvmazeSeasonEpisodes.find((e) => e.number === episode) : undefined;
+    if (tvmazeEp?.runtime && tvmazeEp.runtime > 0) return tvmazeEp.runtime * 60;
+    return null;
+  }, [details, isTv, episodes, episode, tvmazeSeasonEpisodes]);
+
+  const flushProgress = useCallback(
+    (invalidateHint?: boolean) => {
+      if (watchId === 0) return;
+      const positionSeconds = watchedSecondsRef.current;
+      if (positionSeconds < 5) return; // bounces don't count as watching
+      lastSavedRef.current = positionSeconds;
+      if (tmdbId === undefined) return; // keyless IMDB mode is ephemeral
+      saveHistoryProgress({
+        tmdbId,
+        mediaType,
+        title: title || `TMDB #${tmdbId}`,
+        posterPath: details?.posterPath ?? null,
+        backdropPath: details?.backdropPath ?? null,
+        imdbId: imdbId ?? null,
+        season: mediaType === 'tv' ? season : null,
+        episode: mediaType === 'tv' ? episode : null,
+        positionSeconds,
+        durationSeconds,
+      });
+      void invalidateHint;
+    },
+    [watchId, tmdbId, mediaType, title, details?.posterPath, details?.backdropPath, imdbId, season, episode, durationSeconds],
+  );
+
+  useEffect(() => {
+    if (!iframeReady || watchId === 0) return;
+    // Resume the counter per URL+episode, not per component.
+    watchedSecondsRef.current = lastSavedRef.current;
+    const interval = setInterval(() => {
+      if (document.hidden) return; // tab in background — not watching
+      watchedSecondsRef.current += 1;
+      if (watchedSecondsRef.current - lastSavedRef.current >= 15) {
+        flushProgress();
+      }
+    }, 1000);
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flushProgress();
+    };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+      flushProgress(); // episode switch / unmount — persist what we have
+    };
+  }, [iframeReady, watchId, flushProgress]);
+
+  // Reset the watched counter when the episode/title changes.
+  useEffect(() => {
+    watchedSecondsRef.current = 0;
+    lastSavedRef.current = 0;
+  }, [tmdbId, imdbId, season, episode]);
 
   return (
     <section aria-label="Player" className="relative">

@@ -31,6 +31,8 @@ import {
   type MediaCardItem,
 } from '@/components/site/media-card';
 import { MediaRow } from '@/components/site/media-row';
+import { useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey } from '@/lib/settings';
 import { useSession } from '@/hooks/use-session';
@@ -49,6 +51,8 @@ import { type HistoryItem, type SearchItem, type WatchlistItem } from '@/lib/tmd
 import { tmdbImg } from '@/lib/languages';
 import type { MetaSearchItem } from '@/lib/meta';
 import { useFinnishCatalog } from '@/hooks/use-meta';
+import { CustomLists } from '@/components/site/custom-lists';
+import { fetchProfiles, type ProfileRow } from '@/lib/library';
 
 type AnyRowItem = SearchItem | MetaSearchItem;
 
@@ -240,11 +244,28 @@ function HistoryCard({ item }: { item: HistoryItem }) {
               S{item.season}·E{item.episode}
             </span>
           )}
+          {/* Watch-progress bar — real seconds spent watching vs runtime. */}
+          {item.durationSeconds != null && item.durationSeconds > 0 && (
+            <span className="absolute inset-x-0 bottom-0 block h-1 bg-zinc-950/60" aria-hidden>
+              <span
+                className="block h-full bg-brand transition-[width] duration-500"
+                style={{
+                  width: `${Math.min(100, Math.round((item.positionSeconds / item.durationSeconds) * 100))}%`,
+                }}
+              />
+            </span>
+          )}
         </span>
         <span className="mt-2 block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-amber-600 dark:text-zinc-200 dark:group-hover:text-amber-300">
           {item.title}
         </span>
-        <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-600">Continue watching</span>
+        <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-600">
+          {item.durationSeconds != null && item.durationSeconds > 0
+            ? `${Math.min(100, Math.round((item.positionSeconds / item.durationSeconds) * 100))}% watched`
+            : item.positionSeconds > 0
+              ? `${Math.round(item.positionSeconds / 60)} min watched`
+              : 'Continue watching'}
+        </span>
       </button>
       <button
         type="button"
@@ -492,11 +513,35 @@ export function HomeView() {
   const historyItems = historyQuery.data ?? [];
   const watchlistItems = watchlistQuery.data ?? [];
 
+  // Profiles (signed-in only) — kids profiles get a family-safe genre filter.
+  const activeProfileId = useCinedeckStore((s) => s.activeProfileId);
+  const profilesQuery = useQuery<ProfileRow[]>({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
+    enabled: Boolean(user),
+    staleTime: 5 * 60_000,
+  });
+  const isKidsProfile = useMemo(
+    () => (profilesQuery.data ?? []).some((p) => p.id === activeProfileId && p.isKids),
+    [profilesQuery.data, activeProfileId],
+  );
+  const KIDS_BLOCKED_GENRES = new Set(['Horror', 'Thriller', 'Crime', 'War', 'Documentary', 'Mystery']);
+  const kidsFilter = useCallback(
+    (items: AnyRowItem[] | undefined): AnyRowItem[] | undefined => {
+      if (!isKidsProfile || !items) return items;
+      return items.filter((i) => {
+        const genre = 'genre' in i ? i.genre : undefined;
+        return !genre || !KIDS_BLOCKED_GENRES.has(genre);
+      });
+    },
+    [isKidsProfile],
+  );
+
   // Global Movies / TV Series filter — trims every mixed row (trending,
   // continue watching, my list). Catalog rows handle it via their `type` param.
   const filteredTrending = useMemo(
-    () => (contentType === 'all' ? trending : trending?.filter((i) => i.mediaType === contentType)),
-    [trending, contentType],
+    () => kidsFilter(contentType === 'all' ? trending : trending?.filter((i) => i.mediaType === contentType)),
+    [trending, contentType, kidsFilter],
   );
   const filteredHistory = useMemo(
     () => (contentType === 'all' ? historyItems : historyItems.filter((i) => i.mediaType === contentType)),
@@ -684,6 +729,13 @@ export function HomeView() {
           </MediaRow>
         )}
       </motion.section>
+
+      {/* Custom lists — create, curate, share (renders under My List) */}
+      {user && (
+        <motion.section {...fadeIn} aria-label="Custom lists wrapper" className="mb-8">
+          <CustomLists />
+        </motion.section>
+      )}
 
       {/* Trending — horizontal scroll row (type follows the browse filter) */}
       <motion.section {...fadeIn} aria-labelledby="trending-week">

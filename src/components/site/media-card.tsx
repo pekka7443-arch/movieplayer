@@ -1,6 +1,7 @@
 'use client';
 
 import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Film, Play, Star, Tv } from 'lucide-react';
 import { tmdbImg } from '@/lib/languages';
@@ -99,12 +100,27 @@ export function MediaCard({
     >
       <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 transition-all duration-300 group-hover:border-brand/40 group-hover:shadow-[0_14px_40px_-8px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)] group-focus-visible:border-brand/60 dark:border-zinc-800/80 dark:bg-zinc-900/60">
         {poster ? (
-          <img
-            src={poster}
-            alt={`${item.title} poster`}
-            loading={priority ? 'eager' : 'lazy'}
-            className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.06]"
-          />
+          // TMDB posters (posterPath) run through next/image optimization;
+          // third-party URLs (Cinemeta's Amazon CDN etc.) use a plain <img>
+          // because their hosts can't be allowlisted in next.config.
+          item.posterUrl ? (
+            <img
+              src={poster}
+              alt={`${item.title} poster`}
+              loading={priority ? 'eager' : 'lazy'}
+              decoding="async"
+              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.06]"
+            />
+          ) : (
+            <Image
+              src={poster}
+              alt={`${item.title} poster`}
+              fill
+              sizes='(max-width: 640px) 130px, (max-width: 768px) 160px, 180px'
+              priority={priority}
+              className="object-cover transition-transform duration-300 group-hover:scale-[1.06]"
+            />
+          )
         ) : (
           <span className="flex size-full flex-col items-center justify-center gap-2 bg-zinc-200/40 dark:bg-zinc-900/40">
             {item.mediaType === 'tv' ? (

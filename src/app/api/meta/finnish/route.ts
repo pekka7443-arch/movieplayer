@@ -10,6 +10,8 @@ import type { MetaSearchItem } from "@/lib/meta";
 // Both paths return items carrying IMDB ids (+ TMDB ids when known) so the
 // player can scan every provider under whichever id form actually indexes
 // the title — the reason Finnish films were previously "not found".
+const SWR = { "cache-control": "public, s-maxage=1800, stale-while-revalidate=7200" } as const;
+
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
@@ -28,7 +30,7 @@ export async function GET(request: Request) {
       try {
         const items = await finnishTmdb(type, request, limit);
         if (items.length > 0) {
-          return Response.json({ results: items, source: "tmdb" });
+          return Response.json({ results: items, source: "tmdb" }, { headers: SWR });
         }
       } catch {
         // TMDB unreachable/bad key — silently fall back to the keyless path.
@@ -36,9 +38,9 @@ export async function GET(request: Request) {
     }
 
     const items = await finnishCurated(type, limit);
-    return Response.json({ results: items, source: "cinemeta" });
+    return Response.json({ results: items, source: "cinemeta" }, { headers: SWR });
   } catch (error) {
     console.error("[meta/finnish] failed:", error);
-    return Response.json({ results: [] satisfies MetaSearchItem[], source: "none" });
+    return Response.json({ results: [] satisfies MetaSearchItem[], source: "none" }, { headers: SWR });
   }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookmarkCheck, BookmarkPlus, ChevronLeft, ExternalLink, Tv } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, ChevronLeft, ExternalLink, Share2, Tv } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { PlayerSection } from '@/components/site/player-section';
@@ -16,6 +16,9 @@ import {
   useWatchlist,
 } from '@/hooks/use-media';
 import { useMetaDetails, useMetaSimilar, useTvmazeShow } from '@/hooks/use-meta';
+import { WatchRating } from '@/components/site/watch-rating';
+import { CommentsSection } from '@/components/site/comments-section';
+import { markEpisodeWatched } from '@/lib/library';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey, useSettings } from '@/lib/settings';
 import type { MediaDetails, MediaType } from '@/lib/tmdb';
@@ -123,6 +126,7 @@ export function WatchView({
         title: details?.title ?? `TMDB #${tmdbId}`,
         posterPath: details?.posterPath ?? null,
         backdropPath: details?.backdropPath ?? null,
+        imdbId: imdbId ?? null,
         existingRowId,
       },
       {
@@ -149,12 +153,32 @@ export function WatchView({
       title: details?.title ?? `TMDB #${tmdbId}`,
       posterPath: details?.posterPath ?? null,
       backdropPath: details?.backdropPath ?? null,
+      imdbId: imdbId ?? null,
       season: mediaType === 'tv' ? season : null,
       episode: mediaType === 'tv' ? episode : null,
     });
     // History upsert is safe to re-fire (backend upserts by [tmdbId, mediaType]).
     // `saveHistory.mutate` is a stable callback and intentionally omitted.
   }, [tmdbId, mediaType, season, episode, settings.saveHistory, details?.title, hasKey, detailsQuery.isPending, isImdbMode]);
+
+  // Auto-mark TV episodes watched (TMDB mode). Keyless IMDB mode has no
+  // stable tmdbId, so those views stay ephemeral.
+  useEffect(() => {
+    if (isImdbMode || tmdbId === undefined || mediaType !== 'tv') return;
+    void markEpisodeWatched(tmdbId, season, episode).catch(() => undefined);
+  }, [isImdbMode, tmdbId, mediaType, season, episode]);
+
+  const onShare = () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      void navigator.share({ title: watchTitle ? `${watchTitle} on CineDeck` : 'CineDeck', url }).catch(() => undefined);
+    } else {
+      void navigator.clipboard.writeText(url).then(
+        () => toast.success('Link copied — share it anywhere'),
+        () => toast.error('Could not copy the link'),
+      );
+    }
+  };
 
   return (
     <div>
@@ -175,6 +199,18 @@ export function WatchView({
         >
           <ChevronLeft className="size-4" aria-hidden />
           Back to browse
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onShare}
+          aria-label="Share this title"
+          className="h-9 gap-1.5 rounded-lg px-2.5 text-sm text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+        >
+          <Share2 className="size-4" aria-hidden />
+          Share
         </Button>
 
         {tmdbId !== undefined && (
@@ -211,6 +247,8 @@ export function WatchView({
         detailsLoading={detailsLoading}
         hasKey={hasKey}
       />
+
+      {tmdbId !== undefined && <WatchRating tmdbId={tmdbId} mediaType={mediaType} />}
 
       {isFinnishTitle && (
         <section
@@ -290,6 +328,8 @@ export function WatchView({
       {isImdbMode && (
         <MetaSimilarRow items={metaSimilarQuery.data} loading={metaSimilarQuery.isPending} />
       )}
+
+      {tmdbId !== undefined && <CommentsSection tmdbId={tmdbId} mediaType={mediaType} />}
     </div>
   );
 }

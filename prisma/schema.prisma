@@ -1,8 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// CineDeck schema — SQLite (dev) / PostgreSQL (prod).
+// To switch to Postgres in production: change provider to "postgresql" and
+// point DATABASE_URL at a postgres:// URL (see .env.example). The model layer
+// is portable — no SQLite-specific types are used.
 
 generator client {
   provider = "prisma-client-js"
@@ -14,51 +13,299 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String
+  /// 'user' | 'admin' — first registered account becomes admin.
+  role          String    @default("user")
+  emailVerified DateTime?
+  /// Base32 TOTP secret (RFC 6238). Null = 2FA never set up.
+  totpSecret    String?
+  totpEnabled   Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions       Session[]
+  profiles       Profile[]
+  watchHistory   WatchHistory[]
+  watchlistItems WatchlistItem[]
+  ratings        Rating[]
+  episodeWatches EpisodeWatch[]
+  lists          List[]
+  comments       Comment[]
+  notifications  Notification[]
+  resetTokens    PasswordResetToken[]
+  verifyTokens   EmailVerificationToken[]
 }
 
-model Post {
+/// Guest device identities (cinedeck_guest cookie). Rows in the library
+/// tables keep ownerId = guest id with userId = null until the guest signs
+/// up / logs in, at which point they migrate to the account. Guests older
+/// than 1 year are purged by the cleanup job (see /api/health cron notes).
+model Guest {
+  id         String   @id
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now()) @updatedAt
+
+  @@index([lastSeenAt])
+}
+
+/// Revocable server-side session. The cookie carries a random 256-bit token;
+/// only its SHA-256 hash is stored. "Log out of all devices" deletes rows.
+model Session {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// Last time the sliding cookie was re-issued (rotation point).
+  rotatedAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt DateTime
+  userAgent String?
+  ip        String?
+
+  @@index([userId])
 }
 
-// `ownerId` is either an authenticated User id or a guest device UUID
-// (cinedeck_guest cookie). Rows migrate from guest → user on register/login.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// `ownerId` is an authenticated User id or a guest device UUID. Rows with a
+/// user get a real FK (cascade on account delete); guest rows have
+/// userId = null and are reaped with their Guest row after 1 year.
+/// profileId scopes rows to a profile (default "main"; guests always "main").
 model WatchHistory {
-  id           String   @id @default(cuid())
-  ownerId      String
-  tmdbId       Int
-  mediaType    String
-  title        String
-  posterPath   String?
-  backdropPath String?
-  season       Int?
-  episode      Int?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  @@unique([ownerId, tmdbId, mediaType])
+  id              String   @id @default(cuid())
+  ownerId         String
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId       String   @default("main")
+  tmdbId          Int
+  mediaType       String
+  title           String
+  posterPath      String?
+  backdropPath    String?
+  imdbId          String?
+  season          Int?
+  episode         Int?
+  /// Last known playback position (embed players are cross-origin, so this
+  /// is wall-clock time actually spent watching, in seconds).
+  positionSeconds Int      @default(0)
+  /// Runtime when known (TMDB), so cards can render a real progress bar.
+  durationSeconds Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([ownerId, tmdbId, mediaType, profileId])
   @@index([ownerId, updatedAt])
 }
 
 model WatchlistItem {
   id           String   @id @default(cuid())
   ownerId      String
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId    String   @default("main")
   tmdbId       Int
   mediaType    String
   title        String
   posterPath   String?
   backdropPath String?
+  imdbId       String?
   addedAt      DateTime @default(now())
-  @@unique([ownerId, tmdbId, mediaType])
+
+  @@unique([ownerId, tmdbId, mediaType, profileId])
   @@index([ownerId, addedAt])
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  ownerId   String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId String   @default("main")
+  tmdbId    Int
+  mediaType String
+  /// 1–10 personal score (null = no score given, note/watched only).
+  score     Int?
+  /// Short private note.
+  note      String?
+  /// Explicit watched / unwatched flag (movies + shows as a whole).
+  watched   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerId, tmdbId, mediaType, profileId])
+  @@index([ownerId, updatedAt])
+}
+
+model EpisodeWatch {
+  id        String   @id @default(cuid())
+  ownerId   String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tmdbId    Int
+  season    Int
+  episode   Int
+  watchedAt DateTime @default(now())
+
+  @@unique([ownerId, tmdbId, season, episode])
+  @@index([ownerId, tmdbId])
+}
+
+model List {
+  id          String   @id @default(cuid())
+  ownerId     String
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  /// Public lists are readable by anyone with the share link.
+  isPublic    Boolean  @default(false)
+  /// Random unguessable token for the read-only share view.
+  shareToken  String   @unique
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ListMember[]
+
+  @@index([ownerId, position])
+}
+
+model ListMember {
+  id         String   @id @default(cuid())
+  listId     String
+  list       List     @relation(fields: [listId], references: [id], onDelete: Cascade)
+  tmdbId     Int
+  mediaType  String
+  title      String
+  posterPath String?
+  /// Drag-and-drop order inside the list.
+  position   Int      @default(0)
+  addedAt    DateTime @default(now())
+
+  @@unique([listId, tmdbId, mediaType])
+  @@index([listId, position])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  /// Signed-in users only — guests can read but not post.
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Denormalized display name kept for when the account is deleted.
+  authorName String?
+  tmdbId    Int
+  mediaType String
+  body      String
+  /// 'visible' | 'flagged' | 'removed'
+  status    String   @default("visible")
+  createdAt DateTime @default(now())
+
+  reactions Reaction[]
+  reports   Report[]
+
+  @@index([tmdbId, mediaType, createdAt])
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  ownerId   String
+  /// 'like' | 'love' | 'funny' | 'info'
+  kind      String
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, ownerId])
+  @@index([commentId])
+}
+
+model Report {
+  id        String   @id @default(cuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  ownerId   String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([commentId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'episode' | 'release' | 'reply' | 'system'
+  kind      String
+  /// JSON payload (title, tmdbId, mediaType, text…).
+  payload   String    @default("{}")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  /// Emoji avatar glyph (no image storage needed).
+  avatar    String?
+  /// Per-profile metadata language override.
+  language  String?
+  /// Kids profile — filters adult content and enables the age-rating guard.
+  isKids    Boolean  @default(false)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// Rolling health of stream providers, updated fire-and-forget by /api/scan.
+/// Powers the admin dashboard "failing providers" panel.
+model ProviderStat {
+  id         String    @id
+  okCount    Int       @default(0)
+  failCount  Int       @default(0)
+  lastOkAt   DateTime?
+  lastFailAt DateTime?
+}
+
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  message   String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
 }

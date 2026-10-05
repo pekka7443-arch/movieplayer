@@ -1,4 +1,6 @@
 import { PROVIDERS } from "@/lib/providers";
+import { withApi } from "@/lib/server/api";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
 
 // GET /api/player-proxy?u=<provider-embed-url>
 //
@@ -65,7 +67,10 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
-export function GET(request: Request) {
+export const GET = withApi("player-proxy", async (request) => {
+  const limited = enforceRateLimit(request, "playerProxy");
+  if (limited) return limited;
+
   const { searchParams } = new URL(request.url);
   const urlParam = searchParams.get("u") ?? "";
   if (!urlParam) {
@@ -111,7 +116,7 @@ export function GET(request: Request) {
   referrerpolicy="no-referrer"
   scrolling="no"
   title="Stream player"
-  onload="try{window.parent.postMessage({type:'cinedeck:player-loaded',url:'${targetEncoded}'}, '*')}catch(e){}"
+  onload="try{window.parent.postMessage({type:'cinedeck:player-loaded',url:'${targetEncoded}'}, location.origin)}catch(e){}"
 ></iframe>
 </body>
 </html>`;
@@ -124,4 +129,4 @@ export function GET(request: Request) {
       "Referrer-Policy": "no-referrer",
     },
   });
-}
+});

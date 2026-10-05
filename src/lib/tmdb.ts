@@ -91,8 +91,13 @@ export interface HistoryItem {
   title: string;
   posterPath: string | null;
   backdropPath: string | null;
+  imdbId?: string | null;
   season: number | null;
   episode: number | null;
+  /** Seconds actually spent watching (wall-clock while the player was up). */
+  positionSeconds: number;
+  /** Runtime in seconds when known — drives the progress bar. */
+  durationSeconds: number | null;
   updatedAt: string;
 }
 
@@ -103,6 +108,7 @@ export interface WatchlistItem {
   title: string;
   posterPath: string | null;
   backdropPath: string | null;
+  imdbId?: string | null;
   addedAt: string;
 }
 
@@ -317,10 +323,19 @@ interface HistoryPost {
   backdropPath: string | null;
   season?: number | null;
   episode?: number | null;
+  imdbId?: string | null;
+  positionSeconds?: number;
+  durationSeconds?: number | null;
+  /** Called by the progress tracker with a fresh snapshot; skips history
+   * invalidation (the server upserts silently — continue-watching refreshes
+   * on the next mount instead of every 15 seconds). */
+  silent?: boolean;
 }
 
-export async function fetchHistory(): Promise<HistoryItem[]> {
-  const data = await apiFetch<{ items: HistoryItem[] }>('/api/history');
+export async function fetchHistory(limit?: number): Promise<HistoryItem[]> {
+  const data = await apiFetch<{ items: HistoryItem[] }>(
+    limit ? `/api/history?limit=${limit}` : '/api/history',
+  );
   return data.items ?? [];
 }
 
@@ -331,6 +346,17 @@ export async function saveHistory(entry: HistoryPost): Promise<HistoryItem> {
     body: JSON.stringify(entry),
   });
   return data.item;
+}
+
+/** Fire-and-forget history progress write used by the player tracker. */
+export function saveHistoryProgress(entry: HistoryPost): void {
+  void fetch('/api/history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+    // keepalive so the flush survives tab close / navigation away.
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 export async function removeHistory(rowId: string): Promise<void> {
@@ -354,6 +380,7 @@ export async function addToWatchlist(entry: {
   title: string;
   posterPath: string | null;
   backdropPath: string | null;
+  imdbId?: string | null;
 }): Promise<WatchlistItem> {
   const data = await apiFetch<{ item: WatchlistItem }>('/api/watchlist', {
     method: 'POST',

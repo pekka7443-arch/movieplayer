@@ -7,6 +7,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Bookmark,
+  ChevronsUpDown,
+  Command as CommandIcon,
   Gamepad2,
   History,
   LogIn,
@@ -22,15 +24,21 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SearchBar } from '@/components/site/search-bar';
 import { LanguageMenu } from '@/components/site/language-menu';
 import { ThemeToggle } from '@/components/site/theme-toggle';
+import { NotificationsButton } from '@/components/site/notifications-button';
+import { fetchProfiles, type ProfileRow } from '@/lib/library';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey } from '@/lib/settings';
 import { useSession, invalidateIdentityCaches } from '@/hooks/use-session';
 import { useHomeSectionNav } from '@/hooks/use-section-nav';
+import { useQuery } from '@tanstack/react-query';
 import { logoutAccount } from '@/lib/auth-client';
 
 function initialsOf(name: string | null, email: string): string {
@@ -50,6 +58,18 @@ export function Header() {
   const hasKey = useHasTmdbKey();
   const { user, loading } = useSession();
   const goSection = useHomeSectionNav();
+  const setPaletteOpen = useCinedeckStore((s) => s.setPaletteOpen);
+  const activeProfileId = useCinedeckStore((s) => s.activeProfileId);
+  const setActiveProfile = useCinedeckStore((s) => s.setActiveProfile);
+
+  const profilesQuery = useQuery<ProfileRow[]>({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
+    enabled: Boolean(user),
+    staleTime: 5 * 60_000,
+  });
+  const profiles = profilesQuery.data ?? [];
+  const activeProfile = profiles.find((p) => p.id === activeProfileId);
 
   // Scroll-aware chrome: the header densifies and gains depth as the page
   // scrolls, then relaxes back at the top.
@@ -109,8 +129,20 @@ export function Header() {
         </div>
 
         <nav aria-label="Site actions" className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Open command palette (Ctrl+K)"
+            title="Command palette (Ctrl+K)"
+            className="hidden h-9 items-center gap-2 rounded-lg border border-zinc-200 px-2.5 text-xs text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900 lg:inline-flex dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+          >
+            <CommandIcon className="size-3.5" aria-hidden />
+            <span>K</span>
+          </Button>
           <LanguageMenu />
           <ThemeToggle />
+          <NotificationsButton />
           <Button
             variant="ghost"
             size="icon"
@@ -182,6 +214,40 @@ export function Header() {
                     {user.email}
                   </p>
                 </DropdownMenuLabel>
+                {profiles.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger className="gap-2 text-sm">
+                        <span aria-hidden>{activeProfile?.avatar ?? '👤'}</span>
+                        {activeProfile?.name ?? 'Default profile'}
+                        {activeProfile?.isKids && (
+                          <span className="rounded bg-emerald-500/15 px-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            KIDS
+                          </span>
+                        )}
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="w-52">
+                        {profiles.map((profile) => (
+                          <DropdownMenuItem
+                            key={profile.id}
+                            onClick={() => {
+                              setActiveProfile(profile.id);
+                              invalidateIdentityCaches(queryClient);
+                            }}
+                            className="gap-2 text-sm"
+                          >
+                            <span aria-hidden>{profile.avatar ?? '👤'}</span>
+                            <span className="min-w-0 flex-1 truncate">{profile.name}</span>
+                            {profile.id === activeProfileId && (
+                              <span aria-hidden className="text-brand">✓</span>
+                            )}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => goSection('my-list')} className="gap-2 text-sm">
                   <Bookmark className="size-4 text-brand" aria-hidden />
@@ -191,6 +257,22 @@ export function Header() {
                   <History className="size-4 text-brand" aria-hidden />
                   Continue watching
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => router.push('/?view=stats', { scroll: false })}
+                  className="gap-2 text-sm"
+                >
+                  <Trophy className="size-4 text-brand" aria-hidden />
+                  Watch stats & achievements
+                </DropdownMenuItem>
+                {user.role === 'admin' && (
+                  <DropdownMenuItem
+                    onClick={() => router.push('/?view=admin', { scroll: false })}
+                    className="gap-2 text-sm"
+                  >
+                    <Settings2 className="size-4 text-brand" aria-hidden />
+                    Admin dashboard
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={openSettings} className="gap-2 text-sm">
                   <Settings2 className="size-4" aria-hidden />
                   Settings

@@ -1,7 +1,8 @@
 :81 {
-	@transform_port_query {
-		query XTransformPort=*
-	}
+	# Only these backend ports may be reached through the XTransformPort
+	# query param — the proxy is otherwise pinned to the main Next.js app.
+	# (3003 = websocket mini-service, 3030 = auxiliary tooling)
+	@transform_port_query expression {query.XTransformPort} in ["3003", "3030"]
 
 	handle @transform_port_query {
 		reverse_proxy localhost:{query.XTransformPort} {

@@ -159,7 +159,7 @@ export function useSeason(
 export function useHistory() {
   return useQuery<HistoryItem[], ApiError>({
     queryKey: ['history'],
-    queryFn: fetchHistory,
+    queryFn: () => fetchHistory(),
     staleTime: 30 * 1000,
     retry: 1,
   });
@@ -173,6 +173,9 @@ export interface SaveHistoryInput {
   backdropPath: string | null;
   season?: number | null;
   episode?: number | null;
+  imdbId?: string | null;
+  positionSeconds?: number;
+  durationSeconds?: number | null;
 }
 
 export function useSaveHistory(): UseMutationResult<HistoryItem, ApiError, SaveHistoryInput> {
@@ -224,6 +227,7 @@ export interface WatchlistToggleInput {
   title: string;
   posterPath: string | null;
   backdropPath: string | null;
+  imdbId?: string | null;
   existingRowId?: string;
 }
 
@@ -239,7 +243,14 @@ export function useToggleWatchlist(): UseMutationResult<
         await removeWatchlist(input.existingRowId);
         return { added: false };
       }
-      await addToWatchlist(input);
+      await addToWatchlist({
+        tmdbId: input.tmdbId,
+        mediaType: input.mediaType,
+        title: input.title,
+        posterPath: input.posterPath,
+        backdropPath: input.backdropPath,
+        imdbId: input.imdbId ?? null,
+      });
       return { added: true };
     },
     onSettled: () => {

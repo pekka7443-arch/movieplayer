@@ -3,7 +3,19 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Eye, EyeOff, KeyRound, Loader2, Palette, Settings2, Trash2 } from 'lucide-react';
+import {
+  DatabaseBackup,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  Palette,
+  Settings2,
+  Trash2,
+  Upload,
+  UsersRound,
+  UserRoundPlus,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,6 +50,19 @@ import { LANGUAGES } from '@/lib/languages';
 import { applyAccentColor, clearTmdbKey, getTmdbKey, setTmdbKey, updateSettings, useHasTmdbKey, useSettings } from '@/lib/settings';
 import { useCinedeckStore } from '@/lib/store';
 import { useClearHistory, useClearWatchlist } from '@/hooks/use-media';
+import { AccountSecurity } from '@/components/site/account-security';
+import { useSession } from '@/hooks/use-session';
+import {
+  exportLibraryJson,
+  exportWatchlistCsv,
+  importTitles,
+  parseLetterboxdCsv,
+  fetchProfiles,
+  createProfile,
+  deleteProfile,
+  type ProfileRow,
+} from '@/lib/library';
+import { useQuery } from '@tanstack/react-query';
 
 /** Curated palette of preset accent colors — every one is bright enough to
  * pair with the dark zinc-950 text we use as foreground. */
@@ -61,6 +86,7 @@ const ACCENT_PRESETS: { name: string; value: string }[] = [
 function SettingsBody() {
   const language = useCinedeckStore((s) => s.language);
   const setLanguage = useCinedeckStore((s) => s.setLanguage);
+  const { user } = useSession();
 
   const settings = useSettings();
   const hasKey = useHasTmdbKey();
@@ -125,6 +151,9 @@ function SettingsBody() {
           Everything is stored locally in your browser.
         </DialogDescription>
       </DialogHeader>
+
+      {/* Account & security — only when signed in */}
+      {user && <AccountSecurity />}
 
       {/* TMDB API key */}
       <section aria-labelledby="settings-tmdb-key" className="space-y-3">
@@ -337,6 +366,22 @@ function SettingsBody() {
         </p>
       </section>
 
+      {/* Library import / export (signed-in or guest) */}
+      <section aria-labelledby="settings-library" className="space-y-2.5">
+        <div className="flex items-center gap-2">
+          <DatabaseBackup className="size-4 text-brand" aria-hidden />
+          <Label className="text-sm font-medium" id="settings-library">
+            Library import &amp; export
+          </Label>
+        </div>
+        <LibraryIO />
+      </section>
+
+      <Separator className="bg-zinc-200 dark:bg-zinc-800/80" />
+
+      {/* Profiles (signed-in) */}
+      {user && <ProfilesManager />}
+
       {/* History */}
       <section aria-labelledby="settings-history" className="space-y-2.5">
         <div className="flex items-center justify-between gap-4">
@@ -432,6 +477,229 @@ function SettingsBody() {
         </div>
       </section>
     </DialogContent>
+  );
+}
+
+function LibraryIO() {
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const onFile = async (file: File) => {
+    const text = await file.text();
+    setBusy(`importing:${file.name}`);
+    try {
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        const titles = parseLetterboxdCsv(text);
+        if (titles.length === 0) {
+          toast.error('No titles found — expected a Letterboxd CSV with a “Name” column');
+          return;
+        }
+        const imported = await importTitles(titles.slice(0, 200), (done, total, title) => {
+          if (done % 10 === 0 || done === total) {
+            toast(`${done}/${total} imported`, { description: `Last: ${title}` });
+          }
+        });
+        toast.success(`Imported ${imported} titles to My List`);
+      } else {
+        const data = JSON.parse(text) as { watchlist?: { tmdbId: number; mediaType: string; title: string; posterPath: string | null; imdbId?: string | null }[] };
+        let count = 0;
+        for (const item of (data.watchlist ?? []).slice(0, 500)) {
+          const res = await fetch('/api/watchlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tmdbId: item.tmdbId,
+              mediaType: item.mediaType === 'tv' ? 'tv' : 'movie',
+              title: item.title,
+              posterPath: item.posterPath,
+              backdropPath: null,
+              imdbId: item.imdbId ?? null,
+            }),
+          });
+          if (res.ok) count += 1;
+        }
+        toast.success(`Imported ${count} watchlist entries`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    } catch {
+      toast.error('Import failed — is the file valid?');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            setBusy('export-json');
+            try {
+              await exportLibraryJson();
+              toast.success('Library exported (JSON)');
+            } finally {
+              setBusy(null);
+            }
+          }}
+          className="h-8 rounded-lg border-zinc-200 text-xs dark:border-zinc-800"
+        >
+          Export everything (JSON)
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            setBusy('export-csv');
+            try {
+              const items = await fetch('/api/watchlist').then((r) => r.json()).then((d) => d.items ?? []);
+              await exportWatchlistCsv(items);
+              toast.success('Watchlist exported (CSV)');
+            } finally {
+              setBusy(null);
+            }
+          }}
+          className="h-8 rounded-lg border-zinc-200 text-xs dark:border-zinc-800"
+        >
+          Export watchlist (CSV)
+        </Button>
+        <label
+          className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900"
+          aria-label="Import JSON or Letterboxd CSV"
+        >
+          <Upload className="size-3.5" aria-hidden />
+          {busy?.startsWith('importing') ? 'Importing…' : 'Import JSON / Letterboxd CSV'}
+          <input
+            type="file"
+            accept=".json,.csv,text/csv,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) void onFile(file);
+            }}
+          />
+        </label>
+      </div>
+      <p className="text-xs text-zinc-500 dark:text-zinc-600">
+        Exports include My List, history, ratings and custom lists. Letterboxd CSVs import up to
+        200 titles (best TMDB match per row).
+      </p>
+    </div>
+  );
+}
+
+function ProfilesManager() {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  const [kids, setKids] = useState(false);
+
+  const profilesQuery = useQuery<ProfileRow[]>({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
+    staleTime: 30_000,
+  });
+
+  const create = async () => {
+    if (name.trim().length < 1) return;
+    try {
+      await createProfile(name.trim(), kids);
+      setName('');
+      setKids(false);
+      toast.success('Profile created');
+      void queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      toast.error(code === 'conflict' ? 'Profile limit reached (5)' : 'Could not create profile');
+    }
+  };
+
+  const remove = async (id: string, profileName: string) => {
+    if (!window.confirm(`Delete the profile “${profileName}” and its saved data?`)) return;
+    try {
+      await deleteProfile(id);
+      toast.success('Profile deleted');
+      void queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    } catch {
+      toast.error('Could not delete profile');
+    }
+  };
+
+  return (
+    <section aria-labelledby="settings-profiles" className="space-y-2.5">
+      <div className="flex items-center gap-2">
+        <UsersRound className="size-4 text-brand" aria-hidden />
+        <Label className="text-sm font-medium" id="settings-profiles">
+          Profiles
+        </Label>
+      </div>
+      <ul className="space-y-1.5">
+        {(profilesQuery.data ?? []).map((profile) => (
+          <li
+            key={profile.id}
+            className="flex items-center gap-2 rounded-lg bg-zinc-100/70 px-2.5 py-1.5 text-sm dark:bg-zinc-900/60"
+          >
+            <span aria-hidden>{profile.avatar ?? '👤'}</span>
+            <span className="min-w-0 flex-1 truncate text-zinc-800 dark:text-zinc-200">{profile.name}</span>
+            {profile.isKids && (
+              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                KIDS
+              </span>
+            )}
+            {profile.id !== 'main' && (
+              <button
+                type="button"
+                aria-label={`Delete profile ${profile.name}`}
+                onClick={() => remove(profile.id, profile.name)}
+                className="rounded p-1 text-zinc-400 hover:bg-red-500/10 hover:text-red-500"
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {(profilesQuery.data?.length ?? 0) < 5 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value.slice(0, 30))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void create();
+            }}
+            placeholder="New profile name…"
+            aria-label="New profile name"
+            className="h-9 w-40 rounded-lg border-zinc-200 text-sm dark:border-zinc-800"
+          />
+          <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+            <input
+              type="checkbox"
+              checked={kids}
+              onChange={(e) => setKids(e.target.checked)}
+              className="size-3.5 accent-[var(--cinedeck-accent)]"
+            />
+            Kids profile
+          </label>
+          <Button
+            type="button"
+            size="sm"
+            disabled={name.trim().length < 1}
+            onClick={create}
+            className="h-8 rounded-lg bg-brand px-2.5 text-xs font-semibold text-brand-foreground hover:bg-brand/90"
+          >
+            <UserRoundPlus className="size-3.5" aria-hidden />
+            Add
+          </Button>
+        </div>
+      )}
+      <p className="text-xs text-zinc-500 dark:text-zinc-600">
+        Up to 5 profiles per account. Kids profiles hide Horror, Thriller, Crime, War, Documentary
+        and Mystery from the browse rows.
+      </p>
+    </section>
   );
 }
 

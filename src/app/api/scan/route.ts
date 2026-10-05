@@ -1,5 +1,8 @@
 import { PROVIDERS, getEmbedUrl, supportsDub } from "@/lib/providers";
 import type { ScanResult } from "@/lib/meta";
+import { withApi } from "@/lib/server/api";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
+import { db } from "@/lib/db";
 
 // GET /api/scan?type=movie|tv&imdb=tt1375666  (or &tmdb=123, or BOTH)
 //              &s=1&e=1  [&dub=fi]
@@ -106,7 +109,10 @@ function withDeadline(p: Promise<ProbeOutcome>, ms: number): Promise<ProbeOutcom
   ]);
 }
 
-export async function GET(request: Request) {
+export const GET = withApi('scan', async (request) => {
+  const limited = enforceRateLimit(request, 'scan');
+  if (limited) return limited;
+
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") === "tv" ? "tv" : "movie";
   const imdbRaw = (searchParams.get("imdb") ?? "").trim();
@@ -192,5 +198,29 @@ export async function GET(request: Request) {
   if (scanCache.size > 200) scanCache.clear();
   scanCache.set(cacheKey, { value: probes, expiresAt: Date.now() + CACHE_TTL_MS });
 
+  // Rolling provider health for the admin dashboard — best-effort writes.
+  void Promise.all(
+    probes.map((row) =>
+      db.providerStat
+        .upsert({
+          where: { id: row.providerId },
+          create: {
+            id: row.providerId,
+            okCount: row.ok ? 1 : 0,
+            failCount: row.ok ? 0 : 1,
+            lastOkAt: row.ok ? new Date() : null,
+            lastFailAt: row.ok ? null : new Date(),
+          },
+          update: {
+            okCount: { increment: row.ok ? 1 : 0 },
+            failCount: { increment: row.ok ? 0 : 1 },
+            lastOkAt: row.ok ? new Date() : undefined,
+            lastFailAt: row.ok ? undefined : new Date(),
+          },
+        })
+        .catch(() => undefined),
+    ),
+  );
+
   return Response.json({ results: probes });
-}
+});

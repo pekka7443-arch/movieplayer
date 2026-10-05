@@ -11,6 +11,7 @@
 
 import https from 'node:https';
 import type { SportsEvent } from '@/lib/server/thesportsdb';
+import { withCache } from '@/lib/server/cache';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports';
 const TIMEOUT_MS = 8_000;
@@ -260,7 +261,14 @@ function cacheSet(key: string, value: unknown, ttlMs: number): void {
 // ---------------------------------------------------------------------------
 
 /** One league's slate for one calendar day (YYYY-MM-DD). */
-async function espnLeagueDay(league: EspnLeague, date: string): Promise<SportsEvent[]> {
+function espnLeagueDay(league: EspnLeague, date: string): Promise<SportsEvent[]> {
+  return withCache(`espn-league:${league.path}:${date}`, () => espnLeagueDayUncached(league, date), {
+    ttlMs: 30_000,
+    staleMs: 5 * 60_000,
+  });
+}
+
+async function espnLeagueDayUncached(league: EspnLeague, date: string): Promise<SportsEvent[]> {
   const key = `espn-day:${league.path}:${date}`;
   const cached = cacheGet<SportsEvent[]>(key);
   if (cached) return cached;
@@ -278,7 +286,14 @@ async function espnLeagueDay(league: EspnLeague, date: string): Promise<SportsEv
  * what the Upcoming tab wants: real fixtures for the next matchday, however
  * far out it is.
  */
-async function espnLeagueNext(league: EspnLeague): Promise<SportsEvent[]> {
+function espnLeagueNext(league: EspnLeague): Promise<SportsEvent[]> {
+  return withCache(`espn-next:${league.path}`, () => espnLeagueNextUncached(league), {
+    ttlMs: 60_000,
+    staleMs: 10 * 60_000,
+  });
+}
+
+async function espnLeagueNextUncached(league: EspnLeague): Promise<SportsEvent[]> {
   const key = `espn-next:${league.path}`;
   const cached = cacheGet<SportsEvent[]>(key);
   if (cached) return cached;

@@ -7,43 +7,62 @@
 // proxy (variants, segments, EXT-X-KEY, EXT-X-MAP, renditions…).
 // It also fixes mixed content: http:// segment URLs become same-origin https.
 //
-// Safety: only http(s) targets, private/loopback hosts blocked, redirects
-// followed manually (max 4), nothing else is forwarded.
+// Safety (SSRF-hardened):
+//  - only http(s), no credentials, host allowlist not possible for IPTV so
+//    instead EVERY target is DNS-resolved and validated as public
+//  - private / loopback / link-local / CGNAT / multicast / reserved /
+//    IPv4-mapped-IPv6 addresses blocked on EVERY redirect hop
+//  - obfuscated hosts (decimal / hex / octal encodings) are normalized
+//    before checks — 2130706433, 0x7f000001, 017700000001 all die
+//  - sockets are PINNED to the validated DNS answer, so a rebinding attack
+//    between check and connect cannot reach an internal network
+//  - redirects followed manually (max 4), each hop re-validated
+//  - playlists capped at 2 MB / 10 s; segments streamed with a 64 MB cap
+//  - content types limited to HLS media (m3u8/ts/mp4/aac/key/octet-stream)
 
 import https from 'node:https';
 import http from 'node:http';
 import type { IncomingMessage } from 'node:http';
 
-const OPEN_TIMEOUT_MS = 12_000;
+import {
+  assertPublicHttpUrl,
+  pinnedLookup,
+  contentTypeAllowed,
+  type ResolvedTarget,
+} from '@/lib/server/ssrf-guard';
+import { withApi } from '@/lib/server/api';
+import { enforceRateLimit } from '@/lib/server/rate-limit';
 
-function isPrivateHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/\.$/, '');
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) {
-    const [a, b] = h.split('.').map(Number);
-    if (a === 0 || a === 10 || a === 127) return true;
-    if (a === 169 && b === 254) return true; // link-local
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-  }
-  if (h === '::1' || h === '[::1]') return true;
-  if (h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80')) return true;
-  return false;
+const OPEN_TIMEOUT_MS = 12_000;
+const PLAYLIST_MAX_BYTES = 2 * 1024 * 1024;
+const SEGMENT_MAX_BYTES = 64 * 1024 * 1024;
+const PLAYLIST_READ_TIMEOUT_MS = 10_000;
+
+interface OpenResult {
+  res: IncomingMessage;
+  target: ResolvedTarget;
+  redirected: boolean;
 }
 
-/** Open a GET stream, following up to 4 redirects, pinned to IPv4. */
-function openStream(url: string, depth = 0): Promise<{ res: IncomingMessage; url: string } | null> {
+/** Open a GET stream against an already-validated target, following ≤4 redirects. */
+function openStream(target: ResolvedTarget, depth = 0): Promise<OpenResult | null> {
   return new Promise((resolve) => {
     if (depth > 4) {
       resolve(null);
       return;
     }
-    const mod = url.startsWith('http://') ? http : https;
+    const isHttps = target.url.startsWith('https:');
+    const mod = isHttps ? https : http;
+    const url = new URL(target.url);
     const req = mod.get(
-      url,
       {
-        family: 4,
+        // Pin the socket to the validated DNS answer (anti-rebinding).
+        lookup: pinnedLookup(target),
+        hostname: url.hostname,
+        port: target.port,
+        path: `${url.pathname}${url.search}`,
+        protocol: target.url.startsWith('https:') ? 'https:' : 'http:',
+        servername: isHttps ? url.hostname : undefined, // keep TLS SNI correct
         headers: {
           accept: '*/*',
           'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) CineDeck/1.0',
@@ -55,7 +74,10 @@ function openStream(url: string, depth = 0): Promise<{ res: IncomingMessage; url
         const location = res.headers.location;
         if (status >= 300 && status < 400 && location) {
           res.resume();
-          resolve(openStream(new URL(location, url).toString(), depth + 1));
+          // Re-validate EVERY hop — redirects must never escape to intranet.
+          assertPublicHttpUrl(new URL(location, target.url).toString())
+            .then((next) => resolve(openStream(next, depth + 1)))
+            .catch(() => resolve(null));
           return;
         }
         if (status < 200 || status >= 300) {
@@ -63,7 +85,7 @@ function openStream(url: string, depth = 0): Promise<{ res: IncomingMessage; url
           resolve(null);
           return;
         }
-        resolve({ res, url });
+        resolve({ res, target, redirected: depth > 0 });
       },
     );
     req.on('timeout', () => req.destroy(new Error('stream_timeout')));
@@ -71,9 +93,10 @@ function openStream(url: string, depth = 0): Promise<{ res: IncomingMessage; url
   });
 }
 
-function readBody(res: IncomingMessage): Promise<string> {
+function readBody(res: IncomingMessage, maxBytes: number): Promise<string> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
+    let size = 0;
     let settled = false;
     const finish = (text: string) => {
       if (settled) return;
@@ -83,8 +106,15 @@ function readBody(res: IncomingMessage): Promise<string> {
       resolve(text);
     };
     // Absolute cap — a trickling upstream must not hold the playlist hostage.
-    const deadline = setTimeout(() => finish(''), 10_000);
-    res.on('data', (c: Buffer) => chunks.push(c));
+    const deadline = setTimeout(() => finish(''), PLAYLIST_READ_TIMEOUT_MS);
+    res.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > maxBytes) {
+        finish('');
+        return;
+      }
+      chunks.push(c);
+    });
     res.on('end', () => finish(Buffer.concat(chunks).toString('utf8')));
     res.on('error', () => finish(''));
   });
@@ -118,40 +148,42 @@ function isPlaylist(res: IncomingMessage, url: string): boolean {
   return clean.endsWith('.m3u8');
 }
 
-export async function GET(request: Request) {
+export const GET = withApi('sports/stream', async (request) => {
+  const limited = enforceRateLimit(request, 'stream');
+  if (limited) return limited;
+
   const { searchParams } = new URL(request.url);
   const raw = searchParams.get('u');
   if (!raw) return new Response('missing u', { status: 400 });
 
-  let target: URL;
+  // Full SSRF gate: scheme, credentials, obfuscated-host normalization,
+  // DNS resolution and public-IP assertion.
+  let target: ResolvedTarget;
   try {
-    target = new URL(raw);
-  } catch {
-    return new Response('bad u', { status: 400 });
-  }
-  if (target.protocol !== 'https:' && target.protocol !== 'http:') {
-    return new Response('bad protocol', { status: 400 });
-  }
-  if (isPrivateHost(target.hostname)) {
-    return new Response('blocked host', { status: 403 });
+    target = await assertPublicHttpUrl(raw);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'blocked';
+    return new Response(`blocked: ${reason}`, { status: 403 });
   }
 
-  const opened = await openStream(target.toString());
+  const opened = await openStream(target);
   if (!opened) {
     return new Response('upstream unreachable', { status: 502 });
   }
-  const { res, url } = opened;
+  const { res, target: finalTarget } = opened;
 
   // Abort the upstream fetch if the browser goes away.
   request.signal.addEventListener('abort', () => res.destroy());
 
-  if (isPlaylist(res, url)) {
-    const body = await readBody(res);
+  const upstreamPath = new URL(finalTarget.url).pathname;
+
+  if (isPlaylist(res, finalTarget.url)) {
+    const body = await readBody(res, PLAYLIST_MAX_BYTES);
     if (!body.startsWith('#EXTM3U')) {
       return new Response('not a playlist', { status: 502 });
     }
     res.destroy(); // body fully consumed
-    return new Response(rewritePlaylist(body, url), {
+    return new Response(rewritePlaylist(body, finalTarget.url), {
       headers: {
         'content-type': 'application/vnd.apple.mpegurl',
         'cache-control': 'no-store',
@@ -159,14 +191,40 @@ export async function GET(request: Request) {
     });
   }
 
-  // Media segment / key / map — pipe bytes straight through.
+  // Media segment / key / map — content-type must look like media.
+  if (!contentTypeAllowed(res.headers['content-type'] ?? null, upstreamPath)) {
+    res.destroy();
+    return new Response('content type not allowed', { status: 415 });
+  }
+
   const contentType = res.headers['content-type'] ?? 'video/mp2t';
+  let forwarded = 0;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       res.on('data', (c: Buffer) => {
-        controller.enqueue(new Uint8Array(c));
+        forwarded += c.length;
+        if (forwarded > SEGMENT_MAX_BYTES) {
+          res.destroy();
+          try {
+            controller.close();
+          } catch {
+            // already closed
+          }
+          return;
+        }
+        try {
+          controller.enqueue(new Uint8Array(c));
+        } catch {
+          // downstream gone
+        }
       });
-      res.on('end', () => controller.close());
+      res.on('end', () => {
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
+      });
       res.on('error', () => {
         try {
           controller.close();
@@ -186,4 +244,4 @@ export async function GET(request: Request) {
       'cache-control': 'no-store',
     },
   });
-}
+});

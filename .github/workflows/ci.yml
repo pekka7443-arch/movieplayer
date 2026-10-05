@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    env:
+      # CI needs a secret-shaped AUTH_SECRET for the auth unit tests.
+      AUTH_SECRET: ci-secret-0123456789abcdef0123456789abcdef
+      DATABASE_URL: file:./db/custom.db
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bunx tsc --noEmit
+
+      - name: Unit tests
+        run: bunx vitest run
+
+      - name: Prisma generate
+        run: bunx prisma generate
+
+      - name: Build
+        run: bun run build
+
+      # Database safety: migrations must always apply cleanly to a fresh DB.
+      - name: Migrations apply to a fresh database
+        run: |
+          rm -f db/ci-fresh.db
+          DATABASE_URL=file:./db/ci-fresh.db bunx prisma migrate deploy

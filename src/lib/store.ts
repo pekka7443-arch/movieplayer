@@ -36,6 +36,12 @@ interface CinedeckState {
   authMode: 'signin' | 'signup';
   openAuth: (mode?: 'signin' | 'signup') => void;
   closeAuth: () => void;
+  /** Global command palette (Ctrl/Cmd+K). */
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
+  /** Active profile id (per-account; 'main' = default). Persisted locally. */
+  activeProfileId: string;
+  setActiveProfile: (profileId: string) => void;
 }
 
 export const useCinedeckStore = create<CinedeckState>((set) => ({
@@ -81,4 +87,24 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
   authMode: 'signin',
   openAuth: (mode = 'signin') => set({ authOpen: true, authMode: mode }),
   closeAuth: () => set({ authOpen: false }),
+  paletteOpen: false,
+  setPaletteOpen: (open) => set({ paletteOpen: open }),
+  activeProfileId: 'main',
+  setActiveProfile: (profileId) => {
+    try {
+      window.localStorage.setItem('cinedeck.activeProfile', profileId);
+    } catch {
+      // storage unavailable — session-only switch
+    }
+    set({ activeProfileId: profileId });
+  },
 }));
+
+/** Hydrate the active profile from localStorage (call once on mount). */
+export function hydrateActiveProfile(): string {
+  try {
+    return window.localStorage.getItem('cinedeck.activeProfile') || 'main';
+  } catch {
+    return 'main';
+  }
+}
