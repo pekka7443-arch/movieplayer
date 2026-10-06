@@ -97,12 +97,30 @@ export interface CatalogParams {
   sort?: 'top' | 'imdbRating';
   genre?: string | null;
   year?: number | null;
+  /** Advanced filters — fully supported with a TMDB key; keyless applies
+   * minRating as a server-side post-filter and ignores the rest honestly. */
+  minRating?: number | null;
+  decade?: number | null;
+  maxRuntime?: number | null;
+  language?: string | null;
+  country?: string | null;
 }
 
 /** Keyless Cinemeta catalog row — Top Rated, New This Year, genre explorer. */
 export function useCatalog(params: CatalogParams, enabled: boolean) {
   return useQuery<MetaSearchItem[], ApiError>({
-    queryKey: ['catalog', params.type, params.sort ?? 'top', params.genre ?? '', params.year ?? ''],
+    queryKey: [
+      'catalog',
+      params.type,
+      params.sort ?? 'top',
+      params.genre ?? '',
+      params.year ?? '',
+      params.minRating ?? '',
+      params.decade ?? '',
+      params.maxRuntime ?? '',
+      params.language ?? '',
+      params.country ?? '',
+    ],
     queryFn: () => fetchCatalogMeta(params),
     enabled,
     staleTime: 10 * 60 * 1000,

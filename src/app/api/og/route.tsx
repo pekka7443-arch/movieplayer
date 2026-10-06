@@ -108,10 +108,10 @@ export async function GET(request: Request) {
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: 14 }}>
             {posters.map((src, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 key={src.slice(-24)}
                 src={src}
+                alt="Movie poster"
                 width={120}
                 height={180}
                 style={{

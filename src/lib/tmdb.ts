@@ -279,11 +279,24 @@ export async function fetchCatalogMeta(params: {
   sort?: 'top' | 'imdbRating';
   genre?: string | null;
   year?: number | null;
+  minRating?: number | null;
+  decade?: number | null;
+  maxRuntime?: number | null;
+  language?: string | null;
+  country?: string | null;
 }): Promise<MetaSearchItem[]> {
   const search = new URLSearchParams({ type: params.type });
   if (params.sort) search.set('sort', params.sort);
   if (params.genre) search.set('genre', params.genre);
   if (params.year) search.set('year', String(params.year));
+  if (params.minRating != null) search.set('minRating', String(params.minRating));
+  if (params.decade != null) search.set('decade', String(params.decade));
+  if (params.maxRuntime != null) search.set('maxRuntime', String(params.maxRuntime));
+  if (params.language) search.set('language', params.language);
+  if (params.country) search.set('country', params.country);
+  // A TMDB key (when the user has one) unlocks the full-power discover path.
+  const key = getTmdbKey();
+  if (key) search.set('key', key);
   const data = await apiFetch<{ results: MetaSearchItem[] }>(
     `/api/meta/catalog?${search.toString()}`,
     { headers: { accept: 'application/json' } }

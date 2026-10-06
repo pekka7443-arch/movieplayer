@@ -562,6 +562,296 @@ export const EXPLORE_GENRES = [
   'Thriller',
 ] as const;
 
+// ---------------------------------------------------------------------------
+// Explore advanced filters + saved presets
+// ---------------------------------------------------------------------------
+
+interface ExploreFilterState {
+  minRating: number | null;
+  decade: number | null;
+  maxRuntime: number | null;
+  language: string | null;
+  country: string | null;
+}
+
+const EMPTY_FILTERS: ExploreFilterState = {
+  minRating: null,
+  decade: null,
+  maxRuntime: null,
+  language: null,
+  country: null,
+};
+
+function filtersHaveValues(f: ExploreFilterState): boolean {
+  return f.minRating != null || f.decade != null || f.maxRuntime != null || f.language != null || f.country != null;
+}
+
+interface ExplorePreset {
+  id: string;
+  name: string;
+  genre: string;
+  filters: ExploreFilterState;
+}
+
+const PRESETS_STORAGE = 'cinedeck.explorePresets';
+
+function loadPresets(): ExplorePreset[] {
+  try {
+    const raw = window.localStorage.getItem(PRESETS_STORAGE);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p): p is ExplorePreset =>
+        typeof p === 'object' && p !== null && typeof (p as ExplorePreset).id === 'string' && typeof (p as ExplorePreset).name === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
+function savePresets(presets: ExplorePreset[]): void {
+  try {
+    window.localStorage.setItem(PRESETS_STORAGE, JSON.stringify(presets));
+  } catch {
+    // storage unavailable — presets stay session-only
+  }
+}
+
+const FILTER_LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'fi', label: 'Finnish' },
+  { value: 'sv', label: 'Swedish' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'it', label: 'Italian' },
+  { value: 'no', label: 'Norwegian' },
+  { value: 'da', label: 'Danish' },
+] as const;
+
+const FILTER_COUNTRIES = [
+  { value: 'us', label: 'United States' },
+  { value: 'gb', label: 'United Kingdom' },
+  { value: 'fi', label: 'Finland' },
+  { value: 'se', label: 'Sweden' },
+  { value: 'no', label: 'Norway' },
+  { value: 'dk', label: 'Denmark' },
+  { value: 'fr', label: 'France' },
+  { value: 'de', label: 'Germany' },
+  { value: 'jp', label: 'Japan' },
+  { value: 'kr', label: 'South Korea' },
+] as const;
+
+/** One compact labeled <select> — native for reliability inside the scroll row. */
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+}) {
+  return (
+    <label className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+      {label}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="h-7 rounded-md border border-zinc-200 bg-white/80 px-1.5 text-xs font-medium text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/**
+ * Advanced Explore filter row: rating (all users) + decade/runtime/language/
+ * country (TMDB key) + saved presets (localStorage, device-local).
+ */
+function ExploreFilterBar({
+  filters,
+  setFilters,
+  hasKey,
+  exploreGenre,
+}: {
+  filters: ExploreFilterState;
+  setFilters: (f: ExploreFilterState) => void;
+  hasKey: boolean;
+  exploreGenre: string;
+}) {
+  const [presets, setPresets] = useState<ExplorePreset[]>([]);
+  const [naming, setNaming] = useState(false);
+  const [presetName, setPresetName] = useState('');
+
+  // Load device-local presets after mount (hydration-safe: the server and
+  // the first client render agree on an empty list).
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setPresets(loadPresets()));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const persist = (next: ExplorePreset[]) => {
+    setPresets(next);
+    savePresets(next);
+  };
+
+  const saveCurrent = () => {
+    const name = presetName.trim();
+    if (!name) return;
+    persist([
+      ...presets,
+      {
+        id: `p_${Date.now().toString(36)}`,
+        name: name.slice(0, 30),
+        genre: exploreGenre,
+        filters: { ...filters },
+      },
+    ]);
+    setPresetName('');
+    setNaming(false);
+  };
+
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+      <FilterSelect
+        label="Rating"
+        value={filters.minRating == null ? '' : String(filters.minRating)}
+        onChange={(v) => setFilters({ ...filters, minRating: v === '' ? null : Number(v) })}
+        options={[
+          { value: '', label: 'Any' },
+          { value: '5', label: '5+' },
+          { value: '6', label: '6+' },
+          { value: '7', label: '7+' },
+          { value: '8', label: '8+' },
+        ]}
+      />
+      <FilterSelect
+        label="Decade"
+        value={filters.decade == null ? '' : String(filters.decade)}
+        onChange={(v) => setFilters({ ...filters, decade: v === '' ? null : Number(v) })}
+        disabled={!hasKey}
+        options={[
+          { value: '', label: 'Any' },
+          { value: '2020', label: '2020s' },
+          { value: '2010', label: '2010s' },
+          { value: '2000', label: '2000s' },
+          { value: '1990', label: '1990s' },
+          { value: '1980', label: '1980s' },
+        ]}
+      />
+      <FilterSelect
+        label="Runtime"
+        value={filters.maxRuntime == null ? '' : String(filters.maxRuntime)}
+        onChange={(v) => setFilters({ ...filters, maxRuntime: v === '' ? null : Number(v) })}
+        disabled={!hasKey}
+        options={[
+          { value: '', label: 'Any' },
+          { value: '90', label: '≤ 90 min' },
+          { value: '120', label: '≤ 2 h' },
+          { value: '150', label: '≤ 2.5 h' },
+        ]}
+      />
+      <FilterSelect
+        label="Language"
+        value={filters.language ?? ''}
+        onChange={(v) => setFilters({ ...filters, language: v === '' ? null : v })}
+        disabled={!hasKey}
+        options={[{ value: '', label: 'Any' }, ...FILTER_LANGUAGES.map((l) => ({ value: l.value, label: l.label }))]}
+      />
+      <FilterSelect
+        label="Country"
+        value={filters.country ?? ''}
+        onChange={(v) => setFilters({ ...filters, country: v === '' ? null : v })}
+        disabled={!hasKey}
+        options={[{ value: '', label: 'Any' }, ...FILTER_COUNTRIES.map((c) => ({ value: c.value, label: c.label }))]}
+      />
+
+      {/* Saved presets — device-local filter combinations */}
+      <div className="ml-auto flex items-center gap-1.5">
+        {presets.length > 0 && (
+          <select
+            aria-label="Apply a saved filter preset"
+            value=""
+            onChange={(e) => {
+              const preset = presets.find((p) => p.id === e.target.value);
+              if (!preset) return;
+              setFilters(preset.filters);
+            }}
+            className="h-7 rounded-md border border-zinc-200 bg-white/80 px-1.5 text-xs font-medium text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
+          >
+            <option value="" disabled>
+              Presets ({presets.length})
+            </option>
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {naming ? (
+          <span className="flex items-center gap-1">
+            <input
+              autoFocus
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveCurrent();
+                if (e.key === 'Escape') setNaming(false);
+              }}
+              placeholder="Preset name…"
+              maxLength={30}
+              className="h-7 w-28 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            />
+            <button
+              type="button"
+              onClick={saveCurrent}
+              className="h-7 rounded-md bg-brand px-2 text-xs font-semibold text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            >
+              Save
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setNaming(true)}
+            disabled={!filtersHaveValues(filters)}
+            aria-label="Save current filters as a preset"
+            className="flex h-7 items-center gap-1 rounded-md border border-zinc-200 px-2 text-xs font-medium text-zinc-600 transition-colors hover:border-brand/40 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            <Bookmark className="size-3" aria-hidden />
+            Save preset
+          </button>
+        )}
+        {presets.length > 0 && (
+          <button
+            type="button"
+            aria-label="Delete the last saved preset"
+            onClick={() => persist(presets.slice(0, -1))}
+            className="flex h-7 items-center rounded-md border border-zinc-200 px-1.5 text-xs text-zinc-400 transition-colors hover:border-red-400/50 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-800"
+          >
+            <X className="size-3" aria-hidden />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem[] }) {
   const router = useRouter();
   const language = useCinedeckStore((s) => s.language);
@@ -573,6 +863,8 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
   const { user } = useSession();
 
   const [exploreGenre, setExploreGenre] = useState<string>('Action');
+  // Advanced Explore filters — rating/decade/runtime/language/country.
+  const [exploreFilters, setExploreFilters] = useState<ExploreFilterState>(EMPTY_FILTERS);
 
   // Onboarding seeds the Explore prefilter with the user's first picked genre.
   useEffect(() => {
@@ -1029,10 +1321,20 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
               ))}
             </div>
           </div>
+          <ExploreFilterBar filters={exploreFilters} setFilters={setExploreFilters} hasKey={hasKey} exploreGenre={exploreGenre} />
           <CatalogRow
             icon={Clapperboard}
             title={`${exploreGenre} ${exploreType === 'movie' ? 'movies' : 'shows'}`}
-            params={{ type: exploreType, genre: exploreGenre, sort: 'top' }}
+            params={{
+              type: exploreType,
+              genre: exploreGenre,
+              sort: 'top',
+              minRating: exploreFilters.minRating,
+              decade: exploreFilters.decade,
+              maxRuntime: exploreFilters.maxRuntime,
+              language: exploreFilters.language,
+              country: exploreFilters.country,
+            }}
             enabled
             priorityCount={6}
           />

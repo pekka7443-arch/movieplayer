@@ -9,10 +9,11 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { CornerDownLeft, Database, Film, Loader2, Search, SearchX, Tv } from 'lucide-react';
+import { CornerDownLeft, Database, Film, Loader2, Mic, MicOff, Search, SearchX, Tv } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useSearch } from '@/hooks/use-media';
 import { useMetaSearch } from '@/hooks/use-meta';
+import { useVoiceSearch } from '@/hooks/use-voice-search';
 import { tmdbImg } from '@/lib/languages';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey } from '@/lib/settings';
@@ -266,6 +267,12 @@ export function SearchBar() {
 
   const showDropdown = open && text.trim().length > 0;
 
+  // Voice search — mic button only when the browser supports Web Speech.
+  const voice = useVoiceSearch((transcript) => {
+    setText(transcript);
+    setOpen(true);
+  });
+
   /** YLE Areena escape hatch — the only real source for Finnish films/series
    * (embed servers don't carry them). Shown whenever a query is active. */
   const areenaRow = trimmed.length >= 2 && (
@@ -440,8 +447,27 @@ export function SearchBar() {
         onKeyDown={onInputKeyDown}
         placeholder="Search movies & shows…  /"
         aria-label="Search movies and shows by title"
-        className="h-10 rounded-lg border-zinc-200 bg-white/80 pl-9 pr-3 text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 [&::-webkit-search-cancel-button]:hidden dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:placeholder:text-zinc-600"
+        className="h-10 rounded-lg border-zinc-200 bg-white/80 pl-9 pr-10 text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 [&::-webkit-search-cancel-button]:hidden dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:placeholder:text-zinc-600"
       />
+      {voice.supported && (
+        <button
+          type="button"
+          onClick={voice.toggle}
+          aria-label={voice.listening ? 'Stop voice search' : 'Search by voice'}
+          aria-pressed={voice.listening}
+          className={`absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+            voice.listening
+              ? 'bg-red-500/15 text-red-500'
+              : 'text-zinc-400 hover:bg-zinc-200/70 hover:text-zinc-700 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-200'
+          }`}
+        >
+          {voice.listening ? (
+            <Mic className="size-4 animate-pulse" aria-hidden />
+          ) : (
+            <MicOff className="size-4" aria-hidden />
+          )}
+        </button>
+      )}
       {showDropdown && (
         <div
           role="listbox"
