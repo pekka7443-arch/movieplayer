@@ -1,5 +1,6 @@
 import { getTmdbKey } from '@/lib/settings';
 import type { MetaSearchItem } from '@/lib/meta';
+import { getActiveProfileId, MAIN_PROFILE_ID } from '@/lib/profile';
 
 // ---------------------------------------------------------------------------
 // Shared types (API contract v1)
@@ -332,9 +333,18 @@ interface HistoryPost {
   silent?: boolean;
 }
 
+/**
+ * Library reads/writes are profile-scoped: every call tags the active profile
+ * ('main' stays the default bucket). Guests always map to 'main' server-side.
+ */
+function profileParam(): string {
+  const id = getActiveProfileId();
+  return id && id !== MAIN_PROFILE_ID ? `&profileId=${encodeURIComponent(id)}` : '';
+}
+
 export async function fetchHistory(limit?: number): Promise<HistoryItem[]> {
   const data = await apiFetch<{ items: HistoryItem[] }>(
-    limit ? `/api/history?limit=${limit}` : '/api/history',
+    `/api/history?${limit ? `limit=${limit}` : ''}${profileParam()}`.replace(/\?&/, '?').replace(/\?$/, ''),
   );
   return data.items ?? [];
 }
@@ -343,7 +353,7 @@ export async function saveHistory(entry: HistoryPost): Promise<HistoryItem> {
   const data = await apiFetch<{ item: HistoryItem }>('/api/history', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(entry),
+    body: JSON.stringify({ ...entry, profileId: getActiveProfileId() }),
   });
   return data.item;
 }
@@ -353,7 +363,7 @@ export function saveHistoryProgress(entry: HistoryPost): void {
   void fetch('/api/history', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(entry),
+    body: JSON.stringify({ ...entry, profileId: getActiveProfileId() }),
     // keepalive so the flush survives tab close / navigation away.
     keepalive: true,
   }).catch(() => undefined);
@@ -370,7 +380,9 @@ export async function clearHistory(): Promise<void> {
 }
 
 export async function fetchWatchlist(): Promise<WatchlistItem[]> {
-  const data = await apiFetch<{ items: WatchlistItem[] }>('/api/watchlist');
+  const data = await apiFetch<{ items: WatchlistItem[] }>(
+    `/api/watchlist?${profileParam().replace(/^&/, '')}`.replace(/\?$/, ''),
+  );
   return data.items ?? [];
 }
 
@@ -385,7 +397,7 @@ export async function addToWatchlist(entry: {
   const data = await apiFetch<{ item: WatchlistItem }>('/api/watchlist', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(entry),
+    body: JSON.stringify({ ...entry, profileId: getActiveProfileId() }),
   });
   return data.item;
 }

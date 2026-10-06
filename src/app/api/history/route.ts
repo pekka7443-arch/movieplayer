@@ -78,12 +78,16 @@ async function finish<T extends Response>(response: T, owner: OwnerContext): Pro
 }
 
 // GET /api/history → most recent entries (default 60; stats pass ?limit=1000).
+// ?profileId= scopes the read to one profile (validated server-side); the
+// default 'main' bucket is used when absent — matching how writes tag rows.
 export const GET = withApi('history', async (request) => {
   const owner = await resolveOwner(request);
-  const requested = Number.parseInt(new URL(request.url).searchParams.get('limit') ?? '', 10);
+  const { searchParams } = new URL(request.url);
+  const requested = Number.parseInt(searchParams.get('limit') ?? '', 10);
   const take = Number.isFinite(requested) ? Math.min(1000, Math.max(1, requested)) : 60;
+  const profileId = await safeProfileId(owner.ownerId, owner.userId !== null, searchParams.get('profileId') ?? undefined);
   const rows = await db.watchHistory.findMany({
-    where: { ownerId: owner.ownerId },
+    where: { ownerId: owner.ownerId, profileId },
     orderBy: { updatedAt: 'desc' },
     take,
   });

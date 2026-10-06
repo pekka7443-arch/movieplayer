@@ -25,6 +25,7 @@ export const GET = withApi('profiles', async (request) => {
         name: row.name,
         avatar: row.avatar,
         isKids: row.isKids,
+        language: row.language,
         position: row.position,
       })),
     }),
@@ -87,6 +88,8 @@ const patchSchema = z.object({
   name: z.string().trim().min(1).max(30).optional(),
   avatar: z.string().trim().max(4).nullable().optional(),
   isKids: z.boolean().optional(),
+  /** Per-profile preferred content language (BCP-47 tag, e.g. fi-FI). */
+  language: z.string().trim().max(20).nullable().optional(),
 });
 
 // PATCH /api/profiles → rename / avatar / kids flag.

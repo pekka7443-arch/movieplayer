@@ -365,6 +365,65 @@ function RowEmptyState({ text }: { text: string }) {
   );
 }
 
+interface RecommendationPayload {
+  results: SearchItem[];
+  becauseOf: string | null;
+}
+
+/**
+ * "Because you watched X" / "Top picks for you" — TMDB-key-only row seeded
+ * from the caller's own watch history (backend merges /recommendations for
+ * the last 3 distinct titles). Renders nothing when the backend returns no
+ * picks (keyless users keep their existing keyless rows) — honest absence,
+ * per the documented recommendation decision.
+ */
+function RecommendationsRow({ enabled }: { enabled: boolean }) {
+  const language = useCinedeckStore((s) => s.language);
+  const { ref, near } = useNearViewport<HTMLDivElement>();
+  const query = useQuery<RecommendationPayload>({
+    queryKey: ['recommendations', language],
+    queryFn: async () => {
+      const res = await fetch(`/api/tmdb/recommendations?language=${encodeURIComponent(language)}`);
+      if (!res.ok) throw new Error('recommendations_unavailable');
+      return (await res.json()) as RecommendationPayload;
+    },
+    enabled: enabled && near,
+    staleTime: 5 * 60_000,
+  });
+
+  const results = query.data?.results ?? [];
+  if (!enabled && !query.isPending) return null;
+  if (query.isSuccess && results.length === 0) return null;
+
+  const becauseOf = query.data?.becauseOf ?? null;
+  const title = becauseOf ? `Because you watched ${becauseOf}` : 'Top picks for you';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 22 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-70px' }}
+      transition={{ duration: 0.5, ease: 'easeOut' }}
+      ref={ref}
+    >
+      <SectionHeading
+        icon={Sparkles}
+        title={title}
+        hint="From your watch history"
+      />
+      {query.isPending || !near ? (
+        <RowSkeletonStripe />
+      ) : query.isError ? null : (
+        <MediaRow label={title}>
+          {results.map((item, index) => (
+            <MediaCard key={rowKeyOf(item)} item={toCardItem(item)} priority={index < 4} index={index} />
+          ))}
+        </MediaRow>
+      )}
+    </motion.div>
+  );
+}
+
 /** Shared fetch-state shell for keyless catalog rows (skeleton / cards / empty). */
 function CatalogRow({
   icon,
@@ -771,6 +830,9 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
           <CustomLists />
         </motion.section>
       )}
+
+      {/* "Because you watched X" / "Top picks for you" — TMDB-key-only */}
+      <RecommendationsRow enabled={hasKey} />
 
       {/* Trending — horizontal scroll row (type follows the browse filter) */}
       <motion.section {...fadeIn} aria-labelledby="trending-week">

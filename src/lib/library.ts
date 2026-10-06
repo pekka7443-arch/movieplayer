@@ -3,6 +3,7 @@
 
 import { fetchHistory, fetchWatchlist } from '@/lib/tmdb';
 import type { MediaType, WatchlistItem } from '@/lib/tmdb';
+import { getActiveProfileId } from '@/lib/profile';
 
 export type { MediaType };
 export type { HistoryItem, WatchlistItem } from '@/lib/tmdb';
@@ -51,8 +52,11 @@ export interface RatingRow {
   updatedAt: string;
 }
 
-export const fetchRatings = (): Promise<RatingRow[]> =>
-  getJson<{ items: RatingRow[] }>('/api/ratings').then((d) => d.items ?? []);
+export const fetchRatings = (): Promise<RatingRow[]> => {
+  const profileId = getActiveProfileId();
+  const suffix = profileId && profileId !== 'main' ? `&profileId=${encodeURIComponent(profileId)}` : '';
+  return getJson<{ items: RatingRow[] }>(`/api/ratings?${suffix}`.replace(/\?$/, '')).then((d) => d.items ?? []);
+};
 
 export interface RatingUpsert {
   tmdbId: number;
@@ -66,7 +70,7 @@ export const saveRating = (input: RatingUpsert): Promise<RatingRow> =>
   getJson<{ item: RatingRow }>('/api/ratings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, profileId: getActiveProfileId() }),
   }).then((d) => d.item);
 
 // ---------------------------------------------------------------------------
@@ -217,11 +221,21 @@ export interface ProfileRow {
   name: string;
   avatar: string | null;
   isKids: boolean;
+  /** Per-profile preferred content language (null = use the device setting). */
+  language: string | null;
   position: number;
 }
 
 export const fetchProfiles = (): Promise<ProfileRow[]> =>
   getJson<{ profiles: ProfileRow[] }>('/api/profiles').then((d) => d.profiles ?? []);
+
+/** Save the content language on one profile (per-profile language feature). */
+export const updateProfileLanguage = (id: string, language: string | null): Promise<void> =>
+  getJson('/api/profiles', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, language }),
+  }).then(() => undefined);
 
 export const createProfile = (name: string, isKids = false): Promise<ProfileRow> =>
   getJson<{ profile: ProfileRow }>('/api/profiles', {

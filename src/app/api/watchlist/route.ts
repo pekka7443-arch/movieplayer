@@ -66,10 +66,13 @@ async function finish<T extends Response>(response: T, owner: OwnerContext): Pro
 
 // GET /api/watchlist → the caller's saved titles (newest 200).
 // Works signed-in (session cookie) or as a guest (device cookie, auto-minted).
+// ?profileId= scopes the read to one profile (validated server-side).
 export const GET = withApi('watchlist', async (request) => {
   const owner = await resolveOwner(request);
+  const { searchParams } = new URL(request.url);
+  const profileId = await safeProfileId(owner.ownerId, owner.userId !== null, searchParams.get('profileId') ?? undefined);
   const rows = await db.watchlistItem.findMany({
-    where: { ownerId: owner.ownerId },
+    where: { ownerId: owner.ownerId, profileId },
     orderBy: { addedAt: 'desc' },
     take: 200,
   });

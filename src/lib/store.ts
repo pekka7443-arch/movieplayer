@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { DEFAULT_LANGUAGE } from '@/lib/languages';
 import { DEFAULT_PROVIDER, sanitizePreferredServer } from '@/lib/providers';
 import { getSettings, updateSettings } from '@/lib/settings';
+import { getActiveProfileId, setActiveProfileId, syncProfileLanguage } from '@/lib/profile';
 
 interface CinedeckState {
   /** Active TMDB content language (persisted). */
@@ -49,6 +50,8 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
   setLanguage: (code) => {
     updateSettings({ language: code });
     set({ language: code });
+    // Non-main profiles remember their own content language across devices.
+    syncProfileLanguage(code);
   },
   contentType: 'all',
   setContentType: (type) => {
@@ -91,20 +94,12 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   activeProfileId: 'main',
   setActiveProfile: (profileId) => {
-    try {
-      window.localStorage.setItem('cinedeck.activeProfile', profileId);
-    } catch {
-      // storage unavailable — session-only switch
-    }
+    setActiveProfileId(profileId);
     set({ activeProfileId: profileId });
   },
 }));
 
 /** Hydrate the active profile from localStorage (call once on mount). */
 export function hydrateActiveProfile(): string {
-  try {
-    return window.localStorage.getItem('cinedeck.activeProfile') || 'main';
-  } catch {
-    return 'main';
-  }
+  return getActiveProfileId();
 }

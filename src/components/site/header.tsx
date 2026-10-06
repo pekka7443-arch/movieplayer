@@ -234,6 +234,11 @@ export function Header() {
                             onClick={() => {
                               setActiveProfile(profile.id);
                               invalidateIdentityCaches(queryClient);
+                              // Per-profile content language: switching profiles
+                              // adopts that profile's saved language (if set).
+                              if (profile.language) {
+                                useCinedeckStore.getState().setLanguage(profile.language);
+                              }
                             }}
                             className="gap-2 text-sm"
                           >

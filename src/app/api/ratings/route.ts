@@ -48,7 +48,18 @@ const upsertSchema = z.object({
   score: z.number().int().min(1).max(10).nullable().optional(),
   note: z.string().max(2000).nullable().optional(),
   watched: z.boolean().optional(),
+  profileId: z.string().max(40).optional(),
 });
+
+const PROFILE_RE = /^[a-z0-9-]{1,40}$/;
+
+/** Profile ids come from the client — constrain + validate against the owner. */
+async function safeProfileId(ownerId: string, isUser: boolean, raw: string | undefined): Promise<string> {
+  const candidate = raw && PROFILE_RE.test(raw) ? raw : 'main';
+  if (!isUser || candidate === 'main') return candidate;
+  const profile = await db.profile.findFirst({ where: { userId: ownerId, id: candidate } });
+  return profile ? profile.id : 'main';
+}
 
 async function finish<T extends Response>(response: T, owner: OwnerContext): Promise<T> {
   await withSessionRefresh(response, owner);
@@ -56,10 +67,16 @@ async function finish<T extends Response>(response: T, owner: OwnerContext): Pro
 }
 
 // GET /api/ratings → the caller's ratings (scored, noted, watched).
+// ?profileId= scopes the read to one profile (validated server-side).
 export const GET = withApi('ratings', async (request) => {
   const owner = await resolveOwner(request);
+  const profileId = await safeProfileId(
+    owner.ownerId,
+    owner.userId !== null,
+    new URL(request.url).searchParams.get('profileId') ?? undefined,
+  );
   const rows = await db.rating.findMany({
-    where: { ownerId: owner.ownerId },
+    where: { ownerId: owner.ownerId, profileId },
     orderBy: { updatedAt: 'desc' },
     take: 1000,
   });
@@ -77,6 +94,7 @@ export const POST = withApi('ratings-post', async (request) => {
   const { tmdbId, mediaType, score, note, watched } = parsed.data;
 
   const owner = await resolveOwner(request);
+  const profileId = await safeProfileId(owner.ownerId, owner.userId !== null, parsed.data.profileId);
 
   const row = await db.rating.upsert({
     where: {
@@ -84,12 +102,13 @@ export const POST = withApi('ratings-post', async (request) => {
         ownerId: owner.ownerId,
         tmdbId,
         mediaType,
-        profileId: 'main',
+        profileId,
       },
     },
     create: {
       ownerId: owner.ownerId,
       userId: owner.userId,
+      profileId,
       tmdbId,
       mediaType,
       score: score ?? null,
