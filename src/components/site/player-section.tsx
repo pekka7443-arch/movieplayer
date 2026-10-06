@@ -530,6 +530,45 @@ export function PlayerSection({
     lastSavedRef.current = 0;
   }, [tmdbId, imdbId, season, episode]);
 
+  // ---------------------------------------------------------------------------
+  // "Up next" auto-advance — when the wall-clock watched time crosses ~92% of
+  // the known runtime (cross-origin embeds can't report the real playhead),
+  // offer the next episode with a 10s countdown. Tab-hidden time doesn't
+  // count; dismissing once per episode keeps it from nagging.
+  // ---------------------------------------------------------------------------
+  const [upNextSeconds, setUpNextSeconds] = useState<number | null>(null);
+  const upNextFiredRef = useRef('');
+  const hasNextEpisode = isTv && (maxEpisode === null || episode < maxEpisode);
+
+  useEffect(() => {
+    if (!iframeReady || !hasNextEpisode || durationSeconds == null || durationSeconds <= 0) return;
+    const firedKey = `${watchId}:${season}:${episode}`;
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      if (upNextFiredRef.current === firedKey) return;
+      if (watchedSecondsRef.current >= durationSeconds * 0.92) {
+        upNextFiredRef.current = firedKey;
+        setUpNextSeconds(10);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [iframeReady, hasNextEpisode, durationSeconds, watchId, season, episode]);
+
+  useEffect(() => {
+    if (upNextSeconds == null) return;
+    const timer = setTimeout(() => {
+      if (document.hidden) return; // hold the countdown while the tab is hidden
+      const next = upNextSeconds - 1;
+      if (next <= 0) {
+        setUpNextSeconds(null);
+        navigateTo(season, episode + 1);
+      } else {
+        setUpNextSeconds(next);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [upNextSeconds, navigateTo, season, episode]);
+
   return (
     <section aria-label="Player" className="relative">
       {/* Ambient amber glow behind the player */}
@@ -971,6 +1010,49 @@ export function PlayerSection({
             }}
             className="absolute inset-0 size-full border-0"
           />
+          {/* "Up next" countdown — fires near the end of the episode */}
+          {upNextSeconds != null && (
+            <div
+              role="alertdialog"
+              aria-label="Up next episode"
+              className="absolute bottom-4 right-4 z-10 flex max-w-[22rem] items-center gap-3 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-xl shadow-black/20 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95"
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand text-base font-bold text-brand-foreground" aria-hidden>
+                {upNextSeconds}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  Up next
+                </span>
+                <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  {title} · S{season} E{episode + 1}
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setUpNextSeconds(null);
+                    navigateTo(season, episode + 1);
+                  }}
+                  className="h-8 rounded-lg bg-brand px-2.5 text-xs font-semibold text-brand-foreground hover:bg-brand/90"
+                >
+                  Play now
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUpNextSeconds(null)}
+                  aria-label="Dismiss the up next prompt"
+                  className="h-8 rounded-lg border-zinc-300 px-2 text-xs text-zinc-600 dark:border-zinc-600 dark:text-zinc-300"
+                >
+                  <X className="size-3.5" aria-hidden />
+                </Button>
+              </span>
+            </div>
+          )}
           {!iframeReady && (
             <div
               role="status"
