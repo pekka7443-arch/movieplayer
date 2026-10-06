@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Columns2,
   ExternalLink,
   History,
   Info,
@@ -22,6 +23,7 @@ import {
   RefreshCw,
   Search,
   SkipForward,
+  Star,
   Trophy,
   Tv,
   Volume2,
@@ -34,6 +36,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/lib/settings';
+import { useFavoriteTeams, teamKey } from '@/lib/sports-favorites';
 
 // ---------------------------------------------------------------------------
 // Types (mirror the server routes)
@@ -66,7 +69,7 @@ interface SportsChannel {
   group: string;
 }
 
-type SportsTab = 'today' | 'upcoming' | 'channels';
+type SportsTab = 'today' | 'upcoming' | 'channels' | 'standings' | 'multiview';
 
 const SPORT_CHIPS = [
   'All',
@@ -205,6 +208,52 @@ function useSportsChannels() {
       return json.channels;
     },
     staleTime: 30 * 60_000,
+    retry: 1,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Standings — league tables via the keyless ESPN standings endpoint
+// ---------------------------------------------------------------------------
+
+interface StandingsRow {
+  team: string;
+  logo: string | null;
+  stats: { label: string; value: string }[];
+  note: string | null;
+}
+
+const STANDINGS_LEAGUE_OPTIONS: { path: string; label: string }[] = [
+  { path: 'soccer/eng.1', label: 'Premier League' },
+  { path: 'soccer/esp.1', label: 'LaLiga' },
+  { path: 'soccer/ita.1', label: 'Serie A' },
+  { path: 'soccer/ger.1', label: 'Bundesliga' },
+  { path: 'soccer/fra.1', label: 'Ligue 1' },
+  { path: 'soccer/fin.1', label: 'Veikkausliiga' },
+  { path: 'soccer/swe.1', label: 'Allsvenskan' },
+  { path: 'soccer/nor.1', label: 'Eliteserien' },
+  { path: 'soccer/den.1', label: 'Superliga' },
+  { path: 'soccer/usa.1', label: 'MLS' },
+  { path: 'soccer/mex.1', label: 'Liga MX' },
+  { path: 'soccer/uefa.champions', label: 'Champions League' },
+  { path: 'football/nfl', label: 'NFL' },
+  { path: 'basketball/nba', label: 'NBA' },
+  { path: 'basketball/wnba', label: 'WNBA' },
+  { path: 'hockey/nhl', label: 'NHL' },
+  { path: 'baseball/mlb', label: 'MLB' },
+];
+
+function useStandings(path: string, enabled: boolean) {
+  return useQuery<StandingsRow[]>({
+    queryKey: ['sports-standings', path],
+    queryFn: async () => {
+      const res = await fetchCapped(`/api/sports/standings?league=${encodeURIComponent(path)}`);
+      if (!res.ok) throw new Error('standings_unreachable');
+      const json = (await res.json()) as { rows: StandingsRow[] };
+      return json.rows;
+    },
+    enabled,
+    staleTime: 10 * 60_000,
     retry: 1,
   });
 }
@@ -455,6 +504,43 @@ function LinksRow({ event, dense }: { event: SportsEvent; dense?: boolean }) {
 
 const STATE_RANK = { live: 0, upcoming: 1, unknown: 2, finished: 3 } as const;
 
+// ---------------------------------------------------------------------------
+// Favorite teams (device-local) — star toggle on every schedule row
+// ---------------------------------------------------------------------------
+
+function FavoriteStar({ home, away }: { home: string; away: string }) {
+  const { favorites, toggle } = useFavoriteTeams();
+  const isFav = favorites.has(teamKey(home)) || favorites.has(teamKey(away));
+  return (
+    <button
+      type="button"
+      aria-label={isFav ? `Remove ${home} / ${away} from favorites` : `Add ${home} vs ${away} to favorites`}
+      aria-pressed={isFav}
+      onClick={(e) => {
+        e.stopPropagation();
+        // Toggle whichever side is not yet starred; both starred → unstar both.
+        if (favorites.has(teamKey(home)) && favorites.has(teamKey(away))) {
+          toggle(home);
+          toggle(away);
+        } else if (favorites.has(teamKey(home))) {
+          toggle(home);
+        } else if (favorites.has(teamKey(away))) {
+          toggle(away);
+        } else {
+          toggle(home);
+          toggle(away);
+        }
+      }}
+      className={cn(
+        'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
+        isFav ? 'text-amber-500' : 'text-zinc-300 hover:text-amber-500 dark:text-zinc-600',
+      )}
+    >
+      <Star className={cn('size-4', isFav && 'fill-amber-500')} aria-hidden />
+    </button>
+  );
+}
+
 function ScheduleRow({
   event,
   active,
@@ -652,6 +738,8 @@ function ScheduleRow({
           {event.venue ?? ''}
         </span>
 
+        <FavoriteStar home={event.home} away={event.away} />
+
         <Button
           type="button"
           size="sm"
@@ -739,6 +827,41 @@ function ScheduleList({
           </ul>
         </section>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Multi-view — watch two live games side by side (each cell resolves its own
+// feeds via its own useMatchCandidates instance)
+// ---------------------------------------------------------------------------
+
+function MultiViewCell({
+  event,
+  onBrowseChannels,
+}: {
+  event: SportsEvent;
+  onBrowseChannels: () => void;
+}) {
+  const candidates = useMatchCandidates(event);
+  return (
+    <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <div className="flex items-center gap-2 border-b border-zinc-200 bg-white/70 px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-900/60">
+        {event.state === 'live' && <LiveDot />}
+        <span className="min-w-0 truncate text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+          {event.home} vs {event.away}
+        </span>
+        <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+          {event.league}
+        </span>
+      </div>
+      <LivePlayer
+        event={event}
+        candidates={candidates.data ?? []}
+        loading={candidates.isPending}
+        onBrowseChannels={onBrowseChannels}
+        onRetryScan={() => void candidates.refetch()}
+      />
     </div>
   );
 }
@@ -2193,6 +2316,184 @@ function WatchPage({
 // Main view
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Standings tab — league select + keyless ESPN table
+// ---------------------------------------------------------------------------
+
+function StandingsTab({
+  league,
+  onLeagueChange,
+}: {
+  league: string;
+  onLeagueChange: (path: string) => void;
+}) {
+  const query = useStandings(league, true);
+  const statLabels = query.data?.[0]?.stats.map((s) => s.label) ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <select
+          value={league}
+          onChange={(e) => onLeagueChange(e.target.value)}
+          aria-label="Select league"
+          className="h-9 rounded-lg border border-zinc-200 bg-white/80 px-2.5 text-sm font-medium text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
+        >
+          {STANDINGS_LEAGUE_OPTIONS.map((o) => (
+            <option key={o.path} value={o.path}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">Keyless — powered by ESPN public data</span>
+      </div>
+
+      {query.isPending ? (
+        <div className="space-y-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 rounded-lg bg-zinc-200 dark:bg-zinc-900" />
+          ))}
+        </div>
+      ) : query.isError || (query.data ?? []).length === 0 ? (
+        <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
+          Standings aren&apos;t available for this league right now — try another one.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white/70 dark:border-zinc-800 dark:bg-zinc-900/60">
+          <table className="w-full min-w-[26rem] text-sm">
+            <thead>
+              <tr className="border-b border-zinc-200 text-left text-[11px] uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                <th scope="col" className="px-3 py-2 font-semibold">#</th>
+                <th scope="col" className="px-3 py-2 font-semibold">Team</th>
+                {statLabels.map((label) => (
+                  <th key={label} scope="col" className="px-2.5 py-2 text-right font-semibold">
+                    {label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(query.data ?? []).map((row, i) => (
+                <tr
+                  key={row.team}
+                  className="border-b border-zinc-100 last:border-b-0 dark:border-zinc-800/60"
+                >
+                  <td className="px-3 py-2 font-mono text-xs text-zinc-400 dark:text-zinc-500">{i + 1}</td>
+                  <td className="px-3 py-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      {row.logo ? (
+                        <img
+                          src={row.logo}
+                          alt=""
+                          width={18}
+                          height={18}
+                          loading="lazy"
+                          className="size-[18px] shrink-0 object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.visibility = 'hidden';
+                          }}
+                        />
+                      ) : null}
+                      <span className="truncate font-medium text-zinc-900 dark:text-zinc-100">{row.team}</span>
+                    </span>
+                  </td>
+                  {statLabels.map((label, idx) => (
+                    <td key={label} className="px-2.5 py-2 text-right font-mono text-xs tabular-nums text-zinc-700 dark:text-zinc-300">
+                      {row.stats[idx]?.value ?? '—'}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Multi-view tab — pick up to 2 live games, watch them side by side
+// ---------------------------------------------------------------------------
+
+function MultiViewTab({
+  liveEvents,
+  picks,
+  onToggle,
+  onBrowseChannels,
+}: {
+  liveEvents: SportsEvent[];
+  picks: string[];
+  onToggle: (id: string) => void;
+  onBrowseChannels: () => void;
+}) {
+  const picked = picks
+    .map((id) => liveEvents.find((e) => e.id === id))
+    .filter((e): e is SportsEvent => Boolean(e));
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        Watch two live games side by side — pick up to two matches below.
+      </p>
+
+      {liveEvents.length === 0 ? (
+        <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
+          Nothing is live right now — check back at kickoff.
+        </p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {liveEvents.slice(0, 18).map((event) => {
+            const selected = picks.includes(event.id);
+            const pickIndex = picks.indexOf(event.id);
+            return (
+              <button
+                key={event.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => onToggle(event.id)}
+                className={cn(
+                  'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
+                  selected
+                    ? 'border-brand bg-brand-soft'
+                    : 'border-zinc-200 bg-white/70 hover:border-brand/40 dark:border-zinc-800 dark:bg-zinc-900/60',
+                )}
+              >
+                <span
+                  className={cn(
+                    'flex size-6 shrink-0 items-center justify-center rounded-md font-mono text-[11px] font-bold',
+                    selected ? 'bg-brand text-brand-foreground' : 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+                  )}
+                  aria-hidden
+                >
+                  {selected ? pickIndex + 1 : '+'}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {event.home} vs {event.away}
+                  </span>
+                  <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">{event.league}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div
+        className={cn(
+          'grid gap-4',
+          picked.length === 2 ? 'md:grid-cols-2' : picked.length === 1 ? 'md:grid-cols-2' : 'grid-cols-1',
+        )}
+      >
+        {picked.map((event) => (
+          <MultiViewCell key={event.id} event={event} onBrowseChannels={onBrowseChannels} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function SportsView() {
   const router = useRouter();
   const params = useSearchParams();
@@ -2202,6 +2503,12 @@ export function SportsView() {
   const [date, setDate] = useState(todayUtc());
   const [channel, setChannel] = useState<SportsChannel | null>(null);
   const [channelQuery, setChannelQuery] = useState('');
+  // Standings tab state + multi-view picks (max 2 games side by side).
+  const [standingsLeague, setStandingsLeague] = useState('soccer/eng.1');
+  const [multiPicks, setMultiPicks] = useState<string[]>([]);
+  // Favorite teams filter (device-local, starred rows on the schedule).
+  const { favorites } = useFavoriteTeams();
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   const eventsQuery = useSportsEvents(date, tab === 'today' ? sport : 'All');
   const upcomingQuery = useUpcomingEvents(tab === 'upcoming' || watchId !== null);
@@ -2231,6 +2538,16 @@ export function SportsView() {
   const matchQuery = useMatchCandidates(watchEvent);
 
   const liveCount = useMemo(() => allDayQuery.data?.filter((e) => e.state === 'live').length ?? 0, [allDayQuery.data]);
+
+  // Favorites filter — matches either side of the fixture.
+  const shownEvents = useMemo(() => {
+    if (!favoritesOnly || favorites.size === 0) return events;
+    return events.filter((e) => favorites.has(teamKey(e.home)) || favorites.has(teamKey(e.away)));
+  }, [events, favoritesOnly, favorites]);
+  const liveEvents = useMemo(
+    () => allDayQuery.data?.filter((e) => e.state === 'live') ?? [],
+    [allDayQuery.data],
+  );
   const liveBySport = useMemo(() => {
     const m = new Map<string, number>();
     for (const e of allDayQuery.data ?? []) {
@@ -2376,6 +2693,8 @@ export function SportsView() {
           [
             { id: 'today', label: 'Live & today', icon: Radio },
             { id: 'upcoming', label: 'Upcoming', icon: CalendarDays },
+            { id: 'standings', label: 'Standings', icon: Trophy },
+            { id: 'multiview', label: 'Multi-view', icon: Columns2 },
             { id: 'channels', label: 'TV Channels', icon: Tv },
           ] as const
         ).map(({ id, label, icon: Icon }) => (
@@ -2402,6 +2721,22 @@ export function SportsView() {
       {tab === 'today' && (
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
+            {favorites.size > 0 && (
+              <button
+                type="button"
+                aria-pressed={favoritesOnly}
+                onClick={() => setFavoritesOnly((v) => !v)}
+                className={cn(
+                  'h-8 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
+                  favoritesOnly
+                    ? 'border-amber-400 bg-amber-400 text-zinc-950'
+                    : 'border-zinc-200 bg-white/70 text-zinc-600 hover:border-amber-400/60 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100',
+                )}
+              >
+                <Star className={cn('mr-1 inline size-3', favoritesOnly ? 'fill-zinc-950' : 'fill-amber-400 text-amber-500')} aria-hidden />
+                Favorites ({favorites.size})
+              </button>
+            )}
             {SPORT_CHIPS.map((chip) => {
               const count = chip === 'All' ? liveCount : (liveBySport.get(chip) ?? 0);
               return (
@@ -2480,13 +2815,14 @@ export function SportsView() {
             The sports schedule didn&apos;t load right now — TheSportsDB may be briefly unreachable.
             It will retry automatically.
           </p>
-        ) : events.length === 0 ? (
+        ) : shownEvents.length === 0 ? (
           <p className="rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
-            No {sport !== 'All' ? SPORT_LABELS[sport] ?? sport : ''} events listed for this day.
-            Try another day or check the Upcoming tab.
+            {favoritesOnly && events.length > 0
+              ? 'None of your favorite teams play today — try another day or unfilter Favorites.'
+              : `No ${sport !== 'All' ? SPORT_LABELS[sport] ?? sport : ''} events listed for this day. Try another day or check the Upcoming tab.`}
           </p>
         ) : (
-          <ScheduleList events={events} watchId={watchId} onWatch={openWatch} />
+          <ScheduleList events={shownEvents} watchId={watchId} onWatch={openWatch} />
         )
       )}
 
@@ -2504,6 +2840,25 @@ export function SportsView() {
         ) : (
           <ScheduleList events={upcomingQuery.data!} watchId={watchId} onWatch={openWatch} />
         )
+      )}
+
+      {tab === 'standings' && <StandingsTab league={standingsLeague} onLeagueChange={setStandingsLeague} />}
+
+      {tab === 'multiview' && (
+        <MultiViewTab
+          liveEvents={liveEvents}
+          picks={multiPicks}
+          onToggle={(id) =>
+            setMultiPicks((picks) =>
+              picks.includes(id)
+                ? picks.filter((p) => p !== id)
+                : picks.length >= 2
+                  ? [...picks.slice(1), id]
+                  : [...picks, id],
+            )
+          }
+          onBrowseChannels={() => setTab('channels')}
+        />
       )}
 
       {tab === 'channels' && (

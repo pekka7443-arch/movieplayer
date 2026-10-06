@@ -15,6 +15,7 @@ import { withCache } from '@/lib/server/cache';
 import { withRetries } from '@/lib/server/http';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports';
+const STANDINGS_BASE = 'https://site.web.api.espn.com/apis/v2/sports';
 const TIMEOUT_MS = 8_000;
 
 // Public entry: retry transient nulls (network/timeout/5xx soft-fails) with
@@ -415,4 +416,88 @@ export async function espnEventById(id: string): Promise<SportsEvent | null> {
   );
   cacheSet(key, event, event?.state === 'live' ? 60_000 : 10 * 60_000);
   return event;
+}
+
+// ---------------------------------------------------------------------------
+// Standings — /apis/site/v2/sports/{path}/standings (keyless, same public API)
+// ---------------------------------------------------------------------------
+
+export interface EspnStandingsRow {
+  team: string;
+  logo: string | null;
+  /** Curated stat columns in display order (skips whatever the sport lacks). */
+  stats: { label: string; value: string }[];
+  /** ESPN qualifier note ("Playoffs"/"Relegation"-style color marker). */
+  note: string | null;
+}
+
+const STAT_LABELS: Record<string, string> = {
+  gamesPlayed: 'GP',
+  wins: 'W',
+  losses: 'L',
+  ties: 'D',
+  draws: 'D',
+  points: 'Pts',
+  pointDifferential: 'DIFF',
+  goalDifference: 'GD',
+  pointsFor: 'PF',
+  pointsAgainst: 'PA',
+  rank: '#',
+  playoffSeed: '#',
+  overall: 'REC',
+};
+
+/** Preferred display order for the standings table columns. */
+const STAT_ORDER = ['GP', 'W', 'D', 'L', 'Pts', 'REC', 'DIFF', 'PF', 'PA', '#'];
+
+interface EspnStandingsPayload {
+  children?: {
+    name?: string;
+    standings?: {
+      entries?: {
+        team?: { displayName?: string; logos?: { href: string }[] };
+        note?: { color?: string; description?: string };
+        stats?: { name?: string; displayValue?: string }[];
+      }[];
+    };
+  }[];
+}
+
+/** One league's standings table (10-minute cache). Works keyless for both
+ * soccer and US majors via ESPN's web API (site.api's standings endpoint is
+ * empty for soccer and conference-only for US sports). */
+export async function espnStandings(path: string): Promise<EspnStandingsRow[]> {
+  const key = `espn-standings:${path}`;
+  const cached = cacheGet<EspnStandingsRow[]>(key);
+  if (cached) return cached;
+
+  const url = path.startsWith('soccer/')
+    ? `${STANDINGS_BASE}/${path}/standings?season=${new Date().getFullYear()}`
+    : `${STANDINGS_BASE}/${path}/standings`;
+  const board = await httpsJson<EspnStandingsPayload>(url);
+  const rows: EspnStandingsRow[] = [];
+  for (const child of board?.children ?? []) {
+    for (const entry of child.standings?.entries ?? []) {
+      const collected: { label: string; value: string; order: number }[] = [];
+      for (const stat of entry.stats ?? []) {
+        const label = stat.name ? STAT_LABELS[stat.name] : undefined;
+        if (!label || stat.displayValue == null || stat.displayValue === '') continue;
+        collected.push({
+          label,
+          value: stat.displayValue,
+          order: STAT_ORDER.indexOf(label) === -1 ? 99 : STAT_ORDER.indexOf(label),
+        });
+      }
+      collected.sort((a, b) => a.order - b.order);
+      const stats = collected.slice(0, 5).map(({ label, value }) => ({ label, value }));
+      rows.push({
+        team: entry.team?.displayName ?? '—',
+        logo: entry.team?.logos?.[0]?.href ?? null,
+        stats,
+        note: entry.note?.description ?? null,
+      });
+    }
+  }
+  cacheSet(key, rows, 10 * 60_000);
+  return rows;
 }
