@@ -54,6 +54,18 @@ export const GET = withApi('achievements', async (request) => {
   const rated = ratings.filter((r) => r.score != null).length;
   const watched = ratings.filter((r) => r.watched).length;
 
+  // Arcade badges — personal bests live in ArcadeScore (owner-scoped, so
+  // guests earn arcade badges with their device identity too).
+  const arcadeScores = await db.arcadeScore.findMany({
+    where: { ownerId: owner.ownerId },
+    select: { game: true, score: true, total: true },
+  });
+  const bestDaily = arcadeScores
+    .filter((s) => s.game === 'daily')
+    .reduce((max, s) => Math.max(max, s.score), 0);
+  const arcadeGames = arcadeScores.length;
+  const perfectArcade = arcadeScores.some((s) => s.total != null && s.total > 0 && s.score >= s.total);
+
   const achievements: Achievement[] = [
     { key: 'first-play', title: 'First play', hint: 'Open any title', earned: history.length >= 1, progress: Math.min(history.length, 1), goal: 1 },
     { key: 'ten-movies', title: '10 movies', hint: `${movies}/10 movies watched`, earned: movies >= 10, progress: Math.min(movies, 10), goal: 10 },
@@ -63,6 +75,9 @@ export const GET = withApi('achievements', async (request) => {
     { key: 'marathon', title: 'Marathon', hint: `${hours}/10 hours watched`, earned: hours >= 10, progress: Math.min(hours, 10), goal: 10 },
     { key: 'binge', title: 'Binger', hint: `${Math.min(history.filter((h) => h.mediaType === 'tv').length, 25)}/25 episodes opened`, earned: history.filter((h) => h.mediaType === 'tv').length >= 25, progress: Math.min(history.filter((h) => h.mediaType === 'tv').length, 25), goal: 25 },
     { key: 'collector', title: 'Collector', hint: `${watched}/25 marked watched`, earned: watched >= 25, progress: Math.min(watched, 25), goal: 25 },
+    { key: 'arcade-rookie', title: 'Arcade rookie', hint: `${arcadeGames}/1 arcade game played`, earned: arcadeGames >= 1, progress: Math.min(arcadeGames, 1), goal: 1 },
+    { key: 'daily-player', title: 'Daily player', hint: `${Math.min(bestDaily, 8)}/8 on a daily challenge`, earned: bestDaily >= 8, progress: Math.min(bestDaily, 8), goal: 8 },
+    { key: 'quiz-master', title: 'Quiz master', hint: 'Perfect run on any quiz', earned: perfectArcade, progress: perfectArcade ? 1 : 0, goal: 1 },
   ];
 
   return Response.json({ achievements });

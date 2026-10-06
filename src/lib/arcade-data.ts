@@ -98,6 +98,94 @@ export function buildRounds(count = 10): QuizRound[] {
 export { shuffleCopy };
 
 // ---------------------------------------------------------------------------
+// Year quiz — "what year did X come out?" from the same verified pool
+// ---------------------------------------------------------------------------
+
+export interface YearQuizRound {
+  title: string;
+  year: number;
+  mediaType: 'movie' | 'tv';
+  options: number[];
+}
+
+function distractorYears(correct: number, taken: Set<number>): number[] {
+  const out: number[] = [];
+  let offset = 1;
+  while (out.length < 3 && offset < 40) {
+    for (const sign of [-1, 1]) {
+      const candidate = correct + sign * offset;
+      if (candidate >= 1950 && candidate <= 2100 && !out.includes(candidate) && !taken.has(candidate)) {
+        out.push(candidate);
+        if (out.length === 3) break;
+      }
+    }
+    offset += 1;
+  }
+  return out;
+}
+
+export function buildYearRounds(count = 10): YearQuizRound[] {
+  const picks = shuffleCopy(EMOJI_QUIZ).slice(0, Math.min(count, EMOJI_QUIZ.length));
+  return picks.map((item) => {
+    const options = shuffleCopy([item.year, ...distractorYears(item.year, new Set([item.year]))]);
+    return { title: item.answer, year: item.year, mediaType: item.mediaType, options };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Daily challenge — deterministic per-UTC-date selection (mulberry32 PRNG)
+// ---------------------------------------------------------------------------
+
+/** Stable string hash (FNV-1a) → 32-bit seed. */
+export function dailySeed(dateIso: string, salt = 'cinedeck-daily'): number {
+  let h = 0x811c9dc5;
+  const input = `${salt}:${dateIso}`;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle<T>(input: readonly T[], rng: () => number): T[] {
+  const arr = [...input];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** Deterministic emoji-quiz rounds for a given date — every device sees the same daily challenge. */
+export function buildDailyRounds(dateIso: string, count = 8): QuizRound[] {
+  const rng = mulberry32(dailySeed(dateIso));
+  const picks = seededShuffle(EMOJI_QUIZ, rng).slice(0, Math.min(count, EMOJI_QUIZ.length));
+  return picks.map((item) => {
+    const distractors = seededShuffle(
+      EMOJI_QUIZ.filter((q) => q.answer !== item.answer),
+      rng,
+    )
+      .slice(0, 3)
+      .map((q) => q.answer);
+    return { item, options: seededShuffle([item.answer, ...distractors], rng) };
+  });
+}
+
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ---------------------------------------------------------------------------
 // Roulette — slot-machine random pick, all entries are real TMDB ids
 // ---------------------------------------------------------------------------
 
