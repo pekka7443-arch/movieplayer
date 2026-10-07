@@ -35,7 +35,11 @@ interface CinedeckState {
   /** Sign in / create account dialog. */
   authOpen: boolean;
   authMode: 'signin' | 'signup';
-  openAuth: (mode?: 'signin' | 'signup') => void;
+  /** Optional contextual nudge shown at the top of the auth dialog
+   *  (e.g. "Sign in to watch Dune: Part Two") + return-to navigation. */
+  authNotice: string | null;
+  authReturnTo: string | null;
+  openAuth: (mode?: 'signin' | 'signup', options?: { notice?: string | null; returnTo?: string | null }) => void;
   closeAuth: () => void;
   /** Global command palette (Ctrl/Cmd+K). */
   paletteOpen: boolean;
@@ -88,8 +92,16 @@ export const useCinedeckStore = create<CinedeckState>((set) => ({
   closeArcade: () => set({ arcadeOpen: false }),
   authOpen: false,
   authMode: 'signin',
-  openAuth: (mode = 'signin') => set({ authOpen: true, authMode: mode }),
-  closeAuth: () => set({ authOpen: false }),
+  authNotice: null,
+  authReturnTo: null,
+  openAuth: (mode = 'signin', options) =>
+    set({
+      authOpen: true,
+      authMode: mode,
+      authNotice: options?.notice ?? null,
+      authReturnTo: options?.returnTo ?? null,
+    }),
+  closeAuth: () => set({ authOpen: false, authNotice: null, authReturnTo: null }),
   paletteOpen: false,
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   activeProfileId: 'main',

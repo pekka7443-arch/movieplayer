@@ -32,6 +32,8 @@ export const GET = withApi('auth/sessions', async (request) => {
       expiresAt: true,
       userAgent: true,
       ip: true,
+      country: true,
+      city: true,
     },
   });
 
@@ -44,6 +46,8 @@ export const GET = withApi('auth/sessions', async (request) => {
       expiresAt: row.expiresAt.toISOString(),
       userAgent: row.userAgent,
       ip: row.ip,
+      country: row.country,
+      city: row.city,
     })),
   });
 });

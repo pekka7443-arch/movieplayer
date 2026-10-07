@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useSession } from '@/hooks/use-session';
+import { useSettings } from '@/lib/settings';
 import {
   fetchNotifications,
   markNotificationsRead,
@@ -32,11 +33,13 @@ export function NotificationsButton() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useSession();
+  const settings = useSettings();
 
   const query = useQuery<{ items: NotificationRow[]; unread: number }>({
     queryKey: ['notifications'],
     queryFn: fetchNotifications,
-    enabled: Boolean(user),
+    // The user's Watchlist-alerts setting gates polling entirely.
+    enabled: Boolean(user) && settings.notificationsEnabled,
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
   });

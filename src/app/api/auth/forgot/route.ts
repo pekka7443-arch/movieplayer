@@ -32,7 +32,7 @@ export const POST = withApi('auth/forgot', async (request) => {
   const user = await db.user.findUnique({ where: { email: parsed.data.email } });
   if (user) {
     const { token, expiresAt } = signStatelessToken('reset', user.id, 30 * 60);
-    const url = `${appBaseUrl(request)}/?view=reset&token=${encodeURIComponent(token)}`;
+    const url = `${appBaseUrl(request)}/reset-password?token=${encodeURIComponent(token)}`;
     await mailer().send({
       to: user.email,
       subject: 'CineDeck password reset',

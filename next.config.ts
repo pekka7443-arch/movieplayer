@@ -67,6 +67,10 @@ const CSP = [
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: false,
+  // Native/dirname-dependent server packages must stay outside the bundler:
+  // geoip-lite loads its MaxMind .dat files relative to __dirname, which the
+  // bundler rewrites to a virtual /ROOT and breaks module init.
+  serverExternalPackages: ["geoip-lite", "qrcode"],
   // Type errors fail the build — no more silent ignoreBuildErrors.
   typescript: {
     ignoreBuildErrors: false,

@@ -3,9 +3,10 @@
 import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Film, Play, Star, Tv } from 'lucide-react';
+import { Film, Lock, Play, Star, Tv } from 'lucide-react';
 import { tmdbImg } from '@/lib/languages';
 import { yearOf, type MediaType } from '@/lib/tmdb';
+import { usePlaybackLocked } from '@/components/site/sign-in-gate';
 
 export interface MediaCardItem {
   /** TMDB ID — used to build the watch URL (?id=…&type=…). */
@@ -45,6 +46,9 @@ export function MediaCard({
 }) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
+  // Guests see a subtle lock badge on the play affordance — the click still
+  // navigates to the watch view, where the full "Sign in to watch" gate lives.
+  const playbackLocked = usePlaybackLocked();
 
   // 3D tilt motion values (springs return the card to flat on leave).
   const rotateX = useMotionValue(0);
@@ -154,13 +158,18 @@ export function MediaCard({
           </span>
         )}
 
-        {/* Center play button — springs in on hover. */}
+        {/* Center play button — springs in on hover. Guests get a lock. */}
         <span
           aria-hidden
           className="absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 group-hover:opacity-100"
         >
-          <span className="flex size-11 scale-50 items-center justify-center rounded-full bg-brand text-zinc-950 shadow-[0_0_28px_color-mix(in_srgb,var(--cinedeck-accent)_45%,transparent)] transition-transform duration-300 group-hover:scale-100">
+          <span className="relative flex size-11 scale-50 items-center justify-center rounded-full bg-brand text-zinc-950 shadow-[0_0_28px_color-mix(in_srgb,var(--cinedeck-accent)_45%,transparent)] transition-transform duration-300 group-hover:scale-100">
             <Play className="size-5 translate-x-[1px] fill-zinc-950" aria-hidden />
+            {playbackLocked && (
+              <span className="absolute -right-1.5 -top-1.5 flex size-4.5 items-center justify-center rounded-full bg-zinc-950 text-amber-300 ring-1 ring-white/25">
+                <Lock className="size-2.5" aria-hidden />
+              </span>
+            )}
           </span>
         </span>
 

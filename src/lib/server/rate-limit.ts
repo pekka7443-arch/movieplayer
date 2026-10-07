@@ -86,8 +86,8 @@ export interface RateLimitSpec {
 }
 
 export const RATE_LIMITS = {
-  login: { limit: 10, windowSec: 5 * 60 },
-  register: { limit: 5, windowSec: 60 * 60 },
+  login: { limit: 5, windowSec: 15 * 60 },
+  register: { limit: 10, windowSec: 60 * 60 },
   forgotPassword: { limit: 5, windowSec: 60 * 60 },
   resetPassword: { limit: 10, windowSec: 60 * 60 },
   verifyEmail: { limit: 20, windowSec: 60 * 60 },

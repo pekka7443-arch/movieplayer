@@ -45,13 +45,15 @@ describe('password strength', () => {
     expect(checkPassword('salasanakissa').acceptable).toBe(false); // Finnish common word
     expect(checkPassword('aaaaaaaaaa').acceptable).toBe(false);
     expect(checkPassword('abcdefghijkl').acceptable).toBe(false); // letters only, <16
+    expect(checkPassword('***REMOVED***').acceptable).toBe(false); // no special char
   });
 
   it('accepts solid passphrases and scores them', () => {
     const verdict = checkPassword('Tr0ub4dor&Kettle9');
     expect(verdict.acceptable).toBe(true);
     expect(verdict.score).toBeGreaterThanOrEqual(2);
-    expect(checkPassword('correct horse battery staple 42').acceptable).toBe(true); // 16+ may skip digit
+    // Policy: 8+ chars with a letter, a number AND a special character.
+    expect(checkPassword('correct horse battery staple 42!').acceptable).toBe(true);
   });
 });
 

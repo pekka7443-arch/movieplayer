@@ -1,9 +1,9 @@
-import { z } from 'zod';
+import QRCode from 'qrcode';
 
 import { db } from '@/lib/db';
 import { resolveOwner } from '@/lib/server/auth';
 import { withApi, apiError } from '@/lib/server/api';
-import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
+import { enforceSameOrigin } from '@/lib/server/http';
 import { enforceRateLimit } from '@/lib/server/rate-limit';
 import { generateTotpSecret } from '@/lib/server/totp';
 
@@ -13,8 +13,9 @@ export const dynamic = 'force-dynamic';
  * POST /api/account/totp/setup → generate a fresh TOTP secret for the
  * account. The secret is stored but NOT active until /totp/enable verifies a
  * live code — re-running setup simply replaces the pending secret.
- * Returns the base32 secret + otpauth:// URL (paste into any authenticator;
- * a QR renderer can consume the URL client-side).
+ * Returns the base32 secret, the otpauth:// URL AND a QR code data URL so
+ * the settings UI can render a scannable code without any client-side
+ * QR library.
  */
 export const POST = withApi('account/totp/setup', async (request) => {
   const originError = enforceSameOrigin(request);
@@ -37,7 +38,12 @@ export const POST = withApi('account/totp/setup', async (request) => {
   }
 
   const { secret, otpauthUrl } = generateTotpSecret(user.email);
+  const qrDataUrl = await QRCode.toDataURL(otpauthUrl, {
+    width: 256,
+    margin: 1,
+    color: { dark: '#18181b', light: '#ffffff' },
+  });
   await db.user.update({ where: { id: owner.userId }, data: { totpSecret: secret } });
 
-  return Response.json({ secret, otpauthUrl });
+  return Response.json({ secret, otpauthUrl, qrDataUrl });
 });

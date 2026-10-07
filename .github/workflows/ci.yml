@@ -44,3 +44,47 @@ jobs:
         run: |
           rm -f db/ci-fresh.db
           DATABASE_URL=file:./db/ci-fresh.db bunx prisma migrate deploy
+
+      # Admin seed: idempotent, safe to run on a fresh DB and twice.
+      - name: Admin seed smoke test
+        run: |
+          rm -f db/ci-seed.db
+          DATABASE_URL=file:./db/ci-seed.db ADMIN_EMAIL=ci-admin@test.local ADMIN_PASSWORD='Ci-Seed-P4ss!' bun run seed
+          DATABASE_URL=file:./db/ci-seed.db ADMIN_EMAIL=ci-admin@test.local ADMIN_PASSWORD='Ci-Seed-P4ss!' bun run seed
+
+  e2e:
+    name: Playwright e2e
+    runs-on: ubuntu-latest
+    env:
+      AUTH_SECRET: ci-secret-0123456789abcdef0123456789abcdef
+      DATABASE_URL: file:./db/custom.db
+      E2E_RATELIMIT_BYPASS: ci-e2e-bypass-0123456789abcdef
+      ADMIN_EMAIL: ci-admin@test.local
+      ADMIN_PASSWORD: Ci-Seed-P4ss!
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: bunx playwright install chromium --with-deps
+
+      - name: Migrate dev database
+        run: bunx prisma migrate deploy
+
+      - name: Start dev server
+        run: |
+          bun run dev &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/api/health >/dev/null && break
+            sleep 2
+          done
+
+      - name: Run e2e tests
+        run: bunx playwright test

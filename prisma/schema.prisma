@@ -17,12 +17,28 @@ model User {
   email         String    @unique
   name          String?
   passwordHash  String
-  /// 'user' | 'admin' — first registered account becomes admin.
+  /// 'user' | 'admin' — the seeded env admin is the primary admin.
   role          String    @default("user")
   emailVerified DateTime?
   /// Base32 TOTP secret (RFC 6238). Null = 2FA never set up.
   totpSecret    String?
   totpEnabled   Boolean   @default(false)
+  /// SHA-256 hashes of one-time 2FA backup codes (JSON array). Null = none.
+  backupCodes   String?
+  /// Emoji glyph (preset avatar). Null = initials fallback.
+  avatar        String?
+  /// Truncated signup IP + geo (never the raw IP).
+  signupIp      String?
+  country       String?
+  city          String?
+  /// True right after an env-seeded admin is created — UI nags to change it.
+  mustChangePassword Boolean @default(false)
+  /// Suspension (moderation). endsAt null = permanent.
+  suspendedAt      DateTime?
+  suspensionReason String?
+  suspensionEndsAt DateTime?
+  /// Soft delete — account is recoverable for 30 days, then purged.
+  deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -37,6 +53,8 @@ model User {
   notifications  Notification[]
   resetTokens    PasswordResetToken[]
   verifyTokens   EmailVerificationToken[]
+  loginAttempts  LoginAttempt[]
+  adminNotes     AdminNote[]
 }
 
 /// Guest device identities (cinedeck_guest cookie). Rows in the library
@@ -64,7 +82,10 @@ model Session {
   lastSeenAt DateTime @default(now())
   expiresAt DateTime
   userAgent String?
+  /// Truncated IP (last octet zeroed) — raw IPs are never stored.
   ip        String?
+  country   String?
+  city      String?
 
   @@index([userId])
 }
@@ -325,4 +346,57 @@ model ArcadeScore {
 
   @@unique([ownerId, game])
   @@index([game, score])
+}
+
+/// Security ledger of every login attempt (success + failure). Powers the
+/// admin "failed logins" panel and per-user login history. Only truncated
+/// IPs are stored — the last octet is zeroed before insert.
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  success   Boolean
+  /// 'bad_credentials' | 'suspended' | 'rate_limited' | 'ok'
+  reason    String?
+  ip        String?
+  userAgent String?
+  country   String?
+  city      String?
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([createdAt])
+}
+
+/// Immutable admin action + security event log. Never edited, only appended
+/// and purged after 1 year by the health cleanup job.
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?
+  actorEmail  String?
+  action      String
+  /// e.g. 'user' | 'comment' | 'session' | 'flag' | 'announcement'
+  targetType  String?
+  targetId    String?
+  /// Human-readable target label (email / title) for quick scanning.
+  targetLabel String?
+  /// JSON payload with action-specific details.
+  details     String   @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+}
+
+/// Internal admin notes about a user — never shown to the user themselves.
+model AdminNote {
+  id           String   @id @default(cuid())
+  targetUserId String
+  target       User     @relation(fields: [targetUserId], references: [id], onDelete: Cascade)
+  authorEmail  String
+  body         String
+  createdAt    DateTime @default(now())
+
+  @@index([targetUserId, createdAt])
 }

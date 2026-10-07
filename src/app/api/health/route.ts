@@ -1,14 +1,21 @@
 import { db } from '@/lib/db';
 import { cleanupStaleGuests } from '@/lib/server/auth';
 import { withApi } from '@/lib/server/api';
+import { ensureAdminSeed } from '@/lib/server/seed';
+import { purgeExpiredDeletedUsers } from '@/lib/server/cleanup';
 
 export const dynamic = 'force-dynamic';
 
 // GET /api/health → liveness + dependency snapshot (used by uptime checks
 // and the admin dashboard). Never leaks internals beyond counts.
 export const GET = withApi('health', async () => {
-  // Opportunistic daily housekeeping: purge guest rows older than a year.
+  // Opportunistic housekeeping (all throttled internally):
+  // - admin seed from .env (first boot / idempotent re-checks)
+  // - guest rows older than a year
+  // - accounts soft-deleted more than 30 days ago
+  void ensureAdminSeed();
   void cleanupStaleGuests();
+  void purgeExpiredDeletedUsers();
 
   const startedAt = Date.now();
   let dbOk = true;

@@ -51,7 +51,7 @@ export const POST = withApi('auth/reset', async (request) => {
   await db.$transaction([
     db.user.update({
       where: { id: user.id },
-      data: { passwordHash: hashPassword(parsed.data.password) },
+      data: { passwordHash: hashPassword(parsed.data.password), mustChangePassword: false },
     }),
     // Every device signs in again after a reset.
     db.session.deleteMany({ where: { userId: user.id } }),

@@ -32,6 +32,8 @@ export interface CinedeckSettings {
   contentType: 'all' | 'movie' | 'tv';
   /** Genre chips picked during onboarding — seed the Explore prefilter. */
   favoriteGenres: string[];
+  /** Notification center: episode/release alerts for watchlist titles. */
+  notificationsEnabled: boolean;
 }
 
 export const FAILOVER_SECONDS_MIN = 6;
@@ -55,6 +57,7 @@ export const DEFAULT_SETTINGS: CinedeckSettings = {
   dubLanguage: 'original',
   contentType: 'all',
   favoriteGenres: [],
+  notificationsEnabled: true,
 };
 
 function normalizeDubLanguage(value: unknown): string {
@@ -191,6 +194,8 @@ export function getSettings(): CinedeckSettings {
           favoriteGenres: Array.isArray(parsed.favoriteGenres)
             ? parsed.favoriteGenres.filter((g): g is string => typeof g === 'string').slice(0, 12)
             : [],
+          notificationsEnabled:
+            typeof parsed.notificationsEnabled === 'boolean' ? parsed.notificationsEnabled : true,
         };
       }
     } catch {

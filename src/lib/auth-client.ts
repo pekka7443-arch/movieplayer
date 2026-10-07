@@ -9,18 +9,22 @@ export interface AuthUser {
   email: string;
   name: string | null;
   role: string;
+  avatar?: string | null;
   emailVerified?: boolean;
   totpEnabled?: boolean;
+  mustChangePassword?: boolean;
 }
 
 export type AuthErrorCode =
   | 'email_taken'
   | 'invalid_credentials'
   | 'invalid_code'
+  | 'invalid_token'
   | 'pending_expired'
   | 'bad_request'
   | 'weak_password'
   | 'rate_limited'
+  | 'account_suspended'
   | 'network'
   | 'unknown';
 
@@ -40,10 +44,12 @@ export const AUTH_ERROR_TEXT: Record<AuthErrorCode, string> = {
   email_taken: 'That email already has an account — sign in instead.',
   invalid_credentials: 'Wrong email or password.',
   invalid_code: 'That code didn’t match — check your authenticator and try again.',
+  invalid_token: 'That link is no longer valid — request a fresh one.',
   pending_expired: 'The sign-in attempt expired — start again.',
   bad_request: 'Check the highlighted fields and try again.',
   weak_password: 'That password is too weak.',
   rate_limited: 'Too many attempts — wait a minute and try again.',
+  account_suspended: 'Your account has been suspended. Contact support.',
   network: 'Network error — check your connection.',
   unknown: 'Something went wrong. Try again.',
 };
@@ -55,6 +61,7 @@ interface AuthResponsePayload {
   problems?: string[];
   totpRequired?: boolean;
   pendingToken?: string;
+  verificationSent?: boolean;
 }
 
 /** Read the machine error code out of an API response body — accepts the
@@ -97,14 +104,19 @@ async function authFetch(path: string, body: unknown): Promise<AuthUser | AuthTo
       'email_taken',
       'invalid_credentials',
       'invalid_code',
+      'invalid_token',
       'pending_expired',
       'bad_request',
       'weak_password',
+      'account_suspended',
     ];
     const code = (known as readonly string[]).includes(payloadErrorCode(payload) ?? '')
       ? (payloadErrorCode(payload) as AuthErrorCode)
       : 'unknown';
-    throw new AuthError(code, AUTH_ERROR_TEXT[code], payload.problems);
+    // Server-supplied messages (suspension reason, etc.) win over static text.
+    const serverMessage =
+      payload.error && typeof payload.error !== 'string' ? payload.error.message : undefined;
+    throw new AuthError(code, serverMessage ?? AUTH_ERROR_TEXT[code], payload.problems);
   }
   return payload.user;
 }
@@ -122,14 +134,15 @@ export async function registerAccount(
   name: string,
   email: string,
   password: string,
-): Promise<AuthUser> {
+): Promise<{ user: AuthUser; verificationSent: boolean }> {
   const result = await authFetch('/api/auth/register', {
     name: name.trim() || undefined,
     email,
     password,
   });
   if (isTotpPending(result)) throw new AuthError('unknown', AUTH_ERROR_TEXT.unknown);
-  return result;
+  const user = result as AuthUser & { verificationSent?: boolean };
+  return { user, verificationSent: user.verificationSent === true };
 }
 
 export async function loginAccount(
@@ -191,6 +204,21 @@ function writeCachedUser(user: AuthUser | null): void {
   }
 }
 
+/**
+ * Optimistically adopt a freshly authenticated user: called by the auth
+ * dialog right after login/register so the UI flips to signed-in instantly
+ * WITHOUT waiting on a refetch of /api/auth/me (whose response can race and
+ * — landing later — would momentarily repaint guest state).
+ */
+export function adoptAuthenticatedUser(
+  queryClient: { cancelQueries: (f: { queryKey: unknown[] }) => Promise<void>; setQueryData: (k: unknown[], v: unknown) => void },
+  user: AuthUser,
+): void {
+  void queryClient.cancelQueries({ queryKey: ['session'] });
+  writeCachedUser(user);
+  queryClient.setQueryData(['session'], user);
+}
+
 export async function fetchMe(): Promise<AuthUser | null> {
   let response: Response;
   try {
@@ -228,6 +256,8 @@ export interface SessionInfo {
   expiresAt: string;
   userAgent: string | null;
   ip: string | null;
+  country?: string | null;
+  city?: string | null;
 }
 
 export async function fetchSessions(): Promise<SessionInfo[]> {
@@ -292,22 +322,24 @@ export async function changePassword(
 // Two-factor auth
 // ---------------------------------------------------------------------------
 
-export async function totpSetup(): Promise<{ secret: string; otpauthUrl: string }> {
+export async function totpSetup(): Promise<{ secret: string; otpauthUrl: string; qrDataUrl?: string }> {
   const res = await fetch('/api/account/totp/setup', { method: 'POST' });
-  const data = (await res.json().catch(() => ({}))) as { secret?: string; otpauthUrl?: string };
+  const data = (await res.json().catch(() => ({}))) as { secret?: string; otpauthUrl?: string; qrDataUrl?: string };
   if (!res.ok || !data.secret || !data.otpauthUrl) {
     throw new AuthError('unknown', AUTH_ERROR_TEXT.unknown);
   }
-  return { secret: data.secret, otpauthUrl: data.otpauthUrl };
+  return { secret: data.secret, otpauthUrl: data.otpauthUrl, qrDataUrl: data.qrDataUrl };
 }
 
-export async function totpEnable(code: string): Promise<void> {
+export async function totpEnable(code: string): Promise<{ backupCodes?: string[] }> {
   const res = await fetch('/api/account/totp/enable', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
   });
+  const data = (await res.json().catch(() => ({}))) as { backupCodes?: string[] };
   if (!res.ok) throw new AuthError('invalid_code', AUTH_ERROR_TEXT.invalid_code);
+  return { backupCodes: data.backupCodes };
 }
 
 export async function totpDisable(code: string): Promise<void> {
@@ -317,4 +349,68 @@ export async function totpDisable(code: string): Promise<void> {
     body: JSON.stringify({ code }),
   });
   if (!res.ok) throw new AuthError('invalid_code', AUTH_ERROR_TEXT.invalid_code);
+}
+
+// ---------------------------------------------------------------------------
+// Account management (profile / email / export / delete)
+// ---------------------------------------------------------------------------
+
+export async function updateProfile(
+  patch: { name?: string; avatar?: string | null },
+): Promise<AuthUser> {
+  const res = await fetch('/api/account/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const data = (await res.json().catch(() => ({}))) as { user?: AuthUser; error?: { code?: string } };
+  if (!res.ok || !data.user) throw new AuthError('bad_request', AUTH_ERROR_TEXT.bad_request);
+  return data.user;
+}
+
+export async function changeEmail(
+  password: string,
+  newEmail: string,
+): Promise<{ email: string; verificationSent: boolean }> {
+  const res = await fetch('/api/account/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password, newEmail }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    email?: string;
+    verificationSent?: boolean;
+    error?: { code?: string; message?: string };
+  };
+  if (!res.ok || !data.email) {
+    const code = (data.error?.code ?? 'bad_request') as AuthErrorCode;
+    throw new AuthError(code, data.error?.message ?? AUTH_ERROR_TEXT[code] ?? AUTH_ERROR_TEXT.unknown);
+  }
+  return { email: data.email, verificationSent: data.verificationSent ?? false };
+}
+
+export async function deleteAccount(password: string): Promise<void> {
+  const res = await fetch('/api/account/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password, confirm: 'DELETE' }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+  if (!res.ok) {
+    const code = (data.error?.code ?? 'unknown') as AuthErrorCode;
+    throw new AuthError(code, data.error?.message ?? AUTH_ERROR_TEXT[code] ?? AUTH_ERROR_TEXT.unknown);
+  }
+}
+
+/** URL that streams the signed-in user's JSON data export. */
+export const ACCOUNT_EXPORT_URL = '/api/account/export';
+
+/** Ask the server to re-send the email-verification link. */
+export async function resendVerification(email: string): Promise<void> {
+  const res = await fetch('/api/auth/verify', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw new AuthError('unknown', AUTH_ERROR_TEXT.unknown);
 }

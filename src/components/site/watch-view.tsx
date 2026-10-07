@@ -6,6 +6,7 @@ import { BookmarkCheck, BookmarkPlus, ChevronLeft, ExternalLink, Share2, Tv } fr
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { PlayerSection } from '@/components/site/player-section';
+import { GuestPlayLock, usePlaybackLocked } from '@/components/site/sign-in-gate';
 import { InfoSection } from '@/components/site/info-section';
 import { SimilarRow, MetaSimilarRow } from '@/components/site/similar-row';
 import { MetaInfo } from '@/components/site/meta-info';
@@ -180,6 +181,8 @@ export function WatchView({
     }
   };
 
+  const playbackLocked = usePlaybackLocked();
+
   return (
     <div>
       {/* Local accent bloom behind the player — draws the eye to the action. */}
@@ -237,16 +240,20 @@ export function WatchView({
         )}
       </div>
 
-      <PlayerSection
-        tmdbId={tmdbId}
-        imdbId={imdbId}
-        mediaType={mediaType}
-        season={season}
-        episode={episode}
-        details={details}
-        detailsLoading={detailsLoading}
-        hasKey={hasKey}
-      />
+      {playbackLocked ? (
+        <GuestPlayLock title={watchTitle || undefined} returnTo={typeof window !== 'undefined' ? window.location.href : undefined} />
+      ) : (
+        <PlayerSection
+          tmdbId={tmdbId}
+          imdbId={imdbId}
+          mediaType={mediaType}
+          season={season}
+          episode={episode}
+          details={details}
+          detailsLoading={detailsLoading}
+          hasKey={hasKey}
+        />
+      )}
 
       {tmdbId !== undefined && <WatchRating tmdbId={tmdbId} mediaType={mediaType} />}
 

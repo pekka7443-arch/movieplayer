@@ -46,11 +46,12 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LANGUAGES } from '@/lib/languages';
 import { applyAccentColor, clearTmdbKey, getTmdbKey, setTmdbKey, updateSettings, useHasTmdbKey, useSettings } from '@/lib/settings';
 import { useCinedeckStore } from '@/lib/store';
 import { useClearHistory, useClearWatchlist } from '@/hooks/use-media';
-import { AccountSecurity } from '@/components/site/account-security';
+import { AccountPanel, SecurityPanel, DangerZonePanel } from '@/components/site/account-security';
 import { useSession } from '@/hooks/use-session';
 import {
   exportLibraryJson,
@@ -152,8 +153,30 @@ function SettingsBody() {
         </DialogDescription>
       </DialogHeader>
 
-      {/* Account & security — only when signed in */}
-      {user && <AccountSecurity />}
+      <Tabs defaultValue="appearance" className="gap-5">
+        <TabsList className="flex w-full flex-wrap gap-1 rounded-xl bg-zinc-200/70 p-1 dark:bg-zinc-900">
+          {user && <TabsTrigger value="account" className="rounded-lg text-xs">Account</TabsTrigger>}
+          {user && <TabsTrigger value="security" className="rounded-lg text-xs">Security</TabsTrigger>}
+          <TabsTrigger value="appearance" className="rounded-lg text-xs">Appearance</TabsTrigger>
+          <TabsTrigger value="notifications" className="rounded-lg text-xs">Notifications</TabsTrigger>
+          <TabsTrigger value="privacy" className="rounded-lg text-xs">Privacy</TabsTrigger>
+          <TabsTrigger value="danger" className="rounded-lg text-xs">Danger zone</TabsTrigger>
+        </TabsList>
+
+        {user && (
+          <TabsContent value="account" className="space-y-4">
+            <AccountPanel />
+            <ProfilesManager />
+          </TabsContent>
+        )}
+
+        {user && (
+          <TabsContent value="security" className="space-y-4">
+            <SecurityPanel />
+          </TabsContent>
+        )}
+
+        <TabsContent value="appearance" className="space-y-5">
 
       {/* TMDB API key */}
       <section aria-labelledby="settings-tmdb-key" className="space-y-3">
@@ -366,6 +389,61 @@ function SettingsBody() {
         </p>
       </section>
 
+        </TabsContent>
+
+        <TabsContent value="notifications" className="space-y-5">
+          <section aria-labelledby="settings-notifications" className="space-y-2.5">
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="notif-switch" className="text-sm font-medium">
+                Watchlist alerts
+              </Label>
+              <Switch
+                id="notif-switch"
+                checked={settings.notificationsEnabled}
+                onCheckedChange={(checked) => updateSettings({ notificationsEnabled: checked })}
+                aria-label="Watchlist alerts"
+                className="data-[state=checked]:bg-brand"
+              />
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              New episodes and releases from your watchlist show up in the notification bell.
+            </p>
+          </section>
+          <p className="rounded-lg bg-zinc-100 px-3 py-2 text-[11px] leading-relaxed text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+            Installed as a PWA? CineDeck also lights up the app badge when unread alerts are
+            waiting for you.
+          </p>
+        </TabsContent>
+
+        <TabsContent value="privacy" className="space-y-5">
+          <section aria-labelledby="settings-history" className="space-y-2.5">
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="history-switch" className="text-sm font-medium">
+                Save watch history
+              </Label>
+              <Switch
+                id="history-switch"
+                checked={settings.saveHistory}
+                onCheckedChange={(checked) => updateSettings({ saveHistory: checked })}
+                aria-label="Save watch history"
+                className="data-[state=checked]:bg-brand"
+              />
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Tracks what you watch so you can continue where you left off.
+            </p>
+          </section>
+
+          <p className="rounded-lg bg-zinc-100 px-3 py-2 text-[11px] leading-relaxed text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+            <strong className="font-semibold">What CineDeck stores about you:</strong> your email,
+            display name, optional avatar emoji and app preferences; watch history, watchlist and
+            ratings tied to your account; truncated IPs plus coarse country/city on sessions and
+            login attempts (never raw IPs); and security events (password changes, 2FA changes,
+            admin actions) in an audit log. Nothing is sold or shared with third parties —
+            playback itself happens on external providers we don’t control. Everything is
+            exportable and deletable from this dialog at any time.
+          </p>
+
       {/* Library import / export (signed-in or guest) */}
       <section aria-labelledby="settings-library" className="space-y-2.5">
         <div className="flex items-center gap-2">
@@ -376,32 +454,10 @@ function SettingsBody() {
         </div>
         <LibraryIO />
       </section>
+        </TabsContent>
 
-      <Separator className="bg-zinc-200 dark:bg-zinc-800/80" />
-
-      {/* Profiles (signed-in) */}
-      {user && <ProfilesManager />}
-
-      {/* History */}
-      <section aria-labelledby="settings-history" className="space-y-2.5">
-        <div className="flex items-center justify-between gap-4">
-          <Label htmlFor="history-switch" className="text-sm font-medium">
-            Save watch history
-          </Label>
-          <Switch
-            id="history-switch"
-            checked={settings.saveHistory}
-            onCheckedChange={(checked) => updateSettings({ saveHistory: checked })}
-            aria-label="Save watch history"
-            className="data-[state=checked]:bg-brand"
-          />
-        </div>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Tracks what you watch so you can continue where you left off.
-        </p>
-      </section>
-
-      <Separator className="bg-zinc-200 dark:bg-zinc-800/80" />
+        <TabsContent value="danger" className="space-y-5">
+          {user && <DangerZonePanel />}
 
       {/* Danger zone */}
       <section aria-labelledby="settings-danger" className="space-y-2.5">
@@ -476,6 +532,8 @@ function SettingsBody() {
           </AlertDialog>
         </div>
       </section>
+        </TabsContent>
+      </Tabs>
     </DialogContent>
   );
 }

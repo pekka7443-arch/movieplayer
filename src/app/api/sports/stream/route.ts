@@ -30,8 +30,9 @@ import {
   contentTypeAllowed,
   type ResolvedTarget,
 } from '@/lib/server/ssrf-guard';
-import { withApi } from '@/lib/server/api';
+import { withApi, apiError } from '@/lib/server/api';
 import { enforceRateLimit } from '@/lib/server/rate-limit';
+import { requireAuthedUser } from '@/lib/server/auth';
 
 const OPEN_TIMEOUT_MS = 12_000;
 const PLAYLIST_MAX_BYTES = 2 * 1024 * 1024;
@@ -149,6 +150,10 @@ function isPlaylist(res: IncomingMessage, url: string): boolean {
 }
 
 export const GET = withApi('sports/stream', async (request) => {
+  // PHASE 2: stream proxy → accounts only.
+  const authed = await requireAuthedUser(request);
+  if (!authed) return apiError(401, 'unauthorized');
+
   const limited = enforceRateLimit(request, 'stream');
   if (limited) return limited;
 

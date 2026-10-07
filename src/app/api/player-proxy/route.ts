@@ -1,6 +1,7 @@
 import { PROVIDERS } from "@/lib/providers";
-import { withApi } from "@/lib/server/api";
+import { withApi, apiError } from "@/lib/server/api";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
+import { requireAuthedUser } from "@/lib/server/auth";
 
 // GET /api/player-proxy?u=<provider-embed-url>
 //
@@ -68,6 +69,10 @@ function escapeHtml(s: string): string {
 }
 
 export const GET = withApi("player-proxy", async (request) => {
+  // PHASE 2: the proxy serves playable provider pages → accounts only.
+  const authed = await requireAuthedUser(request);
+  if (!authed) return apiError(401, 'unauthorized');
+
   const limited = enforceRateLimit(request, "playerProxy");
   if (limited) return limited;
 

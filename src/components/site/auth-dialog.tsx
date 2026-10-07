@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   AlertCircle,
   ArrowLeft,
+  CheckCircle2,
   Clapperboard,
   Eye,
   EyeOff,
@@ -30,6 +32,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  adoptAuthenticatedUser,
   AUTH_ERROR_TEXT,
   AuthError,
   isTotpPending,
@@ -48,18 +51,25 @@ interface FieldErrors {
   name?: string;
   email?: string;
   password?: string;
+  confirm?: string;
 }
 
-type Step = 'form' | 'totp' | 'forgot' | 'forgot-done';
+type Step = 'form' | 'totp' | 'forgot' | 'forgot-done' | 'verify-email';
 
 const STRENGTH_COLORS = ['bg-zinc-300 dark:bg-zinc-700', 'bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-emerald-400'];
 
-/** Sign in / create account dialog — shared by the header CTA buttons. */
+type Tab = 'signin' | 'signup' | 'forgot';
+
+/** Sign in / create account / reset dialog — shared by the header CTA and
+ *  the "Sign in to watch" gate. */
 export function AuthDialog() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const reduceMotion = useReducedMotion();
   const authOpen = useCinedeckStore((s) => s.authOpen);
   const authMode = useCinedeckStore((s) => s.authMode);
+  const authNotice = useCinedeckStore((s) => s.authNotice);
+  const authReturnTo = useCinedeckStore((s) => s.authReturnTo);
   const closeAuth = useCinedeckStore((s) => s.closeAuth);
   const openAuth = useCinedeckStore((s) => s.openAuth);
 
@@ -67,6 +77,7 @@ export function AuthDialog() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [pendingToken, setPendingToken] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -88,22 +99,45 @@ export function AuthDialog() {
       setShowPassword(false);
       setTotpCode('');
       setPendingToken('');
+      setConfirm('');
     }
   }, [authOpen, authMode]);
+
+  const finishAuth = (user: Parameters<typeof adoptAuthenticatedUser>[1]) => {
+    // Adopt BEFORE invalidating: cancels any in-flight (stale) /me fetch and
+    // paints the signed-in UI instantly — a racing guest response can never
+    // overwrite the fresh session.
+    adoptAuthenticatedUser(queryClient, user);
+    invalidateIdentityCaches(queryClient);
+    setPassword('');
+    setConfirm('');
+    closeAuth();
+    // Return the user to exactly what they were doing (e.g. the title they
+    // tried to play while signed out).
+    if (authReturnTo) {
+      router.push(authReturnTo, { scroll: false });
+    }
+  };
 
   const validate = (): boolean => {
     const next: FieldErrors = {};
     if (isSignup && name.trim().length > 40) next.name = 'Keep it under 40 characters.';
     if (!EMAIL_RE.test(email.trim())) next.email = 'Enter a valid email address.';
-    if (password.length < (isSignup ? 8 : 1)) {
-      next.password = isSignup ? 'Use at least 8 characters.' : 'Enter your password.';
+    if (isSignup) {
+      if (password.length < 8) {
+        next.password = 'Use at least 8 characters.';
+      } else if (strength && !strength.acceptable) {
+        next.password = strength.problems[0] ?? 'That password is too weak.';
+      }
+      if (confirm !== password) next.confirm = 'The passwords do not match.';
+    } else if (password.length < 1) {
+      next.password = 'Enter your password.';
     }
     setFieldErrors(next);
     return Object.keys(next).length === 0;
   };
 
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault();
+  const submit = async (): Promise<void> => {
     if (submitting) return;
     setFormError(null);
     if (!validate()) return;
@@ -111,25 +145,31 @@ export function AuthDialog() {
     setSubmitting(true);
     try {
       if (isSignup) {
-        const user = await registerAccount(name, email, password);
+        const { user, verificationSent } = await registerAccount(name, email, password);
         toast.success(`Welcome to CineDeck, ${user.name || user.email.split('@')[0]}!`, {
           description: 'Your guest lists (if any) moved into your account.',
         });
-      } else {
-        const result = await loginAccount(email, password);
-        if (isTotpPending(result)) {
-          setPendingToken(result.pendingToken);
-          setStep('totp');
-          setSubmitting(false);
-          return;
+        adoptAuthenticatedUser(queryClient, user);
+        invalidateIdentityCaches(queryClient);
+        setPassword('');
+        setConfirm('');
+        closeAuth();
+        if (verificationSent) {
+          setStep('verify-email');
         }
-        toast.success(`Welcome back, ${result.name || result.email.split('@')[0]}!`, {
-          description: 'My List & history are now synced to your account.',
-        });
+        return;
       }
-      invalidateIdentityCaches(queryClient);
-      setPassword('');
-      closeAuth();
+      const result = await loginAccount(email, password);
+      if (isTotpPending(result)) {
+        setPendingToken(result.pendingToken);
+        setStep('totp');
+        setSubmitting(false);
+        return;
+      }
+      toast.success(`Welcome back, ${result.name || result.email.split('@')[0]}!`, {
+        description: 'My List & history are now synced to your account.',
+      });
+      finishAuth(result);
     } catch (error) {
       if (error instanceof AuthError) {
         if (error.code === 'weak_password' && error.problems?.length) {
@@ -142,7 +182,7 @@ export function AuthDialog() {
             password: prev.password ?? (isSignup ? 'Use at least 8 characters.' : undefined),
           }));
         }
-        setFormError(AUTH_ERROR_TEXT[error.code]);
+        setFormError(error.message || AUTH_ERROR_TEXT[error.code]);
       } else {
         setFormError(AUTH_ERROR_TEXT.unknown);
       }
@@ -151,8 +191,13 @@ export function AuthDialog() {
     }
   };
 
-  const onTotpSubmit = async (event: FormEvent) => {
+  /** Native form submit (Enter key) and the button click share this path. */
+  const onSubmit = (event: FormEvent) => {
     event.preventDefault();
+    void submit();
+  };
+
+  const totpSubmit = async (): Promise<void> => {
     if (submitting || !pendingToken) return;
     setFormError(null);
     setSubmitting(true);
@@ -161,16 +206,13 @@ export function AuthDialog() {
       toast.success(`Welcome back, ${user.name || user.email.split('@')[0]}!`, {
         description: 'Two-factor sign-in complete.',
       });
-      invalidateIdentityCaches(queryClient);
-      setPassword('');
-      setTotpCode('');
-      closeAuth();
+      finishAuth(user);
     } catch (error) {
       if (error instanceof AuthError) {
         if (error.code === 'pending_expired') {
           setStep('form');
         }
-        setFormError(AUTH_ERROR_TEXT[error.code]);
+        setFormError(error.message || AUTH_ERROR_TEXT[error.code]);
       } else {
         setFormError(AUTH_ERROR_TEXT.unknown);
       }
@@ -179,8 +221,12 @@ export function AuthDialog() {
     }
   };
 
-  const onForgotSubmit = async (event: FormEvent) => {
+  const onTotpSubmit = (event: FormEvent) => {
     event.preventDefault();
+    void totpSubmit();
+  };
+
+  const forgotSubmit = async (): Promise<void> => {
     if (submitting) return;
     setFormError(null);
     if (!EMAIL_RE.test(email.trim())) {
@@ -200,8 +246,18 @@ export function AuthDialog() {
     }
   };
 
-  const switchMode = () => {
-    openAuth(isSignup ? 'signin' : 'signup');
+  const onForgotSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    void forgotSubmit();
+  };
+
+  const switchTab = (tab: Tab) => {
+    if (tab === 'forgot') {
+      setStep('forgot');
+      return;
+    }
+    setStep('form');
+    openAuth(tab);
   };
 
   const inputClass =
@@ -222,7 +278,7 @@ export function AuthDialog() {
     },
     totp: {
       title: 'Two-factor sign-in',
-      description: 'Enter the 6-digit code from your authenticator app.',
+      description: 'Enter the 6-digit code from your authenticator app — or a backup code.',
     },
     forgot: {
       title: 'Reset your password',
@@ -232,7 +288,13 @@ export function AuthDialog() {
       title: 'Check your inbox',
       description: 'If that address has an account, a reset link is on its way.',
     },
+    'verify-email': {
+      title: 'Check your inbox',
+      description: 'Confirm your email address — the app is already usable.',
+    },
   };
+
+  const activeTab: Tab = step === 'forgot' || step === 'forgot-done' ? 'forgot' : authMode;
 
   return (
     <Dialog open={authOpen} onOpenChange={(open) => !open && closeAuth()}>
@@ -260,6 +322,40 @@ export function AuthDialog() {
               {titles[step].description}
             </DialogDescription>
           </DialogHeader>
+
+          {/* Contextual nudge (e.g. the title the guest tried to play) */}
+          {authNotice && step !== 'forgot-done' && (
+            <p className="mt-3 flex items-start gap-2 rounded-lg border border-brand/40 bg-brand/10 px-3 py-2 text-xs font-medium leading-relaxed text-zinc-800 dark:text-zinc-100">
+              <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden />
+              {authNotice}
+            </p>
+          )}
+
+          {/* Tab strip: Sign in / Sign up / Forgot password */}
+          {step !== 'forgot-done' && step !== 'verify-email' && (
+            <div role="tablist" aria-label="Authentication" className="mt-4 grid grid-cols-3 gap-1 rounded-xl bg-zinc-200/70 p-1 dark:bg-zinc-900">
+              {(['signin', 'signup', 'forgot'] as Tab[]).map((tab) => {
+                const active = activeTab === tab && (tab !== 'signin' || !isSignup) && (tab !== 'signup' || isSignup);
+                const label = tab === 'signin' ? 'Sign in' : tab === 'signup' ? 'Sign up' : 'Forgot';
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => switchTab(tab)}
+                    className={`h-8 rounded-lg text-xs font-semibold transition-colors ${
+                      active
+                        ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {step === 'form' && (
@@ -317,7 +413,7 @@ export function AuthDialog() {
                   autoComplete={isSignup ? 'new-password' : 'current-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={isSignup ? 'At least 8 characters' : 'Your password'}
+                  placeholder={isSignup ? '8+ chars, number & symbol' : 'Your password'}
                   className={`${inputClass} pr-10`}
                 />
                 <button
@@ -351,6 +447,27 @@ export function AuthDialog() {
               {fieldErrors.password && <p className="text-xs text-red-600 dark:text-red-400">{fieldErrors.password}</p>}
             </div>
 
+            {isSignup && (
+              <motion.div {...fadeUp(0.05)} className="space-y-1.5">
+                <Label htmlFor="auth-confirm" className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Confirm password
+                </Label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+                  <Input
+                    id="auth-confirm"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    placeholder="Repeat the password"
+                    className={inputClass}
+                  />
+                </div>
+                {fieldErrors.confirm && <p className="text-xs text-red-600 dark:text-red-400">{fieldErrors.confirm}</p>}
+              </motion.div>
+            )}
+
             {formError && (
               <motion.div
                 initial={reduceMotion ? undefined : { opacity: 0, y: -4 }}
@@ -364,7 +481,8 @@ export function AuthDialog() {
             )}
 
             <Button
-              type="submit"
+              type="button"
+              onClick={() => void submit()}
               disabled={submitting}
               className="h-11 w-full rounded-lg bg-brand text-sm font-semibold text-zinc-950 shadow-[0_0_20px_color-mix(in_srgb,var(--cinedeck-accent)_20%,transparent)] hover:bg-brand/90"
             >
@@ -381,34 +499,10 @@ export function AuthDialog() {
               )}
             </Button>
 
-            <div className="flex flex-col items-center gap-1.5 pb-1 text-center">
-              <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                {isSignup ? 'Already have an account?' : 'New to CineDeck?'}{' '}
-                <button
-                  type="button"
-                  onClick={switchMode}
-                  className="font-semibold text-brand underline-offset-4 hover:underline"
-                >
-                  {isSignup ? 'Sign in' : 'Create an account'}
-                </button>
-              </p>
-              {!isSignup && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormError(null);
-                    setStep('forgot');
-                  }}
-                  className="text-xs font-medium text-zinc-500 underline-offset-4 hover:text-brand hover:underline dark:text-zinc-400"
-                >
-                  Forgot your password?
-                </button>
-              )}
-              <p className="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                <ShieldCheck className="size-3" aria-hidden />
-                Guests keep everything on this device — sign up any time to sync.
-              </p>
-            </div>
+            <p className="flex items-center justify-center gap-1 pb-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+              <ShieldCheck className="size-3" aria-hidden />
+              Guests keep everything on this device — sign up any time to sync.
+            </p>
           </form>
         )}
 
@@ -416,7 +510,7 @@ export function AuthDialog() {
           <form onSubmit={onTotpSubmit} noValidate className="space-y-4 px-6 py-5">
             <div className="space-y-1.5">
               <Label htmlFor="auth-totp" className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                Authenticator code
+                Authenticator or backup code
               </Label>
               <div className="relative">
                 <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
@@ -426,9 +520,9 @@ export function AuthDialog() {
                   autoComplete="one-time-code"
                   autoFocus
                   value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value.replace(/[^\d]/g, '').slice(0, 6))}
-                  placeholder="123456"
-                  className={`${inputClass} font-mono tracking-[0.3em]`}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/[^\dA-Za-z-]/g, '').slice(0, 9))}
+                  placeholder="123456 or XXXX-XXXX"
+                  className={`${inputClass} font-mono tracking-[0.2em]`}
                 />
               </div>
             </div>
@@ -439,8 +533,9 @@ export function AuthDialog() {
               </div>
             )}
             <Button
-              type="submit"
-              disabled={submitting || totpCode.length !== 6}
+              type="button"
+              onClick={() => void totpSubmit()}
+              disabled={submitting || totpCode.length < 6}
               className="h-11 w-full rounded-lg bg-brand text-sm font-semibold text-zinc-950 hover:bg-brand/90"
             >
               {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : 'Verify & sign in'}
@@ -481,7 +576,8 @@ export function AuthDialog() {
               {fieldErrors.email && <p className="text-xs text-red-600 dark:text-red-400">{fieldErrors.email}</p>}
             </div>
             <Button
-              type="submit"
+              type="button"
+              onClick={() => void forgotSubmit()}
               disabled={submitting}
               className="h-11 w-full rounded-lg bg-brand text-sm font-semibold text-zinc-950 hover:bg-brand/90"
             >
@@ -519,6 +615,25 @@ export function AuthDialog() {
               className="h-10 w-full rounded-lg border border-zinc-200 bg-transparent text-sm font-medium text-zinc-700 hover:bg-zinc-200/70 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               Back to sign in
+            </Button>
+          </div>
+        )}
+
+        {step === 'verify-email' && (
+          <div className="space-y-4 px-6 py-6 text-center">
+            <CheckCircle2 className="mx-auto size-12 text-emerald-500" aria-hidden />
+            <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+              We sent a verification link to <span className="font-semibold text-zinc-800 dark:text-zinc-200">{email}</span>.
+              Click it whenever you like — your account works fully right now.
+            </p>
+            <Button
+              type="button"
+              onClick={() => {
+                setStep('form');
+              }}
+              className="h-10 w-full rounded-lg border border-zinc-200 bg-transparent text-sm font-medium text-zinc-700 hover:bg-zinc-200/70 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Continue to CineDeck
             </Button>
           </div>
         )}

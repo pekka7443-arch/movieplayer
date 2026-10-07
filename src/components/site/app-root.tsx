@@ -8,6 +8,7 @@ import { Suspense, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import { AppProviders } from '@/components/site/app-providers';
 import { AmbientBackground } from '@/components/site/ambient-background';
 import { BackToTop, ScrollProgress } from '@/components/site/site-chrome';
@@ -17,6 +18,7 @@ import { PwaBootstrap } from '@/components/site/pwa-bootstrap';
 import { SiteFooter } from '@/components/site/site-footer';
 import { BottomNav } from '@/components/site/bottom-nav';
 import { OnboardingTour } from '@/components/site/onboarding-tour';
+import { useSession } from '@/hooks/use-session';
 import { useCinedeckStore, hydrateActiveProfile } from '@/lib/store';
 import { ViewSkeleton } from '@/components/site/view-skeleton';
 import type { MediaType } from '@/lib/tmdb';
@@ -67,6 +69,7 @@ const CommandPalette = dynamic(
   { ssr: false },
 );
 import { AnnouncementBanner } from '@/components/site/announcement-banner';
+import { GuestSignupBanner, MustChangePasswordBanner } from '@/components/site/account-banners';
 
 function parsePositiveInt(value: string | null): number | null {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -76,6 +79,37 @@ function parsePositiveInt(value: string | null): number | null {
 
 function parseImdbId(value: string | null): string | null {
   return value && /^tt\d+$/.test(value) ? value : null;
+}
+
+/**
+ * Maintenance gate — reads the public flags endpoint INSIDE the React Query
+ * provider tree. Admins pass through; everyone else sees a maintenance
+ * screen when the flag is on.
+ */
+function MaintenanceGate({ children }: { children: React.ReactNode }) {
+  const { data: flagData } = useQuery({
+    queryKey: ['flags'],
+    queryFn: async () => {
+      const res = await fetch('/api/flags');
+      return res.ok ? ((await res.json()) as { flags: Record<string, boolean> }) : { flags: {} };
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+  const { user } = useSession();
+  const maintenance = flagData?.flags['maintenance'] === true && user?.role !== 'admin';
+
+  if (!maintenance) return <>{children}</>;
+  return (
+    <main className="flex flex-1 items-center justify-center px-6 py-24 text-center">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">CineDeck is under maintenance</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+          We’re making things better. The app will be back shortly — thanks for your patience.
+        </p>
+      </div>
+    </main>
+  );
 }
 
 function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaSearchItem[] }) {
@@ -129,6 +163,7 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
 
   return (
     <AppProviders>
+      <MaintenanceGate>
       <div className="flex min-h-svh flex-col text-zinc-900 dark:text-zinc-100">
         <a
           href="#main-content"
@@ -140,6 +175,8 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
         <ScrollProgress />
         <Header />
         <AnnouncementBanner />
+        <GuestSignupBanner />
+        <MustChangePasswordBanner />
         <main
           id="main-content"
           tabIndex={-1}
@@ -181,6 +218,7 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
         <BackToTop />
         <PwaBootstrap />
       </div>
+      </MaintenanceGate>
     </AppProviders>
   );
 }

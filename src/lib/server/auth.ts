@@ -24,6 +24,7 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs
 import path from 'node:path';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { db } from '@/lib/db';
+import { truncateIp } from '@/lib/server/geo';
 
 export const SESSION_COOKIE = 'cinedeck_session';
 export const GUEST_COOKIE = 'cinedeck_guest';
@@ -198,7 +199,7 @@ export interface ValidatedSession {
 /** Create a fresh session row + cookie value for a user. */
 export async function createSession(
   userId: string,
-  meta: { userAgent?: string | null; ip?: string | null },
+  meta: { userAgent?: string | null; ip?: string | null; country?: string | null; city?: string | null },
 ): Promise<SessionCookieContext> {
   const token = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
@@ -208,7 +209,9 @@ export async function createSession(
       tokenHash: sha256(token),
       expiresAt,
       userAgent: meta.userAgent?.slice(0, 200) ?? null,
-      ip: meta.ip?.slice(0, 64) ?? null,
+      ip: truncateIp(meta.ip),
+      country: meta.country ?? null,
+      city: meta.city ?? null,
     },
   });
   return { token, expiresAt };
@@ -371,6 +374,20 @@ export async function withSessionRefresh<T extends Response>(
 /** Read the session cookie directly (for routes that only need the token). */
 export function sessionTokenOf(request: Request): string | null {
   return parseCookies(request)[SESSION_COOKIE] ?? null;
+}
+
+/**
+ * Playback gate (PHASE 2): video-related routes require a signed-in account.
+ * Returns the validated owner context, or null when the caller is a guest —
+ * routes answer 401 unauthorized in that case. Browsing/search/details stay
+ * free; ONLY stream URLs / proxies are gated.
+ */
+export async function requireAuthedUser(
+  request: Request,
+): Promise<OwnerContext | null> {
+  const owner = await resolveOwner(request);
+  if (!owner.userId || !owner.session) return null;
+  return owner;
 }
 
 // ---------------------------------------------------------------------------

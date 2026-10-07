@@ -4,8 +4,13 @@
 
 import { findReplays } from '@/lib/server/replay';
 import { apiError } from '@/lib/server/api';
+import { requireAuthedUser } from '@/lib/server/auth';
 
 export async function GET(request: Request) {
+  // PHASE 2: replay stream URLs → accounts only.
+  const authed = await requireAuthedUser(request);
+  if (!authed) return apiError(401, 'unauthorized');
+
   const { searchParams } = new URL(request.url);
   const sport = (searchParams.get('sport') ?? '').trim();
   const league = (searchParams.get('league') ?? '').trim();

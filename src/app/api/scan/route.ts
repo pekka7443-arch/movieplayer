@@ -2,6 +2,7 @@ import { PROVIDERS, getEmbedUrl, supportsDub } from "@/lib/providers";
 import type { ScanResult } from "@/lib/meta";
 import { withApi, apiError } from "@/lib/server/api";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
+import { requireAuthedUser } from "@/lib/server/auth";
 import { db } from "@/lib/db";
 
 // GET /api/scan?type=movie|tv&imdb=tt1375666  (or &tmdb=123, or BOTH)
@@ -110,6 +111,10 @@ function withDeadline(p: Promise<ProbeOutcome>, ms: number): Promise<ProbeOutcom
 }
 
 export const GET = withApi('scan', async (request) => {
+  // PHASE 2: stream-source scans expose playback URLs → accounts only.
+  const authed = await requireAuthedUser(request);
+  if (!authed) return apiError(401, 'unauthorized');
+
   const limited = enforceRateLimit(request, 'scan');
   if (limited) return limited;
 

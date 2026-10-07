@@ -10,15 +10,18 @@ import {
   Film,
   Link2,
   Loader2,
+  Lock,
   Play,
   Star,
   User,
 } from 'lucide-react';
+import { openAuthForWatch } from '@/components/site/sign-in-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConnectCard } from '@/components/site/connect-card';
 import { TrailerDialog } from '@/components/site/trailer-dialog';
+import { usePlaybackLocked } from '@/components/site/sign-in-gate';
 import { useToggleWatchlist, useWatchlist } from '@/hooks/use-media';
 import { tmdbImg } from '@/lib/languages';
 import { useHasTmdbKey } from '@/lib/settings';
@@ -69,6 +72,9 @@ export function InfoSection({
 }) {
   const hasKey = useHasTmdbKey();
   const [trailerOpen, setTrailerOpen] = useState(false);
+  // Trailers are playback too — guests get the sign-in gate instead.
+  const playbackLocked = usePlaybackLocked();
+  const trailerNotice = details?.title ? `Sign in to watch the ${details.title} trailer.` : undefined;
 
   const watchlistQuery = useWatchlist();
   const toggleWatchlist = useToggleWatchlist();
@@ -299,10 +305,15 @@ export function InfoSection({
             <Button
               type="button"
               size="sm"
-              onClick={() => setTrailerOpen(true)}
+              onClick={() => (playbackLocked ? openAuthForWatch(trailerNotice) : setTrailerOpen(true))}
+              aria-label={playbackLocked ? 'Sign in to watch the trailer' : 'Play trailer'}
               className="h-9 gap-1.5 rounded-lg bg-amber-400 px-4 text-xs font-semibold text-zinc-950 hover:bg-amber-300"
             >
-              <Play className="size-3.5 fill-zinc-950" aria-hidden />
+              {playbackLocked ? (
+                <Lock className="size-3.5" aria-hidden />
+              ) : (
+                <Play className="size-3.5 fill-zinc-950" aria-hidden />
+              )}
               Trailer
             </Button>
           )}

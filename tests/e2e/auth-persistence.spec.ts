@@ -10,9 +10,9 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 const uniqueEmail = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@cinedeck.test`;
-const STRONG_PASSWORD = 'glacier-harbor-42-vault';
+const STRONG_PASSWORD = 'glacier-harbor-42-vault!';
 
-async function signUp(page: Page, email: string): Promise<void> {
+async function signUp(page: Page, email: string, context: import('@playwright/test').BrowserContext): Promise<void> {
   // Returning-user state: skip the first-visit onboarding tour so it never
   // overlaps the auth dialog.
   await page.addInitScript(() => {
@@ -23,24 +23,29 @@ async function signUp(page: Page, email: string): Promise<void> {
     }
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Sign up' }).click();
+  // Hydration barrier: the guest banner only renders after React attaches —
+  // clicking any button before this would hit inert SSR markup.
+  await expect(page.getByRole('region', { name: 'Sign in call to action' })).toBeVisible({ timeout: 20_000 });
+  // Scope to the header — the guest banner also has sign-in CTAs.
+  await page.locator('header').getByRole('button', { name: 'Sign up', exact: true }).click();
   await page.locator('#auth-name').fill('E2E Persistence');
   await page.locator('#auth-email').fill(email);
   await page.locator('#auth-password').fill(STRONG_PASSWORD);
-  await page.locator('form button[type="submit"]').first().click();
+  await page.locator('#auth-confirm').fill(STRONG_PASSWORD);
+  await page.getByRole('dialog').getByRole('button', { name: 'Create account' }).click();
   // Signed-in header replaces the Sign up button.
   await expect(page.getByRole('button', { name: 'Sign up' })).toBeHidden({ timeout: 15_000 });
 }
 
 async function expectSignedIn(page: Page): Promise<void> {
-  await expect(page.getByRole('button', { name: 'Sign up' })).toBeHidden({ timeout: 15_000 });
+  await expect(page.locator('header').getByRole('button', { name: 'Sign up', exact: true })).toBeHidden({ timeout: 15_000 });
   await expect(page.locator('header [aria-label^="Account menu"]')).toBeVisible();
 }
 
 test.describe('login persistence', () => {
   test('survives reload, browser restart, and API outage', async ({ page, context }) => {
     const email = uniqueEmail();
-    await signUp(page, email);
+    await signUp(page, email, context);
 
     // 2. Reload — session cookie + cached user survive.
     await page.reload();
@@ -72,16 +77,16 @@ test.describe('login persistence', () => {
     await expectSignedIn(page);
   });
 
-  test('explicit logout still works', async ({ page }) => {
+  test('explicit logout still works', async ({ page, context }) => {
     const email = uniqueEmail();
-    await signUp(page, email);
+    await signUp(page, email, context);
 
     await page.locator('header [aria-label^="Account menu"]').click();
     await page.getByRole('menuitem', { name: /sign out|log out/i }).click();
-    await expect(page.getByRole('button', { name: 'Sign up' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('header').getByRole('button', { name: 'Sign up', exact: true })).toBeVisible({ timeout: 15_000 });
 
     // And it sticks across reloads.
     await page.reload();
-    await expect(page.getByRole('button', { name: 'Sign up' })).toBeVisible();
+    await expect(page.locator('header').getByRole('button', { name: 'Sign up', exact: true })).toBeVisible();
   });
 });

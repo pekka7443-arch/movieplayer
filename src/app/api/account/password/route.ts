@@ -61,7 +61,7 @@ export const POST = withApi('account/password', async (request) => {
 
   await db.user.update({
     where: { id: user.id },
-    data: { passwordHash: hashPassword(newPassword) },
+    data: { passwordHash: hashPassword(newPassword), mustChangePassword: false },
   });
 
   // Kill every other session; keep this device signed in with a fresh cookie.

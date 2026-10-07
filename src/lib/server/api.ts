@@ -43,6 +43,7 @@ const DEFAULT_MESSAGES: Record<string, string> = {
   totp_not_setup: 'Two-factor authentication is not set up yet.',
   totp_not_enabled: 'Two-factor authentication is not enabled.',
   totp_already_enabled: 'Two-factor authentication is already enabled.',
+  account_suspended: 'Your account has been suspended. Contact support if you think this is a mistake.',
 };
 
 /** Normalized API error — throw inside any withApi handler. */

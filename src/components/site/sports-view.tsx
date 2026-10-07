@@ -37,6 +37,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/lib/settings';
 import { useFavoriteTeams, teamKey } from '@/lib/sports-favorites';
+import { GuestPlayLock, usePlaybackLocked } from '@/components/site/sign-in-gate';
 
 // ---------------------------------------------------------------------------
 // Types (mirror the server routes)
@@ -329,10 +330,10 @@ interface ReplayVideo {
 }
 
 /** Ranked YouTube replays (full matches + highlights) for one event. */
-function useReplayVideos(event: SportsEvent | null) {
+function useReplayVideos(event: SportsEvent | null, enabled = true) {
   return useQuery<ReplayVideo[]>({
     queryKey: ['sports-replay', event?.id ?? null],
-    enabled: !!event && event.state === 'finished',
+    enabled: enabled && !!event && event.state === 'finished',
     queryFn: async () => {
       const p = new URLSearchParams({
         sport: event!.sport,
@@ -871,6 +872,7 @@ function MultiViewCell({
 // ---------------------------------------------------------------------------
 
 function ChannelPlayer({ channel, onClose }: { channel: SportsChannel; onClose: () => void }) {
+  const playbackLocked = usePlaybackLocked();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [status, setStatus] = useState<'connecting' | 'live' | 'idle' | 'error'>('connecting');
 
@@ -919,6 +921,10 @@ function ChannelPlayer({ channel, onClose }: { channel: SportsChannel; onClose: 
       video.load();
     };
   }, [channel.url]);
+
+  if (playbackLocked) {
+    return <GuestPlayLock title={channel.name} returnTo={typeof window !== 'undefined' ? window.location.href : undefined} />;
+  }
 
   return (
     <motion.section
@@ -1030,6 +1036,8 @@ function LivePlayer({
   onBrowseChannels: () => void;
   onRetryScan: () => void;
 }) {
+  // PHASE 2 gate: live streams are playback → accounts only.
+  const playbackLocked = usePlaybackLocked();
   const { autoFailover, failoverSeconds } = useSettings();
   const videoRef = useRef<HTMLVideoElement>(null);
   const activeUrlRef = useRef<string | null>(null);
@@ -1177,6 +1185,15 @@ function LivePlayer({
     setIdx(0);
     onRetryScan();
   };
+
+  if (playbackLocked) {
+    return (
+      <GuestPlayLock
+        title={`${event.home} vs ${event.away}`}
+        returnTo={typeof window !== 'undefined' ? window.location.href : undefined}
+      />
+    );
+  }
 
   return (
     <>
@@ -1862,7 +1879,8 @@ type ReplayFilter = 'all' | 'full' | 'highlights';
 
 /** Replay browser — ranked YouTube replays with filters + the seekable player. */
 function ReplayPlayer({ event }: { event: SportsEvent }) {
-  const videosQuery = useReplayVideos(event);
+  const playbackLocked = usePlaybackLocked();
+  const videosQuery = useReplayVideos(event, playbackLocked);
   const [filter, setFilter] = useState<ReplayFilter>('all');
   const [picked, setPicked] = useState<ReplayVideo | null>(null);
   // Videos YouTube refused to play (embedding disabled, gone…) — auto-skipped.
@@ -1895,6 +1913,15 @@ function ReplayPlayer({ event }: { event: SportsEvent }) {
   // Every video refused → stop auto-skipping (it would loop); the player
   // shows YouTube's own "watch on YouTube" UI for the top pick instead.
   const allSkipped = videos.length > 0 && videos.every((v) => skipped.has(v.videoId));
+
+  if (playbackLocked) {
+    return (
+      <GuestPlayLock
+        title={`${event.home} vs ${event.away}`}
+        returnTo={typeof window !== 'undefined' ? window.location.href : undefined}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">

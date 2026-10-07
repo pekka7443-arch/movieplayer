@@ -15,8 +15,10 @@ export interface AuthUserPayload {
   email: string;
   name: string | null;
   role: string;
+  avatar: string | null;
   emailVerified: boolean;
   totpEnabled: boolean;
+  mustChangePassword: boolean;
   createdAt: string;
 }
 
@@ -44,8 +46,10 @@ export const GET = withApi('auth/me', async (request) => {
       email: true,
       name: true,
       role: true,
+      avatar: true,
       emailVerified: true,
       totpEnabled: true,
+      mustChangePassword: true,
       createdAt: true,
     },
   });

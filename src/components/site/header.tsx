@@ -198,7 +198,11 @@ export function Header() {
                   className="ml-1 flex shrink-0 items-center gap-2 rounded-full p-0.5 pr-0.5 transition-colors hover:bg-zinc-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 sm:pr-2.5 dark:hover:bg-zinc-800/60"
                 >
                   <span className="flex size-9 items-center justify-center rounded-full bg-brand text-xs font-bold text-brand-foreground shadow-[0_0_16px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)]">
-                    {initialsOf(user.name, user.email)}
+                    {user.avatar ? (
+                      <span aria-hidden className="text-lg leading-none">{user.avatar}</span>
+                    ) : (
+                      initialsOf(user.name, user.email)
+                    )}
                   </span>
                   <span className="hidden max-w-24 truncate text-sm font-medium text-zinc-700 lg:block dark:text-zinc-300">
                     {user.name || user.email.split('@')[0]}
