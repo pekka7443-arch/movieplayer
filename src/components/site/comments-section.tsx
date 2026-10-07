@@ -33,7 +33,9 @@ export function CommentsSection({ tmdbId, mediaType }: { tmdbId: number; mediaTy
   const [posting, setPosting] = useState(false);
   const [visibleCount, setVisibleCount] = useState(4);
   const [reporting, setReporting] = useState<string | null>(null);
-  const reportedRef = useRef<Set<string>>(new Set());
+  // Reported-comment ids live in state (not a ref) — render reads them to
+  // disable the report button.
+  const [reported, setReported] = useState<Set<string>>(new Set());
 
   const query = useQuery<CommentRow[]>({
     queryKey: ['comments', tmdbId, mediaType],
@@ -41,11 +43,15 @@ export function CommentsSection({ tmdbId, mediaType }: { tmdbId: number; mediaTy
     staleTime: 30_000,
   });
 
-  // Reset local UI state when the title changes.
+  // Reset local UI state when the title changes (async so the effect body
+  // stays setState-free — satisfies the react-hooks cascade rule).
   useEffect(() => {
-    setDraft('');
-    setVisibleCount(4);
-    reportedRef.current = new Set();
+    const raf = requestAnimationFrame(() => {
+      setDraft('');
+      setVisibleCount(4);
+      setReported(new Set());
+    });
+    return () => cancelAnimationFrame(raf);
   }, [tmdbId, mediaType]);
 
   const comments = useMemo(() => query.data ?? [], [query.data]);
@@ -88,7 +94,7 @@ export function CommentsSection({ tmdbId, mediaType }: { tmdbId: number; mediaTy
   const onReport = async (id: string) => {
     try {
       await mutateComment({ action: 'report', id });
-      reportedRef.current.add(id);
+      setReported((prev) => new Set(prev).add(id));
       setReporting(null);
       toast.success('Reported — a moderator will take a look');
     } catch {
@@ -181,7 +187,7 @@ export function CommentsSection({ tmdbId, mediaType }: { tmdbId: number; mediaTy
                     type="button"
                     aria-label={`Report comment by ${comment.author}`}
                     onClick={() => setReporting(comment.id)}
-                    disabled={reportedRef.current.has(comment.id)}
+                    disabled={reported.has(comment.id)}
                     className="rounded p-1 text-zinc-400 hover:bg-orange-500/10 hover:text-orange-500 disabled:opacity-40"
                   >
                     <Flag className="size-3.5" aria-hidden />

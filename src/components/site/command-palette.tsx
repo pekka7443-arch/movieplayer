@@ -89,27 +89,32 @@ export function CommandPalette() {
     staleTime: 60_000,
   });
 
+  // Close-reset (async so the effect body stays setState-free — satisfies
+  // the react-hooks cascade rule).
   useEffect(() => {
-    if (!open) {
+    if (open) return;
+    const raf = requestAnimationFrame(() => {
       setQuery('');
       setTitles([]);
       setPeople([]);
-    }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [open]);
 
   // Debounced search — keyless via Cinemeta, with key via TMDB multi; people
-  // searched too when a key exists.
+  // searched too when a key exists. All state updates happen inside the
+  // debounce callback (never synchronously in the effect body).
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) {
-      setTitles([]);
-      setPeople([]);
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
     const controller = new AbortController();
     const timer = setTimeout(async () => {
+      if (q.length < 2) {
+        setTitles([]);
+        setPeople([]);
+        setSearching(false);
+        return;
+      }
+      setSearching(true);
       try {
         const key = getTmdbKey();
         const [titleRes, personRes] = await Promise.all([

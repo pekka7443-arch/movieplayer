@@ -29,8 +29,13 @@ export function WatchRating({ tmdbId, mediaType }: { tmdbId: number; mediaType: 
   const row = (query.data ?? []).find((r) => r.tmdbId === tmdbId && r.mediaType === mediaType);
 
   useEffect(() => {
-    setNoteDraft(row?.note ?? '');
-    setNoteOpen(false);
+    // Sync the note draft after paint (react-hooks cascade rule: no sync
+    // setState in the effect body).
+    const raf = requestAnimationFrame(() => {
+      setNoteDraft(row?.note ?? '');
+      setNoteOpen(false);
+    });
+    return () => cancelAnimationFrame(raf);
   }, [row?.note, tmdbId, mediaType]);
 
   const save = async (patch: { score?: number | null; watched?: boolean; note?: string | null }) => {
