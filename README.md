@@ -29,6 +29,8 @@ bun run start
 | `AUTH_SECRET` | no (dev) / effectively yes (prod) | Session/token signing. If missing, the app **self-heals**: it generates a stable random secret and persists it into `.env` (a warning is logged). It only hard-fails when `NODE_ENV=production` **and** `PUBLISH_STRICT=1`. |
 | `TMDB_API_KEY` | no | Optional server-wide TMDB key. Users can also paste their own free key in Settings (stored in their browser, sent per-request). Without any key the app runs fully keyless via Cinemeta/TVmaze/ESPN/TheSportsDB. |
 | `PUBLISH_STRICT` | no | Set to `1` to make missing critical env vars a hard startup failure instead of a warning. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | no | Seed admin account, created idempotently on boot (or `bun run seed`). Admin logins are capped at **3 active device sessions** and can be restricted with `ADMIN_IP_ALLOWLIST` (comma-separated IPs; unset = check skipped). New-device admin logins are audit-logged, and emailed when `SMTP_URL` is set. |
+| `SMTP_URL` | no | `smtp(s)://user:pass@host:port` — real mail delivery via nodemailer (resets, verification, admin alerts). Unset = console mail adapter (links/alerts in server logs). |
 | `E2E_RATELIMIT_BYPASS` | no | Dev-only rate-limit bypass for Playwright (loopback + header gated; never affects production). |
 
 See `.env.example` for the annotated list.

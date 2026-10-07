@@ -21,16 +21,22 @@ import {
 } from '@/components/ui/dialog';
 import { useCinedeckStore } from '@/lib/store';
 import { useSession } from '@/hooks/use-session';
+import { useHydrated } from '@/hooks/use-hydrated';
 
 /**
  * True when playback must stay locked: no signed-in account. Fails closed —
  * while the very first session query is still resolving, playback stays
  * gated (a signed-in user's cached localStorage profile resolves instantly,
  * so the flash only affects brand-new visitors).
+ *
+ * Hydration-safe: SSR and the first client render both see "locked" (the
+ * server cannot know the visitor), and the gate opens right after hydration
+ * for cached signed-in users — a signed-in reload can never mismatch.
  */
 export function usePlaybackLocked(): boolean {
+  const hydrated = useHydrated();
   const { user } = useSession();
-  return user === null;
+  return !hydrated || user === null;
 }
 
 interface GateProps {

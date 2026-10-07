@@ -23,6 +23,7 @@ import {
   LogOut,
   Mail,
   Megaphone,
+  MonitorSmartphone,
   MousePointerClick,
   Plus,
   RefreshCw,
@@ -38,7 +39,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { useSession } from '@/hooks/use-session';
+import { browserLabel, deviceLabel, timeAgo } from '@/lib/format';
+import {
+  fetchSessions,
+  revokeAllMySessions,
+  revokeOneSession,
+  revokeOtherSessions,
+  type SessionInfo,
+} from '@/lib/auth-client';
+import { invalidateIdentityCaches, useSession } from '@/hooks/use-session';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -118,7 +127,7 @@ function StatCard({ label, value, hint }: { label: string; value: number | strin
 // Role gate + tab shell
 // ---------------------------------------------------------------------------
 
-type Tab = 'overview' | 'users' | 'moderation' | 'audit' | 'flags' | 'sessions' | 'logs';
+type Tab = 'overview' | 'users' | 'moderation' | 'audit' | 'flags' | 'sessions' | 'my-sessions' | 'logs';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview', label: 'Overview', icon: <BarChart3 className="size-4" aria-hidden /> },
@@ -127,6 +136,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'audit', label: 'Audit log', icon: <ScrollText className="size-4" aria-hidden /> },
   { id: 'flags', label: 'Feature flags', icon: <Flag className="size-4" aria-hidden /> },
   { id: 'sessions', label: 'Sessions', icon: <Activity className="size-4" aria-hidden /> },
+  { id: 'my-sessions', label: 'My sessions', icon: <MonitorSmartphone className="size-4" aria-hidden /> },
   { id: 'logs', label: 'Logs', icon: <MousePointerClick className="size-4" aria-hidden /> },
 ];
 
@@ -196,6 +206,7 @@ export function AdminView() {
       {tab === 'audit' && <AuditTab />}
       {tab === 'flags' && <FlagsTab />}
       {tab === 'sessions' && <SessionsTab />}
+      {tab === 'my-sessions' && <MySessionsTab />}
       {tab === 'logs' && <LogsTab />}
     </div>
   );
@@ -1325,6 +1336,146 @@ function SessionsTab() {
           <Button type="button" size="sm" variant="outline" disabled={page >= data.pages} onClick={() => setPage((p) => p + 1)} className="h-7 rounded-md px-2">Next</Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MY SESSIONS — the signed-in admin's own devices (limit: 3 active).
+// ---------------------------------------------------------------------------
+
+function MySessionsTab() {
+  const queryClient = useQueryClient();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const { data, isLoading } = useQuery({
+    queryKey: ['auth', 'sessions'],
+    queryFn: fetchSessions,
+    refetchInterval: 30_000,
+  });
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['auth', 'sessions'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin'] });
+  };
+
+  const revokeOne = async (id: string) => {
+    setBusyId(id);
+    try {
+      const ok = await revokeOneSession(id);
+      if (ok) {
+        toast.success('Session revoked');
+        refresh();
+      } else {
+        toast.error('Could not revoke that session');
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const revokeOthers = async () => {
+    const revoked = await revokeOtherSessions();
+    toast.success(`${revoked} other device${revoked === 1 ? '' : 's'} signed out`);
+    refresh();
+  };
+
+  const revokeAll = async () => {
+    const ok = await revokeAllMySessions();
+    if (ok) {
+      toast.success('All sessions revoked — you are signed out everywhere');
+      invalidateIdentityCaches(queryClient);
+      refresh();
+    } else {
+      toast.error('Could not revoke sessions');
+    }
+  };
+
+  if (isLoading || !data) return <Skeleton className="h-64 rounded-xl bg-zinc-200 dark:bg-zinc-900" />;
+
+  const sessions = data ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Admin accounts are limited to <span className="font-semibold text-zinc-700 dark:text-zinc-200">3 active devices</span> —
+          a login beyond that is rejected. Logins from unseen devices are written to the audit log.
+        </p>
+        <div className="flex gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={revokeOthers}
+            disabled={sessions.length <= 1}
+            className="h-7 gap-1 rounded-md text-[11px]"
+          >
+            <LogOut className="size-3" aria-hidden />
+            Log out other devices
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={revokeAll}
+            className="h-7 gap-1 rounded-md border-red-300 text-[11px] text-red-600 hover:bg-red-500/10 dark:border-red-900 dark:text-red-400"
+          >
+            <Trash2 className="size-3" aria-hidden />
+            Revoke all
+          </Button>
+        </div>
+      </div>
+
+      {sessions.length === 0 ? (
+        <EmptyState icon={<MonitorSmartphone className="size-8" />} label="No active sessions." />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+          <table className="w-full min-w-[640px] text-left text-xs">
+            <thead className="bg-zinc-100 text-[11px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+              <tr>
+                <th className="px-3 py-2">Device</th>
+                <th className="px-3 py-2">Browser</th>
+                <th className="px-3 py-2">Location</th>
+                <th className="px-3 py-2">Signed in</th>
+                <th className="px-3 py-2">Last seen</th>
+                <th className="px-3 py-2 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200 bg-white/60 dark:divide-zinc-800 dark:bg-zinc-950/40">
+              {sessions.map((session) => (
+                <tr key={session.id} className="text-zinc-700 dark:text-zinc-200">
+                  <td className="px-3 py-1.5">
+                    {deviceLabel(session.userAgent)}
+                    {session.current && (
+                      <span className="ml-1.5 rounded bg-brand/15 px-1 py-0.5 text-[10px] font-semibold text-brand">
+                        this device
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5">{browserLabel(session.userAgent)}</td>
+                  <td className="px-3 py-1.5 text-[11px]">
+                    {session.country ? `${COUNTRY_FLAG(session.country)} ${session.city ?? session.country} · ${session.ip ?? ''}` : '—'}
+                  </td>
+                  <td className="px-3 py-1.5 text-[11px] text-zinc-500">{fmtDate(session.createdAt)}</td>
+                  <td className="px-3 py-1.5 text-[11px] text-zinc-500">{timeAgo(session.lastSeenAt)}</td>
+                  <td className="px-3 py-1.5 text-right">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busyId === session.id}
+                      onClick={() => void revokeOne(session.id)}
+                      className="h-7 rounded-md text-[11px]"
+                    >
+                      Revoke
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

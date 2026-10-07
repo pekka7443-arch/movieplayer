@@ -12,6 +12,7 @@ import { KeyRound, Sparkles, X } from 'lucide-react';
 
 import { useCinedeckStore } from '@/lib/store';
 import { useSession } from '@/hooks/use-session';
+import { useHydrated } from '@/hooks/use-hydrated';
 
 const GUEST_BANNER_KEY = 'cinedeck.guestBanner.dismissedAt';
 
@@ -104,9 +105,12 @@ export function GuestSignupBanner() {
 export function MustChangePasswordBanner() {
   const openSettings = useCinedeckStore((s) => s.openSettings);
   const { user } = useSession();
+  // mustChangePassword arrives from the localStorage session cache — gate
+  // until hydration so the SSR HTML (guest) and the first client render agree.
+  const hydrated = useHydrated();
   const [dismissed, setDismissed] = useState(false);
 
-  if (!user?.mustChangePassword || dismissed) return null;
+  if (!hydrated || !user?.mustChangePassword || dismissed) return null;
 
   return (
     <section

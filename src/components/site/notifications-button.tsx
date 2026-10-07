@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useSession } from '@/hooks/use-session';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { useSettings } from '@/lib/settings';
 import {
   fetchNotifications,
@@ -33,6 +34,10 @@ export function NotificationsButton() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useSession();
+  // The bell only exists for signed-in users, and "signed-in" is known from
+  // the localStorage session cache — gate it until hydration so a signed-in
+  // reload never mismatches the guest SSR HTML.
+  const hydrated = useHydrated();
   const settings = useSettings();
 
   const query = useQuery<{ items: NotificationRow[]; unread: number }>({
@@ -61,7 +66,7 @@ export function NotificationsButton() {
     }
   }, [unread]);
 
-  if (!user) return null;
+  if (!hydrated || !user) return null;
 
   const items = (query.data?.items ?? []).slice(0, 12);
 

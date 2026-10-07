@@ -15,6 +15,11 @@ import { enforceRateLimit, clientIpOf } from '@/lib/server/rate-limit';
 import { signStatelessToken } from '@/lib/server/auth';
 import { geoLookup, truncateIp, classifyUserAgent } from '@/lib/server/geo';
 import { writeAudit } from '@/lib/server/audit';
+import {
+  adminLoginGuard,
+  isAdminLoginFromNewDevice,
+  notifyAdminNewDeviceLogin,
+} from '@/lib/server/admin-security';
 
 export const dynamic = 'force-dynamic';
 
@@ -130,6 +135,24 @@ export const POST = withApi('auth/login', async (request) => {
       targetLabel: user.email,
       details: { endedAt: user.suspensionEndsAt?.toISOString() ?? null },
     });
+  }
+
+  // --- Admin-only login guards (IP allowlist + device cap) ---------------
+  // Applies ONLY to role="admin" accounts: optional ADMIN_IP_ALLOWLIST check,
+  // then the 3-active-session cap. Regular members are never limited.
+  if (user.role === 'admin') {
+    const blocked = await adminLoginGuard({ user, ip, userAgent, logAttempt });
+    if (blocked) return blocked;
+    if (await isAdminLoginFromNewDevice(user.id, userAgent)) {
+      await notifyAdminNewDeviceLogin({
+        userId: user.id,
+        email: user.email,
+        ip,
+        userAgent,
+        country: geo.country,
+        city: geo.city,
+      });
+    }
   }
 
   // Carry the guest device's watchlist + history into the account.

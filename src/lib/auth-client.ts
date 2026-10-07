@@ -25,6 +25,8 @@ export type AuthErrorCode =
   | 'weak_password'
   | 'rate_limited'
   | 'account_suspended'
+  | 'admin_device_limit'
+  | 'admin_ip_blocked'
   | 'network'
   | 'unknown';
 
@@ -50,6 +52,9 @@ export const AUTH_ERROR_TEXT: Record<AuthErrorCode, string> = {
   weak_password: 'That password is too weak.',
   rate_limited: 'Too many attempts — wait a minute and try again.',
   account_suspended: 'Your account has been suspended. Contact support.',
+  admin_device_limit:
+    "Maximum device limit reached. Log out from another device first or use 'Log out all devices' in settings.",
+  admin_ip_blocked: 'Login not allowed from this network.',
   network: 'Network error — check your connection.',
   unknown: 'Something went wrong. Try again.',
 };
@@ -109,6 +114,8 @@ async function authFetch(path: string, body: unknown): Promise<AuthUser | AuthTo
       'bad_request',
       'weak_password',
       'account_suspended',
+      'admin_device_limit',
+      'admin_ip_blocked',
     ];
     const code = (known as readonly string[]).includes(payloadErrorCode(payload) ?? '')
       ? (payloadErrorCode(payload) as AuthErrorCode)
@@ -272,6 +279,26 @@ export async function revokeOtherSessions(): Promise<number> {
   if (!res.ok) return 0;
   const data = (await res.json()) as { revoked: number };
   return data.revoked ?? 0;
+}
+
+/** Revoke ONE session by id (DELETE { id }) — used by per-device lists. */
+export async function revokeOneSession(id: string): Promise<boolean> {
+  const res = await fetch('/api/auth/sessions', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  return res.ok;
+}
+
+/** "Log out all devices" (DELETE { all: true }) — revokes the caller too. */
+export async function revokeAllMySessions(): Promise<boolean> {
+  const res = await fetch('/api/auth/sessions', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ all: true }),
+  });
+  return res.ok;
 }
 
 // ---------------------------------------------------------------------------

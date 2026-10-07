@@ -4,7 +4,7 @@
 // Safari/Chrome expose `webkitSpeechRecognition`; Firefox has none — the hook
 // reports unsupported and the mic button simply stays hidden.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 interface SpeechRecognitionAlternativeLike {
   transcript: string;
@@ -34,6 +34,8 @@ interface SpeechRecognitionLike {
 
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
+const voiceSupportSubscribe = () => () => undefined;
+
 function getRecognitionCtor(): SpeechRecognitionCtor | null {
   if (typeof window === 'undefined') return null;
   const w = window as unknown as {
@@ -53,6 +55,14 @@ export function isVoiceSearchSupported(): boolean {
  */
 export function useVoiceSearch(onResult: (transcript: string) => void) {
   const [listening, setListening] = useState(false);
+  // Hydration-safe support flag: the server snapshot is `false`, so SSR and
+  // the first client render agree (no mic button); the real answer lands in
+  // the same tick hydration completes — no setState-in-effect, no mismatch.
+  const supported = useSyncExternalStore(
+    voiceSupportSubscribe,
+    () => getRecognitionCtor() !== null,
+    () => false,
+  );
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const onResultRef = useRef(onResult);
 
@@ -109,5 +119,5 @@ export function useVoiceSearch(onResult: (transcript: string) => void) {
     else start();
   }, [listening, start, stop]);
 
-  return { supported: isVoiceSearchSupported(), listening, toggle };
+  return { supported, listening, toggle };
 }

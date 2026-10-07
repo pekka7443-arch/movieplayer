@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 
 import { expect, test, type Page } from '@playwright/test';
 
@@ -23,6 +24,27 @@ function envFromDotEnv(key: string): string | undefined {
 
 const uniqueEmail = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@cinedeck.test`;
 
+/**
+ * Admin logins are capped at 3 active sessions (admin device-limit rule).
+ * The suite runs repeatedly against the same dev DB, so clear the admin's
+ * sessions directly before signing in — otherwise run #4 would hit
+ * "Maximum device limit reached" and fail for the right reason.
+ */
+function clearAdminSessions(email: string): void {
+  try {
+    const dbUrl = envFromDotEnv('DATABASE_URL') ?? 'file:./db/custom.db';
+    execSync(
+      `bun -e "const {PrismaClient}=require('@prisma/client');` +
+        `const db=new PrismaClient({datasources:{db:{url:${JSON.stringify(dbUrl)}}}});` +
+        `db.session.deleteMany({where:{user:{email:${JSON.stringify(email)}}}})` +
+        `.then(()=>db.$disconnect())"`,
+      { cwd: process.cwd(), stdio: 'ignore', timeout: 30_000 },
+    );
+  } catch {
+    // Best effort — a cold DB or missing binary must not block the suite.
+  }
+}
+
 async function dismissTour(page: Page): Promise<void> {
   await page.addInitScript(() => {
     try {
@@ -44,6 +66,7 @@ test.describe('admin dashboard', () => {
 
   test('suspend → blocked login → unsuspend → login works', async ({ page, request }) => {
     await dismissTour(page);
+    clearAdminSessions(ADMIN_EMAIL);
 
     // 0. Seed a victim account through the public API.
     const reg = await request.post('/api/auth/register', {

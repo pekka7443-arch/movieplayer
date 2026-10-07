@@ -70,7 +70,7 @@ const nextConfig: NextConfig = {
   // Native/dirname-dependent server packages must stay outside the bundler:
   // geoip-lite loads its MaxMind .dat files relative to __dirname, which the
   // bundler rewrites to a virtual /ROOT and breaks module init.
-  serverExternalPackages: ["geoip-lite", "qrcode"],
+  serverExternalPackages: ["geoip-lite", "qrcode", "nodemailer"],
   // Type errors fail the build — no more silent ignoreBuildErrors.
   typescript: {
     ignoreBuildErrors: false,

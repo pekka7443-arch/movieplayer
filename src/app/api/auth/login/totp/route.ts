@@ -14,6 +14,11 @@ import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit, clientIpOf } from '@/lib/server/rate-limit';
 import { matchBackupCode, verifyTotp } from '@/lib/server/totp';
 import { geoLookup, truncateIp } from '@/lib/server/geo';
+import {
+  adminLoginGuard,
+  isAdminLoginFromNewDevice,
+  notifyAdminNewDeviceLogin,
+} from '@/lib/server/admin-security';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,6 +108,47 @@ export const POST = withApi('auth/login/totp', async (request) => {
       .catch(() => undefined);
   }
 
+  const ip = clientIpOf(request);
+  const userAgent = request.headers.get('user-agent');
+  const geo = geoLookup(ip);
+  const logAttempt = (userId: string | null, success: boolean, reason: string) => {
+    void db.loginAttempt
+      .create({
+        data: {
+          email: user.email,
+          userId,
+          success,
+          reason,
+          ip: truncateIp(ip),
+          userAgent: userAgent?.slice(0, 200) ?? null,
+          country: geo.country,
+          city: geo.city,
+        },
+      })
+      .catch(() => undefined);
+  };
+
+  // --- Admin-only login guards (IP allowlist + device cap) — mirrors login.
+  if (user.role === 'admin') {
+    const blocked = await adminLoginGuard({
+      user: { id: user.id, email: user.email, role: user.role },
+      ip,
+      userAgent,
+      logAttempt,
+    });
+    if (blocked) return blocked;
+    if (await isAdminLoginFromNewDevice(user.id, userAgent)) {
+      await notifyAdminNewDeviceLogin({
+        userId: user.id,
+        email: user.email,
+        ip,
+        userAgent,
+        country: geo.country,
+        city: geo.city,
+      });
+    }
+  }
+
   const owner = await resolveOwner(request);
   if (owner.guestId) {
     try {
@@ -112,10 +158,8 @@ export const POST = withApi('auth/login/totp', async (request) => {
     }
   }
 
-  const ip = clientIpOf(request);
-  const geo = geoLookup(ip);
   const session = await createSession(user.id, {
-    userAgent: request.headers.get('user-agent'),
+    userAgent,
     ip,
     country: geo.country,
     city: geo.city,
@@ -128,7 +172,7 @@ export const POST = withApi('auth/login/totp', async (request) => {
         success: true,
         reason: backup.matched ? 'totp_backup' : 'totp_ok',
         ip: truncateIp(ip),
-        userAgent: request.headers.get('user-agent')?.slice(0, 200) ?? null,
+        userAgent: userAgent?.slice(0, 200) ?? null,
         country: geo.country,
         city: geo.city,
       },

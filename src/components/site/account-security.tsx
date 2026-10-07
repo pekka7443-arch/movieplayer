@@ -47,29 +47,10 @@ import {
   type SessionInfo,
 } from '@/lib/auth-client';
 import { checkPassword } from '@/lib/password';
+import { deviceLabel, timeAgo } from '@/lib/format';
 import { useSession, invalidateIdentityCaches } from '@/hooks/use-session';
 
 const AVATAR_PRESETS = ['🍿', '🎬', '🦁', '🐰', '🦊', '🐼', '🐙', '🦉', '🐧', '🌵', '🍄', '⚡'];
-
-function deviceLabel(userAgent: string | null): string {
-  if (!userAgent) return 'Unknown device';
-  if (/iphone|ipad/i.test(userAgent)) return 'iPhone / iPad';
-  if (/android/i.test(userAgent)) return 'Android device';
-  if (/macintosh/i.test(userAgent)) return 'Mac';
-  if (/windows/i.test(userAgent)) return 'Windows PC';
-  if (/linux/i.test(userAgent)) return 'Linux device';
-  return 'Browser';
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return `${Math.floor(hours / 24)} d ago`;
-}
 
 // ---------------------------------------------------------------------------
 // ACCOUNT — identity (name / avatar / email)

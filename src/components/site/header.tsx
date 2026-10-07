@@ -37,6 +37,7 @@ import { fetchProfiles, type ProfileRow } from '@/lib/library';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey } from '@/lib/settings';
 import { useSession, invalidateIdentityCaches } from '@/hooks/use-session';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { useHomeSectionNav } from '@/hooks/use-section-nav';
 import { useQuery } from '@tanstack/react-query';
 import { logoutAccount } from '@/lib/auth-client';
@@ -57,6 +58,12 @@ export function Header() {
   const openAuth = useCinedeckStore((s) => s.openAuth);
   const hasKey = useHasTmdbKey();
   const { user, loading } = useSession();
+  // The session cache lives in localStorage: SSR and the first client render
+  // must agree (skeleton) or React throws a hydration mismatch for every
+  // signed-in reload. useHydrated flips in the same tick hydration completes,
+  // so the real avatar/sign-in button paints immediately after.
+  const hydrated = useHydrated();
+  const identityLoading = loading || !hydrated;
   const goSection = useHomeSectionNav();
   const setPaletteOpen = useCinedeckStore((s) => s.setPaletteOpen);
   const activeProfileId = useCinedeckStore((s) => s.activeProfileId);
@@ -184,7 +191,7 @@ export function Header() {
           </Button>
 
           {/* Account zone */}
-          {loading ? (
+          {identityLoading ? (
             <span
               aria-hidden
               className="ml-1 size-9 shrink-0 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800"

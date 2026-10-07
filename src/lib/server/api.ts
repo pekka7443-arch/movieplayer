@@ -44,6 +44,9 @@ const DEFAULT_MESSAGES: Record<string, string> = {
   totp_not_enabled: 'Two-factor authentication is not enabled.',
   totp_already_enabled: 'Two-factor authentication is already enabled.',
   account_suspended: 'Your account has been suspended. Contact support if you think this is a mistake.',
+  admin_device_limit:
+    "Maximum device limit reached. Log out from another device first or use 'Log out all devices' in settings.",
+  admin_ip_blocked: 'Login not allowed from this network.',
 };
 
 /** Normalized API error — throw inside any withApi handler. */
