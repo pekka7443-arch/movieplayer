@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { resolveOwner } from '@/lib/server/auth';
 import { withApi } from '@/lib/server/api';
 import { guardMutation, jsonError, readJsonBody } from '@/lib/server/http';
+import { recentLogs } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,11 @@ export const GET = withApi('admin', async (request) => {
     select: { role: true },
   });
   if (user?.role !== 'admin') return jsonError('forbidden', 403);
+
+  // ?logs=1 → the in-memory recent-log ring (admin Logs panel).
+  if (new URL(request.url).searchParams.get('logs')) {
+    return Response.json({ logs: recentLogs(100) });
+  }
 
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -65,13 +71,26 @@ export const GET = withApi('admin', async (request) => {
       watchers: entry.viewers.size,
     }));
 
-  const [providerStats, flaggedComments] = await Promise.all([
+  const [providerStats, flaggedComments, sessions] = await Promise.all([
     db.providerStat.findMany({ orderBy: { id: 'asc' } }),
     db.comment.findMany({
       where: { status: 'flagged' },
       orderBy: { createdAt: 'desc' },
       take: 50,
       select: { id: true, authorName: true, body: true, createdAt: true },
+    }),
+    // Active sessions across all accounts (metadata only — never tokens).
+    db.session.findMany({
+      where: { expiresAt: { gt: new Date() } },
+      orderBy: { lastSeenAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        userAgent: true,
+        ip: true,
+        lastSeenAt: true,
+        user: { select: { email: true, name: true } },
+      },
     }),
   ]);
 
@@ -91,6 +110,13 @@ export const GET = withApi('admin', async (request) => {
     topTitles,
     providerStats,
     flaggedComments: flaggedComments.map((c) => ({ ...c, createdAt: c.createdAt.toISOString() })),
+    sessions: sessions.map((s) => ({
+      id: s.id,
+      userAgent: s.userAgent,
+      ip: s.ip,
+      lastSeenAt: s.lastSeenAt.toISOString(),
+      email: s.user?.email ?? 'unknown',
+    })),
   });
 });
 
@@ -98,6 +124,7 @@ const postSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('deleteComment'), id: z.string().min(1) }),
   z.object({ action: z.literal('approveComment'), id: z.string().min(1) }),
   z.object({ action: z.literal('promoteUser'), id: z.string().min(1), admin: z.boolean() }),
+  z.object({ action: z.literal('revokeSession'), id: z.string().min(1).max(64) }),
 ]);
 
 // POST /api/admin → moderation + role actions.
@@ -126,6 +153,10 @@ export const POST = withApi('admin-post', async (request) => {
       where: { id: parsed.data.id },
       data: { status: 'visible' },
     });
+    return Response.json({ ok: true });
+  }
+  if (parsed.data.action === 'revokeSession') {
+    await db.session.deleteMany({ where: { id: parsed.data.id } });
     return Response.json({ ok: true });
   }
   await db.user.update({

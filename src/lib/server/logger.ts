@@ -40,10 +40,57 @@ export interface RequestLogFields {
 
 export function logRequest(fields: RequestLogFields): void {
   const level = fields.status >= 500 ? 'error' : fields.status >= 400 ? 'warn' : 'info';
+  pushRecentLog({
+    time: new Date().toISOString(),
+    level,
+    msg: 'request',
+    path: fields.path,
+    status: fields.status,
+    durationMs: fields.durationMs,
+    requestId: fields.requestId,
+  });
   logger[level](fields, 'request');
 }
 
 /** Child logger bound to a request id — use inside route handlers. */
 export function requestLogger(requestId: string): pino.Logger {
   return logger.child({ requestId });
+}
+
+// ---------------------------------------------------------------------------
+// In-memory recent-log ring — powers the admin Logs panel (dev + prod).
+// Keeps the last 200 entries (requests + errors) in this process.
+// ---------------------------------------------------------------------------
+
+export interface RecentLogEntry {
+  time: string;
+  level: 'info' | 'warn' | 'error';
+  msg: string;
+  path?: string;
+  status?: number;
+  durationMs?: number;
+  requestId?: string;
+}
+
+const globalForLogRing = globalThis as unknown as { __cinedeckLogRing?: RecentLogEntry[] };
+const RING_SIZE = 200;
+
+function ring(): RecentLogEntry[] {
+  if (!globalForLogRing.__cinedeckLogRing) globalForLogRing.__cinedeckLogRing = [];
+  return globalForLogRing.__cinedeckLogRing;
+}
+
+export function pushRecentLog(entry: RecentLogEntry): void {
+  const buf = ring();
+  buf.push(entry);
+  if (buf.length > RING_SIZE) buf.splice(0, buf.length - RING_SIZE);
+}
+
+/** Newest-last list of the most recent `take` entries. */
+export function recentLogs(take = 100): RecentLogEntry[] {
+  return ring().slice(-take);
+}
+
+export function clearRecentLogs(): void {
+  globalForLogRing.__cinedeckLogRing = [];
 }

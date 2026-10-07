@@ -66,6 +66,7 @@ const CommandPalette = dynamic(
   () => import('@/components/site/command-palette').then((m) => m.CommandPalette),
   { ssr: false },
 );
+import { AnnouncementBanner } from '@/components/site/announcement-banner';
 
 function parsePositiveInt(value: string | null): number | null {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -75,41 +76,6 @@ function parsePositiveInt(value: string | null): number | null {
 
 function parseImdbId(value: string | null): string | null {
   return value && /^tt\d+$/.test(value) ? value : null;
-}
-
-/** Announcement banner text from the feature-flag service (admin published). */
-function useAnnouncement(): string | null {
-  const params = useSearchParams();
-  const view = params.get('view');
-  useEffect(() => {
-    let cancelled = false;
-    const storageKey = 'cinedeck.announcement.seen';
-    void fetch('/api/flags')
-      .then((r) => r.json())
-      .then((data: { announcement: { id: string; message: string } | null }) => {
-        if (cancelled || !data.announcement) return;
-        let seen: string | null = null;
-        try {
-          seen = window.localStorage.getItem(storageKey);
-        } catch {
-          // ignore
-        }
-        if (seen === data.announcement.id) return;
-        try {
-          window.localStorage.setItem(storageKey, data.announcement.id);
-        } catch {
-          // ignore
-        }
-        window.dispatchEvent(
-          new CustomEvent('cinedeck:announcement', { detail: data.announcement.message }),
-        );
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [view]);
-  return null;
 }
 
 function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaSearchItem[] }) {
@@ -138,8 +104,6 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
               : shareToken
                 ? 'share'
                 : 'home';
-
-  useAnnouncement();
 
   // Global shortcuts: Ctrl/Cmd+K opens the command palette. Profile id is
   // hydrated once so scoped library writes (profileId) match the UI.
@@ -175,6 +139,7 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
         <AmbientBackground />
         <ScrollProgress />
         <Header />
+        <AnnouncementBanner />
         <main
           id="main-content"
           tabIndex={-1}

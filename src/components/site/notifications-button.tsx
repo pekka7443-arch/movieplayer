@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { Bell, BellRing } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -40,9 +41,25 @@ export function NotificationsButton() {
     refetchInterval: 5 * 60_000,
   });
 
+  const unread = query.data?.unread ?? 0;
+
+  // PWA app badge (setAppBadge where supported — Android/Chrome; harmless no-op elsewhere).
+  useEffect(() => {
+    const nav = navigator as Navigator & {
+      setAppBadge?: (count?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (typeof nav.setAppBadge !== 'function') return;
+    try {
+      if (unread > 0) void nav.setAppBadge(unread).catch(() => undefined);
+      else void nav.clearAppBadge?.().catch(() => undefined);
+    } catch {
+      // unsupported — badge is a progressive enhancement
+    }
+  }, [unread]);
+
   if (!user) return null;
 
-  const unread = query.data?.unread ?? 0;
   const items = (query.data?.items ?? []).slice(0, 12);
 
   const open = async () => {

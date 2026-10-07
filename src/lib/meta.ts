@@ -73,6 +73,9 @@ export interface MetaDetails {
    * "Finland, Belgium, Iceland" — used to detect Finnish titles and surface
    * YLE Areena as the honest source for them. */
   country?: string | null;
+  /** ISO release date when the upstream provides one (Cinemeta `released`).
+   * Powers "now released" notifications for watchlisted movies. */
+  released?: string | null;
 }
 
 export interface ScanResult {

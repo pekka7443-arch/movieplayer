@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { resolveOwner } from '@/lib/server/auth';
 import { withApi } from '@/lib/server/api';
 import { guardMutation, jsonError, readJsonBody } from '@/lib/server/http';
+import { cinemetaDetails } from '@/lib/server/cinemeta';
 import { tvmazeFullByImdb } from '@/lib/server/tvmaze';
 
 export const dynamic = 'force-dynamic';
@@ -94,6 +95,58 @@ async function checkFollowedShows(userId: string): Promise<void> {
   }
 }
 
+/**
+ * Lazily create "now released" notifications for watchlisted movies.
+ * Cinemeta carries the release date; anything released within the last 7
+ * days becomes a kind=release notification (deduped like episodes).
+ */
+async function checkWatchlistMovies(userId: string): Promise<void> {
+  const throttleKey = `${userId}:movies`;
+  const last = (globalForChecks as Record<string, number | undefined>)[throttleKey] ?? 0;
+  const now = Date.now();
+  if (now - last < 6 * 60 * 60 * 1000) return;
+  (globalForChecks as Record<string, number | undefined>)[throttleKey] = now;
+
+  const movies = await db.watchlistItem.findMany({
+    where: { ownerId: userId, mediaType: 'movie', imdbId: { not: null } },
+    select: { tmdbId: true, title: true, imdbId: true },
+    take: 20,
+  });
+  if (movies.length === 0) return;
+
+  const existing = await db.notification.findMany({
+    where: { userId, kind: 'release' },
+    select: { payload: true },
+    orderBy: { createdAt: 'desc' },
+    take: 200,
+  });
+  const seen = new Set(existing.map((n) => String(parsePayload(n.payload).key ?? '')));
+
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  for (const movie of movies.slice(0, 10)) {
+    if (!movie.imdbId) continue;
+    const details = await cinemetaDetails(movie.imdbId, 'movie').catch(() => null);
+    if (!details?.released) continue;
+    const releasedTs = new Date(details.released).getTime();
+    if (!Number.isFinite(releasedTs) || releasedTs < weekAgo || releasedTs > now) continue;
+    const key = `rel:${movie.tmdbId}:${details.released.slice(0, 10)}`;
+    if (seen.has(key)) continue;
+    await db.notification.create({
+      data: {
+        userId,
+        kind: 'release',
+        payload: JSON.stringify({
+          key,
+          title: details.title,
+          tmdbId: movie.tmdbId,
+          mediaType: 'movie',
+          text: `${details.title} is now released — it's on your watchlist.`,
+        }),
+      },
+    });
+  }
+}
+
 // GET /api/notifications → unread + recent notifications (runs the episode
 // check opportunistically, throttled internally).
 export const GET = withApi('notifications', async (request) => {
@@ -103,6 +156,7 @@ export const GET = withApi('notifications', async (request) => {
   }
 
   void checkFollowedShows(owner.userId);
+  void checkWatchlistMovies(owner.userId);
 
   const rows = await db.notification.findMany({
     where: { userId: owner.userId },

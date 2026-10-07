@@ -2,7 +2,18 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, Ban, Check, Megaphone, ShieldCheck, Trash2, Users } from 'lucide-react';
+import {
+  Activity,
+  ArrowLeft,
+  Ban,
+  Check,
+  Megaphone,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -23,6 +34,17 @@ interface AdminPayload {
   topTitles: { tmdbId: number; mediaType: string; title: string; watchers: number }[];
   providerStats: { id: string; okCount: number; failCount: number; lastOkAt: string | null; lastFailAt: string | null }[];
   flaggedComments: { id: string; authorName: string | null; body: string; createdAt: string }[];
+  sessions: { id: string; userAgent: string | null; ip: string | null; lastSeenAt: string; email: string }[];
+}
+
+interface LogEntry {
+  time: string;
+  level: 'info' | 'warn' | 'error';
+  msg: string;
+  path?: string;
+  status?: number;
+  durationMs?: number;
+  requestId?: string;
 }
 
 async function adminAction(body: Record<string, unknown>): Promise<void> {
@@ -238,8 +260,190 @@ export function AdminView() {
               </div>
             </section>
           </div>
+
+          {/* Sessions across accounts */}
+          <section className="rounded-2xl border border-zinc-200 bg-white/70 p-4 dark:border-zinc-800/80 dark:bg-zinc-900/50" aria-label="Sessions">
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-zinc-500">Active sessions</h2>
+            {(data.sessions ?? []).length === 0 ? (
+              <p className="py-4 text-center text-sm text-zinc-500">No active sessions.</p>
+            ) : (
+              <ul className="max-h-56 space-y-1.5 overflow-y-auto">
+                {(data.sessions ?? []).map((s) => (
+                  <li key={s.id} className="flex items-center gap-2 rounded-lg bg-zinc-100/70 px-2.5 py-1.5 text-sm dark:bg-zinc-900/60">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-zinc-800 dark:text-zinc-200">{s.email}</span>
+                      <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {(s.userAgent ?? 'unknown device').slice(0, 60)}{s.ip ? ` · ${s.ip}` : ''}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[10px] text-zinc-400">
+                      {new Date(s.lastSeenAt).toLocaleString()}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 shrink-0 gap-1 rounded-lg px-2 text-[11px] text-red-600"
+                      onClick={() => run({ action: 'revokeSession', id: s.id }, 'Session revoked')}
+                    >
+                      <Trash2 className="size-3" aria-hidden /> Revoke
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <FlagsSection onFlagsChanged={() => void queryClient.invalidateQueries({ queryKey: ['flags'] })} />
+            <LogsSection />
+          </div>
         </>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Feature flags — toggle + create via /api/flags
+// ---------------------------------------------------------------------------
+
+function FlagsSection({ onFlagsChanged }: { onFlagsChanged: () => void }) {
+  const [newKey, setNewKey] = useState('');
+  const query = useQuery({
+    queryKey: ['flags'],
+    queryFn: async () => {
+      const res = await fetch('/api/flags');
+      if (!res.ok) throw new Error('flags_unreachable');
+      return (await res.json()) as { flags: Record<string, boolean> };
+    },
+    staleTime: 10_000,
+  });
+
+  const setFlag = async (key: string, enabled: boolean) => {
+    try {
+      const res = await fetch('/api/flags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'flag', key, enabled }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${key} ${enabled ? 'enabled' : 'disabled'}`);
+      onFlagsChanged();
+      void query.refetch();
+    } catch {
+      toast.error('Flag update failed');
+    }
+  };
+
+  const entries = Object.entries(query.data?.flags ?? {});
+
+  return (
+    <section className="rounded-2xl border border-zinc-200 bg-white/70 p-4 dark:border-zinc-800/80 dark:bg-zinc-900/50" aria-label="Feature flags">
+      <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-zinc-500">Feature flags</h2>
+      {entries.length === 0 ? (
+        <p className="py-3 text-sm text-zinc-500">No flags yet — create the first one below.</p>
+      ) : (
+        <ul className="max-h-40 space-y-1.5 overflow-y-auto">
+          {entries.map(([key, enabled]) => (
+            <li key={key} className="flex items-center gap-2 text-sm">
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-700 dark:text-zinc-300">{key}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={enabled}
+                aria-label={`Toggle ${key}`}
+                onClick={() => void setFlag(key, !enabled)}
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                  enabled ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 size-4 rounded-full bg-white shadow transition-all ${enabled ? 'left-4' : 'left-0.5'}`}
+                  aria-hidden
+                />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 flex gap-2">
+        <Input
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value.replace(/[^a-z0-9-_]/gi, '').slice(0, 60))}
+          placeholder="new-flag-key"
+          className="h-9 rounded-lg border-zinc-200 font-mono text-xs dark:border-zinc-800"
+        />
+        <Button
+          size="sm"
+          disabled={newKey.trim().length < 2}
+          onClick={async () => {
+            await setFlag(newKey.trim(), true);
+            setNewKey('');
+          }}
+          className="h-9 shrink-0 gap-1 rounded-lg bg-brand px-3 text-xs font-semibold text-brand-foreground"
+        >
+          <Plus className="size-3.5" aria-hidden /> Add
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Logs — recent in-memory request/error ring from the server
+// ---------------------------------------------------------------------------
+
+function LogsSection() {
+  const query = useQuery({
+    queryKey: ['admin-logs'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin?logs=1');
+      if (!res.ok) throw new Error('logs_unreachable');
+      return (await res.json()) as { logs: LogEntry[] };
+    },
+    refetchInterval: 15_000,
+  });
+
+  const logs = (query.data?.logs ?? []).slice(-40).reverse();
+
+  return (
+    <section className="rounded-2xl border border-zinc-200 bg-white/70 p-4 dark:border-zinc-800/80 dark:bg-zinc-900/50" aria-label="Recent logs">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-zinc-500">
+          <Activity className="size-3.5" aria-hidden /> Recent logs
+        </h2>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 rounded-lg px-2 text-[11px]"
+          onClick={() => void query.refetch()}
+        >
+          <RefreshCw className={'size-3' + (query.isFetching ? ' animate-spin' : '')} aria-hidden /> Refresh
+        </Button>
+      </div>
+      {query.isPending ? (
+        <p className="py-4 text-sm text-zinc-500">Loading logs…</p>
+      ) : logs.length === 0 ? (
+        <p className="py-4 text-sm text-zinc-500">No log entries in this process yet.</p>
+      ) : (
+        <ul className="max-h-52 space-y-0.5 overflow-y-auto font-mono text-[11px]">
+          {logs.map((entry, i) => (
+            <li
+              key={`${entry.time}-${i}`}
+              className={
+                entry.level === 'error'
+                  ? 'text-red-600 dark:text-red-400'
+                  : entry.level === 'warn'
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-zinc-500 dark:text-zinc-400'
+              }
+            >
+              <span className="text-zinc-400">{entry.time.slice(11, 19)}</span>{' '}
+              {entry.path ? `${entry.path} ${entry.status ?? ''} ${entry.durationMs ?? ''}ms` : entry.msg}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
