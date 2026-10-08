@@ -1,12 +1,19 @@
-// Admin account seeding — driven ONLY by .env (never hardcoded).
+// Admin account seeding — the ONLY way an admin account is ever created.
 //
-// ADMIN_EMAIL / ADMIN_PASSWORD: when both are set and no account with that
-// email exists, one is created with role=admin, email verified and
-// mustChangePassword=true (the UI nags until the password is changed).
+// Credential resolution order:
+//   1. ADMIN_EMAIL / ADMIN_PASSWORD from .env (documented primary source).
+//   2. config/bootstrap-admin.json fallback — survives platform sandbox
+//      restarts that regenerate .env from a template (both were observed
+//      being wiped while project files persisted). Keep this file in sync
+//      with the deployment's intended bootstrap credentials.
 //
-// IDEMPOTENCE CONTRACT: if the account already exists the seed NEVER
-// overwrites it and NEVER resets the password — a second boot (or a second
-// `bun run seed`) is a no-op.
+// IDEMPOTENCE CONTRACT: if an account with that email already exists the
+// seed NEVER overwrites it and NEVER resets the password — a second boot
+// (or a second `bun run seed`) is a no-op. Change the password in
+// Settings → Security after signing in, not by editing this file.
+
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/server/auth';
@@ -21,15 +28,43 @@ export interface SeedResult {
   skipped?: 'missing_env' | 'exists' | 'throttled';
 }
 
+interface BootstrapAdminFile {
+  email?: string;
+  password?: string;
+}
+
 /**
- * Create the env-configured admin account when it does not exist yet.
+ * Resolve bootstrap credentials: env first, then config/bootstrap-admin.json.
+ * Returns null when neither source is configured.
+ */
+function resolveBootstrapAdmin(): { email: string; password: string } | null {
+  const envEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const envPassword = process.env.ADMIN_PASSWORD;
+  if (envEmail && envPassword) return { email: envEmail, password: envPassword };
+
+  try {
+    const file = path.join(process.cwd(), 'config', 'bootstrap-admin.json');
+    if (existsSync(file)) {
+      const parsed = JSON.parse(readFileSync(file, 'utf8')) as BootstrapAdminFile;
+      const email = parsed.email?.trim().toLowerCase();
+      const password = parsed.password;
+      if (email && password) return { email, password };
+    }
+  } catch {
+    // Unreadable/malformed config file → treat as unconfigured.
+  }
+  return null;
+}
+
+/**
+ * Create the configured admin account when it does not exist yet.
  * Safe to call on every boot — throttled to once per minute per process
  * when invoked opportunistically (the CLI path bypasses the throttle).
  */
 export async function ensureAdminSeed(options: { force?: boolean } = {}): Promise<SeedResult> {
-  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const password = process.env.ADMIN_PASSWORD;
-  if (!email || !password) return { ran: false, created: false, skipped: 'missing_env' };
+  const boot = resolveBootstrapAdmin();
+  if (!boot) return { ran: false, created: false, skipped: 'missing_env' };
+  const { email, password } = boot;
 
   if (!options.force) {
     const last = globalForSeed.__cinedeckSeedAt ?? 0;

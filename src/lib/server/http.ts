@@ -22,43 +22,76 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 function normalizeHost(host: string | null): string {
   if (!host) return '';
-  return host.toLowerCase().split(':')[0].replace(/\.$/, '');
+  return host.trim().toLowerCase().split(':')[0].replace(/\.$/, '');
+}
+
+/**
+ * Public platform domains that legitimately serve this deployment. The z.ai
+ * preview/publish gateway proxies the app through preview-<id>.space-z.ai and
+ * embeds it in *.z.ai pages (mirrors FRAME_ANCESTORS in next.config.ts) —
+ * when that proxy rewrites the Host header, an Origin on one of these domains
+ * is still genuinely ours.
+ */
+function isTrustedPlatformHost(host: string): boolean {
+  return host === 'z.ai' || host.endsWith('.z.ai') || host.endsWith('.space-z.ai');
 }
 
 /**
  * True when the request plausibly originates from this site.
- * - Same-origin fetch sends Origin: <scheme://host[:port]>. We compare the
- *   hostname against the Host header (scheme and port differ behind proxies).
- * - No Origin at all: fall back to Referer. Native tooling that sends
- *   neither (curl) is allowed — cookies still gate the sensitive actions.
+ *
+ * Checked in layers, most-trusted first:
+ * 1. `Sec-Fetch-Site` — asserted BY THE BROWSER from the actual page origin,
+ *    so it is immune to reverse proxies rewriting Host. `same-origin`/`none`
+ *    allow, `cross-site` rejects, `same-site` falls through to the header
+ *    comparison. Chrome 76+, Firefox 90+, Safari 16.4+ all send it.
+ * 2. Header comparison — the Origin/Referer hostname against Host,
+ *    X-Forwarded-Host (first hop when chained) and the optional
+ *    ALLOWED_ORIGINS env (comma-separated extra hostnames, port stripped).
+ *    Platform preview domains (*.space-z.ai / *.z.ai) are always accepted.
+ * 3. No Origin/Referer at all (curl, server-to-server) → allow; the session
+ *    cookie is SameSite=Lax + HttpOnly, so browser CSRF is already blocked.
  */
 export function isSameOrigin(request: Request): boolean {
   if (!MUTATING.has(request.method.toUpperCase())) return true;
 
-  const host = normalizeHost(request.headers.get('host'));
-  if (!host) return false;
+  const fetchSite = request.headers.get('sec-fetch-site')?.toLowerCase();
+  if (fetchSite === 'same-origin' || fetchSite === 'none') return true;
+  if (fetchSite === 'cross-site') return false;
+
+  const allowed = new Set<string>();
+  const push = (value: string | null | undefined) => {
+    const host = normalizeHost(value ?? null);
+    if (host) allowed.add(host);
+  };
+  push(request.headers.get('host'));
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  if (forwardedHost) push(forwardedHost.split(',')[0]?.trim());
+  const extraOrigins = process.env.ALLOWED_ORIGINS;
+  if (extraOrigins) {
+    for (const entry of extraOrigins.split(',')) push(entry.trim());
+  }
 
   const origin = request.headers.get('origin');
-  if (origin) {
-    try {
-      return normalizeHost(new URL(origin).host) === host;
-    } catch {
-      return false;
-    }
-  }
-
   const referer = request.headers.get('referer');
-  if (referer) {
-    try {
-      return normalizeHost(new URL(referer).host) === host;
-    } catch {
-      return false;
-    }
-  }
+  if (!origin && !referer) return true;
 
-  // No Origin/Referer (curl, server-to-server). The session cookie is
-  // SameSite=Lax + HttpOnly, so browser CSRF is already blocked — allow.
-  return true;
+  const claimHostOf = (value: string): string | null => {
+    try {
+      return normalizeHost(new URL(value).host);
+    } catch {
+      return null;
+    }
+  };
+
+  const claimAllowed = (claim: string | null): boolean => {
+    if (!claim) return false;
+    return allowed.has(claim) || isTrustedPlatformHost(claim);
+  };
+
+  // Origin decides when present (browsers always send it on cross-site
+  // POSTs); Referer is the legacy fallback when Origin was stripped.
+  if (origin) return claimAllowed(claimHostOf(origin));
+  return claimAllowed(claimHostOf(referer as string));
 }
 
 /** 403 Response when the origin check fails; null when the request is safe. */

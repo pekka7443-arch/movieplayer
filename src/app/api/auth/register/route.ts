@@ -37,9 +37,9 @@ const registerSchema = z.object({
  *    notice email instead of an `email_taken` error;
  *  - with verification off (dev default) `email_taken` keeps the good UX.
  *
- * Admin comes from the env seed (ensureAdminSeed) — normal signups are
- * always role=user. When ADMIN_EMAIL is unset the first account on an empty
- * database still becomes admin (small self-hosted fallback).
+ * Admin comes from the env/config seed (ensureAdminSeed) — signups through
+ * this route are ALWAYS role=user, even on an empty database. Nobody can
+ * escalate to admin by registering.
  */
 export const POST = withApi('auth/register', async (request) => {
   const originError = enforceSameOrigin(request);
@@ -78,7 +78,6 @@ export const POST = withApi('auth/register', async (request) => {
     return apiError(409, 'email_taken');
   }
 
-  const isFirstUser = (await db.user.count()) === 0 && !process.env.ADMIN_EMAIL;
   const ip = clientIpOf(request);
   const geo = geoLookup(ip);
   const user = await db.user.create({
@@ -86,7 +85,10 @@ export const POST = withApi('auth/register', async (request) => {
       email,
       name: name ?? null,
       passwordHash: hashPassword(password),
-      role: isFirstUser ? 'admin' : 'user',
+      // Always a plain member. The ONLY admin account is created by the
+      // idempotent seed (ADMIN_EMAIL/ADMIN_PASSWORD or the bootstrap config
+      // file) — never by signing up.
+      role: 'user',
       signupIp: truncateIp(ip),
       country: geo.country,
       city: geo.city,
