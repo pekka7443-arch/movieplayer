@@ -20,6 +20,7 @@ import {
   Download,
   Eye,
   Flag,
+  Ghost,
   LogOut,
   Mail,
   Megaphone,
@@ -48,6 +49,12 @@ import {
   type SessionInfo,
 } from '@/lib/auth-client';
 import { invalidateIdentityCaches, useSession } from '@/hooks/use-session';
+import {
+  TROLL_CATALOG,
+  TROLL_DURATION_RANGE,
+  TROLL_TYPES,
+  type TrollType,
+} from '@/lib/troll-shared';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -127,7 +134,7 @@ function StatCard({ label, value, hint }: { label: string; value: number | strin
 // Role gate + tab shell
 // ---------------------------------------------------------------------------
 
-type Tab = 'overview' | 'users' | 'moderation' | 'audit' | 'flags' | 'sessions' | 'my-sessions' | 'logs';
+type Tab = 'overview' | 'users' | 'moderation' | 'audit' | 'flags' | 'sessions' | 'my-sessions' | 'logs' | 'troll';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview', label: 'Overview', icon: <BarChart3 className="size-4" aria-hidden /> },
@@ -138,6 +145,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'sessions', label: 'Sessions', icon: <Activity className="size-4" aria-hidden /> },
   { id: 'my-sessions', label: 'My sessions', icon: <MonitorSmartphone className="size-4" aria-hidden /> },
   { id: 'logs', label: 'Logs', icon: <MousePointerClick className="size-4" aria-hidden /> },
+  { id: 'troll', label: 'Troll', icon: <Ghost className="size-4" aria-hidden /> },
 ];
 
 export function AdminView() {
@@ -208,6 +216,7 @@ export function AdminView() {
       {tab === 'sessions' && <SessionsTab />}
       {tab === 'my-sessions' && <MySessionsTab />}
       {tab === 'logs' && <LogsTab />}
+      {tab === 'troll' && <TrollTab />}
     </div>
   );
 }
@@ -1527,6 +1536,263 @@ function LogsTab() {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TROLL — fun pranks to launch at viewers (jumpscare, fake crash, party…)
+// ---------------------------------------------------------------------------
+
+interface TrollHistoryEvent {
+  id: number;
+  type: TrollType;
+  message: string;
+  durationSec: number;
+  createdAt: number;
+  target: string;
+  createdBy: string;
+}
+
+function TrollTab() {
+  const queryClient = useQueryClient();
+  const [type, setType] = useState<TrollType>('jumpscare');
+  const [targetMode, setTargetMode] = useState<'all' | 'user'>('all');
+  const [targetEmail, setTargetEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [durationSec, setDurationSec] = useState(8);
+  const [firing, setFiring] = useState(false);
+
+  // Victim picker — the admin users table, light page of emails.
+  const { data: usersData } = useQuery({
+    queryKey: ['admin', 'users', 'troll-picker'],
+    queryFn: () =>
+      adminGet<{ users: { email: string; name: string | null }[] }>(
+        '/api/admin?view=users&sort=created_at&dir=desc&page=1&pageSize=100',
+      ),
+    staleTime: 60_000,
+  });
+
+  const { data: history, refetch } = useQuery({
+    queryKey: ['admin', 'troll-history'],
+    queryFn: () => adminGet<{ events: TrollHistoryEvent[] }>('/api/admin/troll'),
+    refetchInterval: 30_000,
+  });
+
+  const fire = async () => {
+    if (targetMode === 'user' && !targetEmail.trim()) {
+      toast.error('Type the email of your chosen victim first.');
+      return;
+    }
+    setFiring(true);
+    try {
+      const res = await fetch('/api/admin/troll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          target: targetMode === 'all' ? 'all' : targetEmail.trim().toLowerCase(),
+          message: message.trim() || undefined,
+          durationSec,
+        }),
+      });
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        throw new Error(payload.error?.message ?? `troll_${res.status}`);
+      }
+      const prank = TROLL_CATALOG[type];
+      toast.success(
+        targetMode === 'all'
+          ? `${prank.emoji} ${prank.name} released on everyone — watch the chaos in ~15s.`
+          : `${prank.emoji} ${prank.name} sent to ${targetEmail.trim()} — they'll get it in ~15s.`,
+      );
+      setMessage('');
+      void refetch();
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'audit'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'The prank misfired.');
+    } finally {
+      setFiring(false);
+    }
+  };
+
+  const prank = TROLL_CATALOG[type];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">
+            <Ghost className="size-5 text-brand" aria-hidden /> Troll control room
+          </h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Harmless fun for your viewers. Pranks land on open tabs within ~15 seconds, auto-dismiss,
+            and never touch anyone&apos;s data. Every launch is recorded in the audit log.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+        {/* Prank picker */}
+        <div className="space-y-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {TROLL_TYPES.map((t) => {
+              const item = TROLL_CATALOG[t];
+              const selected = type === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setType(t)}
+                  aria-pressed={selected}
+                  className={cn(
+                    'rounded-xl border p-3 text-left transition-all',
+                    selected
+                      ? 'border-brand bg-brand/10 shadow-sm'
+                      : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-100/60 dark:border-zinc-800 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/40',
+                  )}
+                >
+                  <p className="text-2xl" aria-hidden>{item.emoji}</p>
+                  <p className="pt-1 text-sm font-bold text-zinc-900 dark:text-zinc-100">{item.name}</p>
+                  <p className="pt-0.5 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">{item.blurb}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Options */}
+          <div className="space-y-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <div>
+              <p className="pb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Target
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={targetMode === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => setTargetMode('all')}
+                >
+                  🌍 Everyone
+                </Button>
+                <Button
+                  type="button"
+                  variant={targetMode === 'user' ? 'default' : 'outline'}
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => setTargetMode('user')}
+                >
+                  🎯 One user
+                </Button>
+              </div>
+              {targetMode === 'user' && (
+                <div className="pt-2">
+                  <Input
+                    type="email"
+                    list="troll-user-emails"
+                    placeholder="victim@cinedeck.test"
+                    value={targetEmail}
+                    onChange={(e) => setTargetEmail(e.target.value)}
+                    className="max-w-sm rounded-lg"
+                    aria-label="Target user email"
+                  />
+                  <datalist id="troll-user-emails">
+                    {(usersData?.users ?? []).map((u) => (
+                      <option key={u.email} value={u.email}>
+                        {u.name ?? 'member'}
+                      </option>
+                    ))}
+                  </datalist>
+                  <p className="pt-1 text-[11px] text-zinc-400">
+                    Must be a registered account. Pro tip: prank your own email first to preview.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="troll-message"
+                className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
+              >
+                Custom punchline (optional)
+              </label>
+              <Input
+                id="troll-message"
+                value={message}
+                maxLength={200}
+                placeholder={targetMode === 'all' ? '😈 The admin sends greetings.' : 'Your own joke here…'}
+                onChange={(e) => setMessage(e.target.value)}
+                className="mt-1.5 max-w-md rounded-lg"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="troll-duration"
+                className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
+              >
+                Duration: {durationSec}s
+              </label>
+              <input
+                id="troll-duration"
+                type="range"
+                min={TROLL_DURATION_RANGE.min}
+                max={TROLL_DURATION_RANGE.max}
+                value={durationSec}
+                onChange={(e) => setDurationSec(Number(e.target.value))}
+                className="mt-1.5 w-full max-w-md accent-[var(--cinedeck-accent)]"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                type="button"
+                onClick={() => void fire()}
+                disabled={firing}
+                className="h-11 gap-2 rounded-xl px-6 text-sm font-bold"
+              >
+                {firing ? 'Firing…' : `${prank.emoji} Unleash ${prank.name}`}
+              </Button>
+              <p className="text-[11px] text-zinc-400">
+                You won&apos;t prank your own screen with “Everyone” — target yourself by email to preview.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* History */}
+        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+          <p className="pb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Recent pranks
+          </p>
+          {!history || history.events.length === 0 ? (
+            <p className="py-6 text-center text-xs text-zinc-500">
+              No pranks yet. The power is yours. 😈
+            </p>
+          ) : (
+            <ul className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+              {history.events.map((e) => (
+                <li
+                  key={e.id}
+                  className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-800"
+                >
+                  <p className="font-semibold text-zinc-800 dark:text-zinc-200">
+                    {TROLL_CATALOG[e.type]?.emoji ?? '👻'} {TROLL_CATALOG[e.type]?.name ?? e.type}
+                    <span className="pl-1 font-normal text-zinc-400">
+                      → {e.target === 'all' ? 'Everyone' : e.target}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-zinc-400">
+                    {timeAgo(new Date(e.createdAt).toISOString())} · {e.durationSec}s · by {e.createdBy}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
