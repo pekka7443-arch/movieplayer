@@ -282,7 +282,7 @@ export function Header() {
                 </DropdownMenuItem>
                 {user.role === 'admin' && (
                   <DropdownMenuItem
-                    onClick={() => router.push('/?view=admin', { scroll: false })}
+                    onClick={() => router.push('/admin')}
                     className="gap-2 text-sm"
                   >
                     <Settings2 className="size-4 text-brand" aria-hidden />

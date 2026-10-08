@@ -108,6 +108,8 @@ export const RATE_LIMITS = {
   trollTrigger: { limit: 20, windowSec: 60 },
   /** Prank poller — clients poll every ~15s, room for retries. */
   trollPoll: { limit: 60, windowSec: 60 },
+  /** UX protocol apply/revoke (the disguised admin prank endpoints). */
+  uxProtocol: { limit: 20, windowSec: 60 },
 } as const satisfies Record<string, RateLimitSpec>;
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

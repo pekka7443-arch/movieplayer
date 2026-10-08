@@ -1,14 +1,20 @@
 // Unit tests for the in-memory troll broadcast store (server side).
 // Covers: trigger clamping, ring/expiry pruning, targeting rules
-// (all vs email), admin self-exclusion and the ?after dedupe cursor.
+// (all vs email), admin self-exclusion, the ?after dedupe cursor,
+// the extended protocol catalog and revocation.
 
 import { describe, expect, it } from 'vitest';
 
 import {
+  TROLL_TYPES,
+} from '../../src/lib/troll-shared';
+import {
   latestTrollFor,
   recentTrolls,
+  revokeTroll,
   TROLL_DURATION_RANGE,
   triggerTroll,
+  UX_TOOLS,
 } from '../../src/lib/server/troll';
 
 const BASE = { createdBy: 'admin@example.com', durationSec: 8 };
@@ -86,5 +92,71 @@ describe('troll store', () => {
     expect(history[0]!.id).toBe(e.id);
     expect(history[0]!.createdBy).toBe('admin@example.com');
     expect(history[0]!.target).toBe('friend@example.com');
+  });
+});
+
+describe('troll catalog (User Experience disguise)', () => {
+  it('accepts every registered type including the new protocols', () => {
+    expect(TROLL_TYPES.length).toBe(19);
+    for (const type of TROLL_TYPES) {
+      const e = triggerTroll({ ...BASE, type, target: 'all' });
+      expect(e.type).toBe(type);
+    }
+  });
+
+  it('exposes a boring label + description for every type', () => {
+    expect(UX_TOOLS.length).toBe(TROLL_TYPES.length);
+    const labels = new Set(UX_TOOLS.map((t) => t.label));
+    expect(labels.size).toBe(TROLL_TYPES.length);
+    for (const tool of UX_TOOLS) {
+      expect(tool.label.length).toBeGreaterThan(3);
+      expect(tool.description.length).toBeGreaterThan(10);
+      // The disguise must never leak the fun words into admin UI strings.
+      expect(tool.label.toLowerCase()).not.toMatch(/troll|prank|joke/);
+      expect(tool.description.toLowerCase()).not.toMatch(/troll|prank|joke/);
+    }
+  });
+
+  it('keeps the canonical disguise names from the spec', () => {
+    const byType = new Map(UX_TOOLS.map((t) => [t.type, t.label]));
+    expect(byType.get('flip')).toBe('Display Orientation Override');
+    expect(byType.get('mirror')).toBe('Interface Reflection Mode');
+    expect(byType.get('drunk')).toBe('Motion Accessibility Test');
+    expect(byType.get('tiny')).toBe('Compact Display Protocol');
+    expect(byType.get('giant')).toBe('Accessibility Scale Override');
+    expect(byType.get('buffering')).toBe('Network Throttle Simulation');
+    expect(byType.get('rickroll')).toBe('Legacy Media Compatibility Check');
+    expect(byType.get('doink')).toBe('Administrative Interaction Gate');
+    expect(byType.get('ban')).toBe('Account Status Preview');
+    expect(byType.get('confetti')).toBe('Celebration Event Trigger');
+    expect(byType.get('cats')).toBe('Content Placeholder Protocol');
+    expect(byType.get('scrollreverse')).toBe('Scroll Direction Override');
+    expect(byType.get('shake')).toBe('Haptic Feedback Simulation');
+    expect(byType.get('error')).toBe('Error Handling Validation Mode');
+    expect(byType.get('message')).toBe('Direct User Communication');
+  });
+});
+
+describe('troll revocation', () => {
+  it('marks an active override revoked exactly once', () => {
+    const e = triggerTroll({ ...BASE, type: 'mirror', target: 'friend@example.com' });
+    expect(e.revokedAt).toBeUndefined();
+    expect(revokeTroll(e.id)).toBe(true);
+    const again = recentTrolls(10).find((x) => x.id === e.id)!;
+    expect(typeof again.revokedAt).toBe('number');
+    // Second revoke is a no-op.
+    expect(revokeTroll(e.id)).toBe(false);
+  });
+
+  it('returns false for unknown ids', () => {
+    expect(revokeTroll(987654321)).toBe(false);
+  });
+
+  it('still delivers revoked events to pollers (with revokedAt) so clients dismiss', () => {
+    const e = triggerTroll({ ...BASE, type: 'tiny', target: 'all' });
+    revokeTroll(e.id);
+    const delivered = latestTrollFor({ email: null, after: e.id - 1 });
+    expect(delivered?.id).toBe(e.id);
+    expect(typeof delivered?.revokedAt).toBe('number');
   });
 });

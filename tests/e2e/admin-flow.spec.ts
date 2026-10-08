@@ -4,8 +4,8 @@ import { execSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * PHASE 3 + 6 — admin dashboard flow:
- *  admin signs in → opens /?view=admin → sees overview + users table →
+ * PHASE 3 + 6 — admin console flow (redesigned /admin route tree):
+ *  admin signs in → opens /admin → sees overview + users table →
  *  suspends a fresh user with a reason → that user cannot sign in again
  *  (suspension message shown) → unsuspend restores access.
  */
@@ -33,13 +33,11 @@ const uniqueEmail = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(
 function clearAdminSessions(email: string): void {
   try {
     const dbUrl = envFromDotEnv('DATABASE_URL') ?? 'file:./db/custom.db';
-    execSync(
-      `bun -e "const {PrismaClient}=require('@prisma/client');` +
-        `const db=new PrismaClient({datasources:{db:{url:${JSON.stringify(dbUrl)}}}});` +
-        `db.session.deleteMany({where:{user:{email:${JSON.stringify(email)}}}})` +
-        `.then(()=>db.$disconnect())"`,
-      { cwd: process.cwd(), stdio: 'ignore', timeout: 30_000 },
-    );
+    execSync(`bun scripts/clear-admin-sessions.ts ${email}`, {
+    cwd: process.cwd(),
+    stdio: 'ignore',
+    timeout: 30_000,
+  });
   } catch {
     // Best effort — a cold DB or missing binary must not block the suite.
   }
@@ -86,18 +84,19 @@ test.describe('admin dashboard', () => {
     // 2. The default-password nag is present until the password changes.
     await expect(page.getByText(/default admin password/i)).toBeVisible();
 
-    // 3. Admin dashboard: overview renders, then the Users tab.
-    await page.goto('/?view=admin');
-    await expect(page.getByRole('heading', { name: /admin dashboard/i })).toBeVisible();
-    await expect(page.getByText('Total users')).toBeVisible({ timeout: 15_000 });
+    // 3. Admin console: overview renders, then the Users section.
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('Total Users')).toBeVisible({ timeout: 15_000 });
 
-    await page.getByRole('tab', { name: 'Users' }).click();
+    await page.getByRole('link', { name: 'Users' }).click();
     await page.getByPlaceholder('Search name or email…').fill(victimEmail);
     await expect(page.getByText(victimEmail).first()).toBeVisible({ timeout: 15_000 });
 
-    // 4. Suspend with a reason via the row action.
+    // 4. Suspend with a reason via the row actions menu.
     page.once('dialog', (dialog) => dialog.accept('E2E suspension reason'));
-    await page.getByRole('button', { name: `Suspend ${victimEmail}` }).click();
+    await page.getByRole('button', { name: `Row actions for ${victimEmail}` }).click();
+    await page.getByRole('menuitem', { name: `Suspend ${victimEmail}` }).click();
 
     // 5. The suspended user cannot log in — the reason is shown.
     const blocked = await request.post('/api/auth/login', {
@@ -107,9 +106,10 @@ test.describe('admin dashboard', () => {
     const body = (await blocked.json()) as { error?: { message?: string } };
     expect(body.error?.message).toContain('E2E suspension reason');
 
-    // 6. Unsuspend from the same row, and the account works again.
+    // 6. Unsuspend from the same row menu, and the account works again.
     page.once('dialog', (dialog) => dialog.accept('E2E suspension reason'));
-    await page.getByRole('button', { name: `Unsuspend ${victimEmail}` }).click();
+    await page.getByRole('button', { name: `Row actions for ${victimEmail}` }).click();
+    await page.getByRole('menuitem', { name: `Unsuspend ${victimEmail}` }).click();
     await expect
       .poll(
         async () =>

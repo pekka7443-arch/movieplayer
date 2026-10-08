@@ -10,7 +10,7 @@ VIEWS=(
   "/?id=1396&type=tv"
   "/?view=sports"
   "/?view=stats"
-  "/?view=admin"
+  "/admin"
   "/?genre=28"
 )
 report=/tmp/view-sweep.txt

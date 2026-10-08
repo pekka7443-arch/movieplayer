@@ -30,7 +30,7 @@ await page.locator('#auth-password').fill(ADMIN_PASSWORD);
 await page.getByRole('dialog').getByRole('button', { name: 'Sign in' }).click();
 await page.waitForSelector('header [aria-label^="Account menu"]', { timeout: 20_000 });
 
-await page.goto(`${BASE}/?view=admin`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
 await page.getByRole('tab', { name: 'My sessions' }).click();
 await page.waitForSelector('text=3 active devices', { timeout: 15_000 });
 await page.waitForTimeout(800);

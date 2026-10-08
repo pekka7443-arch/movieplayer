@@ -453,15 +453,104 @@ html.troll-flip {
   background: var(--background);
 }
 
+/* Document-transform prank modes (mirror / drunk / tiny / giant / shake). */
+html.troll-mirror {
+  transform: scaleX(-1);
+  transform-origin: center center;
+  background: var(--background);
+}
+
+@keyframes troll-wobble-keyframes {
+  0%, 100% { transform: rotate(0deg) translateX(0); }
+  25% { transform: rotate(1.6deg) translateX(12px); }
+  50% { transform: rotate(-1.3deg) translateX(-10px); }
+  75% { transform: rotate(0.9deg) translateX(7px); }
+}
+
+html.troll-drunk {
+  animation: troll-wobble-keyframes 5s ease-in-out infinite;
+  transform-origin: center center;
+}
+
+html.troll-tiny {
+  transform: scale(0.55);
+  transform-origin: center center;
+  background: var(--background);
+}
+
+html.troll-giant {
+  transform: scale(1.45);
+  transform-origin: center center;
+  background: var(--background);
+  overflow: hidden;
+}
+
+@keyframes troll-shake-doc-keyframes {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-7px, 5px); }
+  40% { transform: translate(6px, -6px); }
+  60% { transform: translate(-5px, -4px); }
+  80% { transform: translate(7px, 6px); }
+}
+
+html.troll-shake-doc {
+  animation: troll-shake-doc-keyframes 0.35s linear infinite;
+}
+
+/* DOINK — springy flythrough for the Administrative Interaction Gate prank. */
+@keyframes troll-doink-keyframes {
+  0% { transform: translateX(-140%) scale(0.5) rotate(-16deg); }
+  30% { transform: translateX(46%) scale(1.3) rotate(7deg); }
+  50% { transform: translateX(18%) scale(0.9) rotate(-4deg); }
+  70% { transform: translateX(40%) scale(1.15) rotate(3deg); }
+  100% { transform: translateX(150%) scale(0.7) rotate(0deg); }
+}
+
+.troll-doink {
+  animation: troll-doink-keyframes 1.5s cubic-bezier(0.3, 1.2, 0.5, 1) infinite;
+  will-change: transform;
+}
+
+/* Rickroll equalizer bars. */
+@keyframes troll-eq-keyframes {
+  0%, 100% { height: 18%; }
+  50% { height: 95%; }
+}
+
+.troll-eq-bar {
+  height: 40%;
+  animation: troll-eq-keyframes 0.7s ease-in-out infinite;
+  will-change: height;
+}
+
+/* Admin console — 100ms view fade. */
+@keyframes adm-fade-keyframes {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.adm-fade {
+  animation: adm-fade-keyframes 100ms ease both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .troll-shake,
   .troll-zoom-in,
   .troll-disco,
-  .troll-confetti {
+  .troll-confetti,
+  .troll-doink,
+  .troll-eq-bar {
     animation: none !important;
   }
-  html.troll-flip {
+  html.troll-flip,
+  html.troll-mirror,
+  html.troll-tiny,
+  html.troll-giant {
     transform: none;
     transition: none;
+  }
+  html.troll-drunk,
+  html.troll-shake-doc {
+    animation: none !important;
   }
 }

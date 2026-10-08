@@ -53,16 +53,20 @@ async function overviewView() {
   const now = Date.now();
   const d24 = new Date(now - 24 * 60 * 60 * 1000);
   const d7 = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  const d14 = new Date(now - 14 * 24 * 60 * 60 * 1000);
   const d30 = new Date(now - 30 * 24 * 60 * 60 * 1000);
+  const d5min = new Date(now - 5 * 60 * 1000);
   const todayStart = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z');
 
   const [
     totalUsers,
     newToday,
     newWeek,
+    newPrevWeek,
     active24h,
     active7d,
     active30d,
+    activeNow,
     suspended,
     deleted,
     verified,
@@ -76,10 +80,14 @@ async function overviewView() {
     providerStats,
     failedLogins,
     announcements,
+    recentComments,
+    recentAudit,
   ] = await Promise.all([
     db.user.count(),
     db.user.count({ where: { createdAt: { gte: todayStart } } }),
     db.user.count({ where: { createdAt: { gte: d7 } } }),
+    db.user.count({ where: { createdAt: { gte: d14, lt: d7 } } }),
+    db.session.findMany({ where: { lastSeenAt: { gte: d5min } }, select: { userId: true }, distinct: ['userId'] }),
     db.session.findMany({ where: { lastSeenAt: { gte: d24 } }, select: { userId: true }, distinct: ['userId'] }),
     db.session.findMany({ where: { lastSeenAt: { gte: d7 } }, select: { userId: true }, distinct: ['userId'] }),
     db.session.findMany({ where: { lastSeenAt: { gte: d30 } }, select: { userId: true }, distinct: ['userId'] }),
@@ -100,6 +108,16 @@ async function overviewView() {
     db.providerStat.findMany({ orderBy: { id: 'asc' } }),
     db.loginAttempt.findMany({ where: { success: false, createdAt: { gte: d24 } }, select: { ip: true, email: true, reason: true, createdAt: true } }),
     db.announcement.findFirst({ where: { active: true }, orderBy: { createdAt: 'desc' } }),
+    db.comment.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      select: { id: true, body: true, status: true, createdAt: true, authorName: true },
+    }),
+    db.auditLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      select: { id: true, actorEmail: true, action: true, targetLabel: true, createdAt: true },
+    }),
   ]);
 
   // Signups per day for the last 30 days.
@@ -109,22 +127,35 @@ async function overviewView() {
   });
   const signupSeries = buildDaySeries(signups.map((s) => s.createdAt), 30);
 
-  // Active users per day (DAU series) from session lastSeenAt (30 days).
+  // DAU / WAU / MAU series from session lastSeenAt (30-day window), computed
+  // in-memory from one row fetch: per-day distinct users, then trailing-7d and
+  // trailing-30d distinct unions.
   const seen = await db.session.findMany({
     where: { lastSeenAt: { gte: d30 } },
     select: { userId: true, lastSeenAt: true },
   });
-  const dauByDay = new Map<string, Set<string>>();
-  for (const row of seen) {
-    const key = row.lastSeenAt.toISOString().slice(0, 10);
-    const set = dauByDay.get(key) ?? new Set<string>();
-    set.add(row.userId);
-    dauByDay.set(key, set);
+  const dayKeys: string[] = [];
+  for (let i = 29; i >= 0; i--) {
+    dayKeys.push(new Date(now - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
   }
-  const dauSeries = buildDaySeries(
-    [...dauByDay.entries()].flatMap(([key, set]) => Array.from({ length: set.size }, () => new Date(`${key}T12:00:00.000Z`))),
-    30,
-  );
+  const seenByDay = new Map<string, Set<string>>(dayKeys.map((k) => [k, new Set<string>()]));
+  for (const row of seen) {
+    seenByDay.get(row.lastSeenAt.toISOString().slice(0, 10))?.add(row.userId);
+  }
+  const distinctIn = (keys: string[]) => {
+    const all = new Set<string>();
+    for (const key of keys) for (const id of seenByDay.get(key) ?? []) all.add(id);
+    return all.size;
+  };
+  const dauSeries = dayKeys.map((day) => ({ day, count: seenByDay.get(day)!.size }));
+  const wauSeries = dayKeys.map((day, i) => ({
+    day,
+    count: distinctIn(dayKeys.slice(Math.max(0, i - 6), i + 1)),
+  }));
+  const mauSeries = dayKeys.map((day, i) => ({
+    day,
+    count: distinctIn(dayKeys.slice(Math.max(0, i - 29), i + 1)),
+  }));
 
   // Signups by country + top browsers/devices (from sessions' stored UAs).
   const usersForCountry = await db.user.findMany({ select: { country: true } });
@@ -184,9 +215,11 @@ async function overviewView() {
       totalUsers,
       newToday,
       newWeek,
+      newPrevWeek,
       active24h: active24h.length,
       active7d: active7d.length,
       active30d: active30d.length,
+      activeNow: activeNow.length,
       suspended,
       deleted,
       verified,
@@ -197,9 +230,12 @@ async function overviewView() {
       flaggedComments,
       watchlistCount,
       historyCount,
+      uptimeSeconds: Math.round(process.uptime()),
     },
     signupSeries,
     dauSeries,
+    wauSeries,
+    mauSeries,
     countries,
     browsers,
     devices,
@@ -208,6 +244,20 @@ async function overviewView() {
     recentUsers: recentUsers.map((u) => ({
       ...u,
       createdAt: u.createdAt.toISOString(),
+    })),
+    recentComments: recentComments.map((c) => ({
+      id: c.id,
+      body: c.body,
+      status: c.status,
+      authorName: c.authorName,
+      createdAt: c.createdAt.toISOString(),
+    })),
+    recentAudit: recentAudit.map((a) => ({
+      id: a.id,
+      actorEmail: a.actorEmail,
+      action: a.action,
+      targetLabel: a.targetLabel,
+      createdAt: a.createdAt.toISOString(),
     })),
     topTitles,
     providerStats,
@@ -483,6 +533,9 @@ async function userDetailView(params: URLSearchParams) {
 async function auditView(params: URLSearchParams) {
   const q = (params.get('q') ?? '').trim();
   const action = (params.get('action') ?? '').trim();
+  const admin = (params.get('admin') ?? '').trim();
+  const from = (params.get('from') ?? '').trim();
+  const to = (params.get('to') ?? '').trim();
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1);
   const pageSize = 50;
 
@@ -490,6 +543,11 @@ async function auditView(params: URLSearchParams) {
     AND: [
       q ? { OR: [{ actorEmail: { contains: q } }, { targetLabel: { contains: q } }, { targetId: { contains: q } }] } : {},
       action ? { action } : {},
+      admin ? { actorEmail: { contains: admin } } : {},
+      from && !Number.isNaN(Date.parse(from)) ? { createdAt: { gte: new Date(from) } } : {},
+      to && !Number.isNaN(Date.parse(to))
+        ? { createdAt: { lte: new Date(`${to}T23:59:59.999Z`) } }
+        : {},
     ],
   };
 

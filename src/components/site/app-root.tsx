@@ -6,6 +6,7 @@
 
 import { Suspense, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -38,10 +39,6 @@ const SportsView = dynamic(
 );
 const StatsView = dynamic(
   () => import('@/components/site/stats-view').then((m) => m.StatsView),
-  { loading: () => <ViewSkeleton kind="stats" />, ssr: false },
-);
-const AdminView = dynamic(
-  () => import('@/components/site/admin-view').then((m) => m.AdminView),
   { loading: () => <ViewSkeleton kind="stats" />, ssr: false },
 );
 const PersonView = dynamic(
@@ -113,6 +110,7 @@ function MaintenanceGate({ children }: { children: React.ReactNode }) {
 }
 
 function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaSearchItem[] }) {
+  const router = useRouter();
   const params = useSearchParams();
 
   const id = parsePositiveInt(params.get('id'));
@@ -138,6 +136,12 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
               : shareToken
                 ? 'share'
                 : 'home';
+
+  // The admin console moved to a real route tree (/admin/*) with its own
+  // dedicated UI — send legacy /?view=admin links there.
+  useEffect(() => {
+    if (viewKey === 'admin') router.replace('/admin');
+  }, [viewKey, router]);
 
   // Global shortcuts: Ctrl/Cmd+K opens the command palette. Profile id is
   // hydrated once so scoped library writes (profileId) match the UI.
@@ -190,14 +194,12 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
               exit={{ opacity: 0, y: -14, scale: 0.997 }}
               transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
             >
-              {viewKey === 'watch' ? (
+              {viewKey === 'admin' ? null : viewKey === 'watch' ? (
                 <WatchView tmdbId={id ?? undefined} imdbId={imdbId ?? undefined} mediaType={type} season={season} episode={episode} />
               ) : viewKey === 'sports' ? (
                 <SportsView />
               ) : viewKey === 'stats' ? (
                 <StatsView />
-              ) : viewKey === 'admin' ? (
-                <AdminView />
               ) : viewKey === 'person' ? (
                 <PersonView personId={personId ?? 0} />
               ) : viewKey === 'share' ? (
