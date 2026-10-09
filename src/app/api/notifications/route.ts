@@ -212,3 +212,26 @@ export const POST = withApi('notifications-read', async (request) => {
   }
   return Response.json({ ok: true });
 });
+
+// DELETE /api/notifications?id=<id> | ?all=1 — remove one / all notifications.
+export const DELETE = withApi('notifications-delete', async (request) => {
+  const guard = guardMutation(request, 'account');
+  if (guard) return guard;
+
+  const owner = await resolveOwner(request);
+  if (!owner.userId) return jsonError('unauthorized', 401);
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+  const all = searchParams.get('all') === '1';
+
+  if (all) {
+    await db.notification.deleteMany({ where: { userId: owner.userId } });
+    return Response.json({ ok: true });
+  }
+  if (id && id.length <= 64) {
+    await db.notification.deleteMany({ where: { id, userId: owner.userId } });
+    return Response.json({ ok: true });
+  }
+  return jsonError('bad_request', 400);
+});

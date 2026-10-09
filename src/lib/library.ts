@@ -212,6 +212,11 @@ export const markNotificationsRead = (all = true, id?: string): Promise<void> =>
     body: JSON.stringify(all ? { all: true } : { id }),
   }).then(() => undefined);
 
+export const deleteNotifications = (opts: { id?: string; all?: boolean }): Promise<void> => {
+  const query = opts.all ? '?all=1' : opts.id ? `?id=${encodeURIComponent(opts.id)}` : '';
+  return getJson(`/api/notifications${query}`, { method: 'DELETE' }).then(() => undefined);
+};
+
 // ---------------------------------------------------------------------------
 // Profiles
 // ---------------------------------------------------------------------------

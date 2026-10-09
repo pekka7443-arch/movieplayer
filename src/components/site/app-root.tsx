@@ -19,6 +19,7 @@ import { PwaBootstrap } from '@/components/site/pwa-bootstrap';
 import { SiteFooter } from '@/components/site/site-footer';
 import { BottomNav } from '@/components/site/bottom-nav';
 import { OnboardingTour } from '@/components/site/onboarding-tour';
+import { CookieConsent } from '@/components/site/consent-banner';
 import { useSession } from '@/hooks/use-session';
 import { useCinedeckStore, hydrateActiveProfile } from '@/lib/store';
 import { ViewSkeleton } from '@/components/site/view-skeleton';
@@ -47,6 +48,22 @@ const PersonView = dynamic(
 );
 const SharedListView = dynamic(
   () => import('@/components/site/shared-list-view').then((m) => m.SharedListView),
+  { loading: () => <ViewSkeleton kind="rows" />, ssr: false },
+);
+const SearchView = dynamic(
+  () => import('@/components/site/search-view').then((m) => m.SearchView),
+  { loading: () => <ViewSkeleton kind="rows" />, ssr: false },
+);
+const FinnishView = dynamic(
+  () => import('@/components/site/finnish-view').then((m) => m.FinnishView),
+  { loading: () => <ViewSkeleton kind="rows" />, ssr: false },
+);
+const PublicProfileView = dynamic(
+  () => import('@/components/site/public-profile-view').then((m) => m.PublicProfileView),
+  { loading: () => <ViewSkeleton kind="watch" />, ssr: false },
+);
+const LegalView = dynamic(
+  () => import('@/components/site/legal-view').then((m) => m.LegalView),
   { loading: () => <ViewSkeleton kind="rows" />, ssr: false },
 );
 const SettingsDialog = dynamic(
@@ -117,6 +134,7 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
   const imdbId = parseImdbId(params.get('imdb'));
   const personId = parsePositiveInt(params.get('person'));
   const shareToken = params.get('share');
+  const usernameParam = params.get('user');
   const type: MediaType = params.get('type') === 'tv' ? 'tv' : 'movie';
   const season = parsePositiveInt(params.get('s')) ?? 1;
   const episode = parsePositiveInt(params.get('e')) ?? 1;
@@ -129,13 +147,21 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
         ? 'sports'
         : params.get('view') === 'stats'
           ? 'stats'
-          : params.get('view') === 'admin'
-            ? 'admin'
-            : personId !== null
-              ? 'person'
-              : shareToken
-                ? 'share'
-                : 'home';
+          : params.get('view') === 'search'
+            ? 'search'
+            : params.get('view') === 'finnish'
+              ? 'finnish'
+              : params.get('view') === 'legal'
+                ? 'legal'
+                : params.get('view') === 'admin'
+              ? 'admin'
+              : personId !== null
+                ? 'person'
+                : usernameParam
+                  ? 'user'
+                  : shareToken
+                    ? 'share'
+                    : 'home';
 
   // The admin console moved to a real route tree (/admin/*) with its own
   // dedicated UI — send legacy /?view=admin links there.
@@ -200,8 +226,16 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
                 <SportsView />
               ) : viewKey === 'stats' ? (
                 <StatsView />
+              ) : viewKey === 'search' ? (
+                <SearchView />
+              ) : viewKey === 'finnish' ? (
+                <FinnishView />
               ) : viewKey === 'person' ? (
                 <PersonView personId={personId ?? 0} />
+              ) : viewKey === 'user' ? (
+                <PublicProfileView username={usernameParam ?? ''} />
+              ) : viewKey === 'legal' ? (
+                <LegalView />
               ) : viewKey === 'share' ? (
                 <SharedListView token={shareToken ?? ''} />
               ) : (
@@ -213,6 +247,7 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
         <SiteFooter />
         <BottomNav />
         <OnboardingTour />
+        <CookieConsent />
         <SettingsDialog />
         <ArcadeDialog />
         <AuthDialog />

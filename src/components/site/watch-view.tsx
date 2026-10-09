@@ -2,9 +2,11 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookmarkCheck, BookmarkPlus, ChevronLeft, ExternalLink, Share2, Tv } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, ChevronLeft, ExternalLink, Globe, Play, Search, Share2, Star, Tv } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import Image from 'next/image';
 import { PlayerSection } from '@/components/site/player-section';
 import { GuestPlayLock, usePlaybackLocked } from '@/components/site/sign-in-gate';
 import { InfoSection } from '@/components/site/info-section';
@@ -22,7 +24,9 @@ import { CommentsSection } from '@/components/site/comments-section';
 import { markEpisodeWatched } from '@/lib/library';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey, useSettings } from '@/lib/settings';
-import type { MediaDetails, MediaType } from '@/lib/tmdb';
+import { tmdbImg } from '@/lib/languages';
+import { BACKDROP_BLUR } from '@/lib/img-blur';
+import { yearOf, type MediaDetails, type MediaType } from '@/lib/tmdb';
 import type { MetaDetails } from '@/lib/meta';
 
 /** Map keyless Cinemeta details onto the MediaDetails shape PlayerSection expects. */
@@ -183,16 +187,137 @@ export function WatchView({
 
   const playbackLocked = usePlaybackLocked();
 
+  // Cinematic backdrop banner art — TMDB paths go through tmdbImg(); the
+  // keyless Cinemeta adapter already resolves a full URL into backdropPath.
+  const bannerArt = details?.backdropPath
+    ? details.backdropPath.startsWith('http')
+      ? details.backdropPath
+      : tmdbImg(details.backdropPath, 'w1280')
+    : details?.posterPath
+      ? details.posterPath.startsWith('http')
+        ? details.posterPath
+        : tmdbImg(details.posterPath, 'w780')
+      : null;
+  const bannerYear = details?.releaseDate ? yearOf(details.releaseDate) : '';
+  const scrollToPlayer = () => {
+    document
+      .getElementById('player-section')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div>
-      {/* Local accent bloom behind the player — draws the eye to the action. */}
-      <div
-        aria-hidden
-        className="pointer-events-none relative -mt-2 mb-1"
+      {/* Cinematic title banner — large backdrop with gradient overlay,
+          metadata row and the three primary actions (Play / My List / Share). */}
+      <section
+        aria-label={`${watchTitle || 'Title'} — details`}
+        className="relative -mx-4 -mt-6 overflow-hidden sm:-mx-6 sm:-mt-8"
       >
-        <div className="absolute -top-6 left-1/2 h-40 w-[82%] max-w-3xl -translate-x-1/2 rounded-full bg-brand/15 blur-[90px]" />
-      </div>
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <div className="relative flex min-h-[340px] items-end md:min-h-[420px]">
+          {detailsLoading ? (
+            <Skeleton className="absolute inset-0 size-full rounded-none bg-muted" />
+          ) : bannerArt ? (
+            details?.backdropPath && !details.backdropPath.startsWith('http') ? (
+              // TMDB mode: allowlisted host — full next/image optimization.
+              <Image
+                src={bannerArt}
+                alt=""
+                fill
+                priority
+                sizes="100vw"
+                placeholder="blur"
+                blurDataURL={BACKDROP_BLUR}
+                className="object-cover"
+              />
+            ) : (
+              // Keyless Cinemeta art — third-party host, plain eager img.
+              <img
+                src={bannerArt}
+                alt=""
+                loading="eager"
+                fetchPriority="high"
+                className="absolute inset-0 size-full object-cover"
+              />
+            )
+          ) : (
+            <div className="absolute inset-0 bg-muted" />
+          )}
+          {/* Gradient bed — burns the art into the canvas bottom-left */}
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-background/10" />
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-background/85 via-background/20 to-transparent" />
+
+          <div className="relative z-10 w-full px-4 pb-8 pt-24 sm:px-6 sm:pb-10 lg:px-10">
+            <div className="max-w-3xl">
+              {detailsLoading ? (
+                <Skeleton className="h-10 w-2/3 max-w-md rounded-lg bg-white/10" />
+              ) : (
+                <h1 className="text-3xl font-bold leading-tight tracking-tight text-white drop-shadow-[0_2px_14px_rgba(0,0,0,0.6)] sm:text-5xl">
+                  {watchTitle || 'Loading title…'}
+                </h1>
+              )}
+              {!detailsLoading && (
+                <div className="mt-3 flex flex-wrap items-center gap-2.5 text-sm text-zinc-200">
+                  {bannerYear && <span className="font-medium">{bannerYear}</span>}
+                  {details && details.voteAverage > 0 && (
+                    <span className="inline-flex items-center gap-1 font-semibold text-white">
+                      <Star className="size-3.5 fill-brand text-brand" aria-hidden />
+                      {details.voteAverage.toFixed(1)}
+                    </span>
+                  )}
+                  {details?.runtime ? <span>{details.runtime} min</span> : null}
+                  {details?.genres.slice(0, 3).map((genre) => (
+                    <span
+                      key={genre}
+                      className="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm"
+                    >
+                      {genre}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={scrollToPlayer}
+                  className="h-11 rounded-lg bg-brand px-6 text-sm font-semibold text-white shadow-[0_8px_30px_-6px_rgba(229,9,20,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-brand/90 active:scale-[0.97]"
+                >
+                  <Play className="size-4 fill-white" aria-hidden />
+                  Play
+                </Button>
+                {tmdbId !== undefined && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onToggleSave}
+                    disabled={toggleWatchlist.isPending}
+                    aria-pressed={savedToList}
+                    className="h-11 gap-1.5 rounded-lg border-white/25 bg-white/10 px-5 text-sm font-medium text-white backdrop-blur-md transition-all duration-200 hover:border-white/40 hover:bg-white/20"
+                  >
+                    {savedToList ? (
+                      <BookmarkCheck className="size-4" aria-hidden />
+                    ) : (
+                      <BookmarkPlus className="size-4" aria-hidden />
+                    )}
+                    {savedToList ? 'In My List' : 'My List'}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={onShare}
+                  aria-label="Share this title"
+                  className="size-11 rounded-full border border-white/15 bg-black/30 text-zinc-200 backdrop-blur-md hover:bg-black/50 hover:text-white"
+                >
+                  <Share2 className="size-4.5" aria-hidden />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="mb-5 mt-4 flex flex-wrap items-center gap-2">
         <Button
           type="button"
           variant="ghost"
@@ -203,56 +328,23 @@ export function WatchView({
           <ChevronLeft className="size-4" aria-hidden />
           Back to browse
         </Button>
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onShare}
-          aria-label="Share this title"
-          className="h-9 gap-1.5 rounded-lg px-2.5 text-sm text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
-        >
-          <Share2 className="size-4" aria-hidden />
-          Share
-        </Button>
-
-        {tmdbId !== undefined && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onToggleSave}
-            disabled={toggleWatchlist.isPending}
-            aria-pressed={savedToList}
-            className={`h-9 gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors ${
-              savedToList
-                ? 'border-brand/50 bg-brand/10 text-brand hover:bg-brand/20'
-                : 'border-zinc-200 bg-transparent text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100'
-            }`}
-          >
-            {savedToList ? (
-              <BookmarkCheck className="size-4" aria-hidden />
-            ) : (
-              <BookmarkPlus className="size-4" aria-hidden />
-            )}
-            {savedToList ? 'In My List' : 'My List'}
-          </Button>
-        )}
       </div>
 
       {playbackLocked ? (
         <GuestPlayLock title={watchTitle || undefined} returnTo={typeof window !== 'undefined' ? window.location.href : undefined} />
       ) : (
-        <PlayerSection
-          tmdbId={tmdbId}
-          imdbId={imdbId}
-          mediaType={mediaType}
-          season={season}
-          episode={episode}
-          details={details}
-          detailsLoading={detailsLoading}
-          hasKey={hasKey}
-        />
+        <div id="player-section" className="scroll-mt-24">
+          <PlayerSection
+            tmdbId={tmdbId}
+            imdbId={imdbId}
+            mediaType={mediaType}
+            season={season}
+            episode={episode}
+            details={details}
+            detailsLoading={detailsLoading}
+            hasKey={hasKey}
+          />
+        </div>
       )}
 
       {tmdbId !== undefined && <WatchRating tmdbId={tmdbId} mediaType={mediaType} />}
@@ -289,6 +381,32 @@ export function WatchView({
                     <Tv className="size-3.5 shrink-0" aria-hidden />
                     <span>
                       Search “{watchTitle}” on YLE Areena
+                      <ExternalLink className="ml-1 inline size-3 opacity-70" aria-hidden />
+                    </span>
+                  </a>
+                </Button>
+                <Button asChild size="sm" variant="outline" className="h-auto max-w-full whitespace-normal border-sky-300/70 py-1.5 text-left text-xs font-medium text-sky-800 hover:bg-sky-100/70 dark:border-sky-700/60 dark:text-sky-200 dark:hover:bg-sky-900/40">
+                  <a
+                    href={`https://www.justwatch.com/us/search?q=${encodeURIComponent(watchTitle)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Globe className="size-3.5 shrink-0" aria-hidden />
+                    <span>
+                      JustWatch — every legal service
+                      <ExternalLink className="ml-1 inline size-3 opacity-70" aria-hidden />
+                    </span>
+                  </a>
+                </Button>
+                <Button asChild size="sm" variant="outline" className="h-auto max-w-full whitespace-normal border-sky-300/70 py-1.5 text-left text-xs font-medium text-sky-800 hover:bg-sky-100/70 dark:border-sky-700/60 dark:text-sky-200 dark:hover:bg-sky-900/40">
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(`${watchTitle} watch online stream`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Search className="size-3.5 shrink-0" aria-hidden />
+                    <span>
+                      Google
                       <ExternalLink className="ml-1 inline size-3 opacity-70" aria-hidden />
                     </span>
                   </a>

@@ -10,24 +10,34 @@ export const dynamic = 'force-dynamic';
 const GAMES = ['emoji-quiz', 'year-quiz', 'daily'] as const;
 
 /**
- * GET /api/arcade?game=emoji-quiz&period=all|today
+ * GET /api/arcade?game=emoji-quiz&period=all|today|week|month
  *   → { rows: [{ name, score, total, createdAt }], mine: { score, rank } | null }
  * Leaderboard = personal bests (one row per owner per game), so the board
- * stays readable instead of filling up with one player's retries.
+ * stays readable instead of filling up with one player's retries. Rolling
+ * week (7d) and month (30d) windows rank recent form; 'today' resets daily.
  */
 export const GET = withApi('arcade', async (request) => {
   const { searchParams } = new URL(request.url);
   const game = searchParams.get('game') ?? '';
-  const period = searchParams.get('period') === 'today' ? 'today' : 'all';
+  const periodParam = searchParams.get('period') ?? 'all';
+  const period = ['today', 'week', 'month'].includes(periodParam) ? periodParam : 'all';
   if (!GAMES.includes(game as (typeof GAMES)[number])) return jsonError('bad_request', 400, 'unknown game');
 
   const startOfDay = new Date();
   startOfDay.setUTCHours(0, 0, 0, 0);
+  const since =
+    period === 'today'
+      ? startOfDay
+      : period === 'week'
+        ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        : period === 'month'
+          ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+          : null;
 
   const rows = await db.arcadeScore.findMany({
     where: {
       game,
-      ...(period === 'today' ? { updatedAt: { gte: startOfDay } } : {}),
+      ...(since ? { updatedAt: { gte: since } } : {}),
     },
     orderBy: [{ score: 'desc' }, { updatedAt: 'asc' }],
     take: 10,
@@ -46,7 +56,7 @@ export const GET = withApi('arcade', async (request) => {
       where: {
         game,
         score: { gt: mine.score },
-        ...(period === 'today' ? { updatedAt: { gte: startOfDay } } : {}),
+        ...(since ? { updatedAt: { gte: since } } : {}),
       },
     });
     rank = better + 1;

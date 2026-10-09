@@ -94,3 +94,25 @@ tests/                     # vitest unit + playwright e2e
 | Provider plays a black screen | Use the player's Skip-source / "Not playing?" pill — the scanner ranks and fails over automatically. |
 | TMDB features missing (cast, filters, recommendations) | Add a free TMDB key in Settings — everything else stays keyless. |
 | Arcade leaderboard empty after DB reset | Re-run `bunx prisma migrate deploy` (ArcadeScore table). |
+
+## Feature map (final polish pass)
+
+- **Design system** — strict streaming palette (#0d0d0d/#161616/#252525 dark, #f5f5f5/white light), #e50914 accent (user-swappable), Inter type scale (hero 64 → metadata 13), 8px radius base, full-viewport auto-rotating hero (8s crossfade, pause-on-hover, dot indicator), hover-overlay cards with quick-add + watched/rated badges, hover-reveal row arrows ("See all" links), sticky blur header with center nav + mobile slide-in menu, 4-tab bottom nav, illustrated empty states.
+- **Detail pages** — cinematic backdrop banner (title/year/rating/runtime/genre pills + Play/My List/Share), player, cast, similar, comments, ratings, episode/season pickers.
+- **Player** — source scan + auto-failover + 30s watchdog, theater mode, fullscreen (F), skip-intro window (0:30–2:30), 15s watch-time saves that ACCUMULATE across visits (resume seeding), up-next countdown, R/S/T/F/N/P shortcuts, poster loading state.
+- **Search** — /?view=search instant grouped results (Movies/TV/People/Finnish), 300ms debounce, decade/rating/genre filters, local recents, voice input, browse presets (trending/popular) behind every "See all".
+- **Accounts** — 5 profiles (kids filter, per-profile language), unlimited custom lists (dnd reorder, share tokens, Letterboxd CSV import), 1–10 ratings + private notes, auto-cleaning continue-watching (>95%), notifications with delete/clear-all, computed achievements, watch stats.
+- **Social** — public profiles (/?user=handle) with handle/bio/visibility, follow graph, per-title OG cards (IMDB links resolve keylessly; TMDB links resolve with a server key).
+- **Finnish** — /?view=finnish (flag-accented hero, FI badges), "Tänään TV:ssä" live schedule (/api/meta/tvschedule, TVmaze FI, 30-min cache), Yle Areena fallbacks, fi browser-locale auto-pick.
+- **Sports / Arcade** — 30s live polling, favorites, multiview, replays, standings; arcade leaderboard with all-time/month/week/today periods, daily challenge, roulette.
+- **PWA** — manifest (maskable icons, #0d0d0d theme), offline shell SW, ≥2-view install banner, iOS meta, app badge.
+- **Quality** — skip-link, custom focus rings, ARIA throughout, prefers-reduced-motion kill switches, GDPR consent banner, legal page (/?view=legal) + footer links, 404 with search, sonner toasts (max 3 / 4s / click-dismiss).
+
+## Known limitations
+
+- Playback uses third-party embed providers in a proxied iframe: real seek/volume/speed/subtitle control from CineDeck is impossible cross-origin (Skip-intro advances watch tracking honestly instead of seeking; PiP relies on the provider's own controls).
+- Watch progress is wall-clock time-on-page, not a true video playhead.
+- Push notifications are not implemented (no VAPID queue); in-app notifications + app badge cover alerts.
+- Kids mode filters genres client-side; there is no server-side adult-content gate.
+- i18n: the UI-string catalog (EN/FI/SV) covers the newest surfaces; older views remain English.
+- "Trending in Finland" aggregates and a friends activity feed need cross-account analytics (follow edges already exist).

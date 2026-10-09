@@ -77,7 +77,7 @@ export async function GET(request: Request) {
               width: 56,
               height: 56,
               borderRadius: 14,
-              background: '#fbbf24',
+              background: '#e50914',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

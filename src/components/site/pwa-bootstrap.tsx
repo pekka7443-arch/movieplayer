@@ -11,6 +11,26 @@ interface InstallPromptEvent extends Event {
 }
 
 const DISMISS_KEY = 'cinedeck.pwa.dismissedAt';
+const VIEWS_KEY = 'cinedeck.pwa.views';
+const VIEWS_SESSION_KEY = 'cinedeck.pwa.viewsCounted';
+
+/**
+ * Count this page load toward the install-prompt threshold (≥2 loads).
+ * Counted once per browser session so SPA remounts don't inflate it.
+ */
+function countPageView(): number {
+  try {
+    if (window.sessionStorage.getItem(VIEWS_SESSION_KEY)) {
+      return Number(window.localStorage.getItem(VIEWS_KEY) ?? 0);
+    }
+    window.sessionStorage.setItem(VIEWS_SESSION_KEY, '1');
+    const views = Number(window.localStorage.getItem(VIEWS_KEY) ?? 0) + 1;
+    window.localStorage.setItem(VIEWS_KEY, String(views));
+    return views;
+  } catch {
+    return 0;
+  }
+}
 
 /** Registers the service worker + shows a soft install suggestion. */
 export function PwaBootstrap() {
@@ -26,8 +46,10 @@ export function PwaBootstrap() {
     const onPrompt = (event: Event) => {
       event.preventDefault();
       const dismissed = Number(window.localStorage.getItem(DISMISS_KEY) ?? 0);
-      // Re-suggest after two weeks if the user said no earlier.
+      // Re-suggest after two weeks if the user said no earlier — and only
+      // once the visitor has been here at least twice (soft engagement bar).
       if (Date.now() - dismissed < 14 * 86_400_000) return;
+      if (countPageView() < 2) return;
       setInstallEvent(event as InstallPromptEvent);
       setShowSuggestion(true);
     };

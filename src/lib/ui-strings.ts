@@ -52,6 +52,27 @@ export interface UiStrings {
   admin: string;
   search: string;
   surpriseMe: string;
+  profile: string;
+  movies: string;
+  tvShows: string;
+  finnish: string;
+  moreInfo: string;
+  seeAll: string;
+  trendingNow: string;
+  newReleases: string;
+  topRatedMovies: string;
+  popularTv: string;
+  popularMovies: string;
+  finnishContent: string;
+  becauseYouWatched: string;
+  topPicks: string;
+  sportsHighlights: string;
+  emptyListTitle: string;
+  emptyListBody: string;
+  emptyListAction: string;
+  emptyHistoryTitle: string;
+  emptyHistoryBody: string;
+  browseAll: string;
 }
 
 const en: UiStrings = {
@@ -88,6 +109,27 @@ const en: UiStrings = {
   admin: 'Admin',
   search: 'Search',
   surpriseMe: 'Surprise me',
+  profile: 'Profile',
+  movies: 'Movies',
+  tvShows: 'TV Shows',
+  finnish: 'Finnish',
+  moreInfo: 'More Info',
+  seeAll: 'See all',
+  trendingNow: 'Trending Now',
+  newReleases: 'New Releases',
+  topRatedMovies: 'Top Rated Movies',
+  popularTv: 'Popular TV Shows',
+  popularMovies: 'Popular Movies',
+  finnishContent: 'Finnish Content',
+  becauseYouWatched: 'Because you watched',
+  topPicks: 'Top picks for you',
+  sportsHighlights: 'Sports Highlights',
+  emptyListTitle: 'Your list is empty',
+  emptyListBody: 'Hover any poster and hit + to save it here — your queue for movie night.',
+  emptyListAction: 'Browse trending',
+  emptyHistoryTitle: 'Nothing watched yet',
+  emptyHistoryBody: 'Press play on anything — we remember where you left off.',
+  browseAll: 'Browse all',
 };
 
 const fi: UiStrings = {
@@ -124,6 +166,27 @@ const fi: UiStrings = {
   admin: 'Ylläpito',
   search: 'Haku',
   surpriseMe: 'Yllätä minut',
+  profile: 'Profiili',
+  movies: 'Elokuvat',
+  tvShows: 'Sarjat',
+  finnish: 'Suomalainen',
+  moreInfo: 'Lisätietoja',
+  seeAll: 'Näytä kaikki',
+  trendingNow: 'Suosittua nyt',
+  newReleases: 'Uudet julkaisut',
+  topRatedMovies: 'Arvostetuimmat elokuvat',
+  popularTv: 'Suositut sarjat',
+  popularMovies: 'Suositut elokuvat',
+  finnishContent: 'Suomalainen sisältö',
+  becauseYouWatched: 'Koska katsoit',
+  topPicks: 'Suosituksia sinulle',
+  sportsHighlights: 'Urheilukorostukset',
+  emptyListTitle: 'Listasi on tyhjä',
+  emptyListBody: 'Pidä hiiri julisteen päällä ja paina + tallentaaksesi sen tänne — elokuvaillasi jono.',
+  emptyListAction: 'Selaa suosittuja',
+  emptyHistoryTitle: 'Ei vielä katsottua',
+  emptyHistoryBody: 'Paina play — muistamme mihin jäit.',
+  browseAll: 'Selaa kaikkea',
 };
 
 const sv: UiStrings = {
@@ -160,6 +223,27 @@ const sv: UiStrings = {
   admin: 'Administration',
   search: 'Sök',
   surpriseMe: 'Överraska mig',
+  profile: 'Profil',
+  movies: 'Filmer',
+  tvShows: 'TV-serier',
+  finnish: 'Finsk',
+  moreInfo: 'Mer info',
+  seeAll: 'Visa alla',
+  trendingNow: 'Populärt nu',
+  newReleases: 'Nya releaser',
+  topRatedMovies: 'Toppbetyg filmer',
+  popularTv: 'Populära serier',
+  popularMovies: 'Populära filmer',
+  finnishContent: 'Finskt innehåll',
+  becauseYouWatched: 'Eftersom du såg',
+  topPicks: 'Toppplock åt dig',
+  sportsHighlights: 'Sporthöjdpunkter',
+  emptyListTitle: 'Din lista är tom',
+  emptyListBody: 'Hovra en affisch och tryck + för att spara den här — din kvällskö.',
+  emptyListAction: 'Bläddra populärt',
+  emptyHistoryTitle: 'Inget sett ännu',
+  emptyHistoryBody: 'Tryck play — vi minns var du slutade.',
+  browseAll: 'Bläddra allt',
 };
 
 const CATALOGS: Record<UiLanguage, UiStrings> = { en, fi, sv };

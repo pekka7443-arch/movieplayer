@@ -10,7 +10,18 @@ export type ProviderId =
   // Modern player — server-reachable, built-in subtitle/audio language
   // selector, accepts a `language` param to preselect audio/subtitle locale.
   // Probes OK but the user hit a black screen on it — manual/last-resort only.
-  | 'videasy';
+  | 'videasy'
+  // Videasy .net mirror — same embed family/player as videasy.to, probed
+  // live 2026-10 (tmdb + imdb paths answer with a real player shell).
+  | 'videasy_net'
+  // VidFast — modern Next.js player, probed live 2026-10: serves the player
+  // shell for both TMDB and IMDB paths. Widest international catalog of the
+  // pool (Nordic/Polish/Turkish titles are commonly carried).
+  | 'vidfast'
+  // VidLink — modern player, probed live 2026-10. HONEST about misses: the
+  // embed path returns a real 500 for titles it doesn't carry, so the scan
+  // can actually rule it out (2Embed/VidSrc shells answer 200 for anything).
+  | 'vidlink';
 
 /**
  * How much we trust a source to actually PLAY (a 200 health probe is not
@@ -52,6 +63,7 @@ export function isProven(providerId: string): boolean {
 export const PROVIDER_GROUPS: { id: string; label: string }[] = [
   { id: 'twoembed', label: '2Embed' },
   { id: 'vidsrc', label: 'VidSrc' },
+  { id: 'modern', label: 'Modern' },
   { id: 'other', label: 'Extra' },
 ];
 
@@ -60,8 +72,8 @@ export interface Provider {
   name: string;
   /** Short label used in the cluster chip (e.g. ".cc", ".skin"). */
   short: string;
-  /** Cluster this provider belongs to ('twoembed' | 'vidsrc' | 'other'). */
-  group: 'twoembed' | 'vidsrc' | 'other';
+  /** Cluster this provider belongs to. */
+  group: 'twoembed' | 'vidsrc' | 'modern' | 'other';
   /** Playback trust tier — drives auto-pick + failover order (see above). */
   reliability: Reliability;
   /**
@@ -85,11 +97,16 @@ export interface Provider {
 //              the server probe sees a 403 challenge but real browsers load it fine,
 //              so the scan reports it as "unknown" and the player still tries it)
 //   VidSrc.su:/embed/movie/{id}            /embed/tv/{id}/{s}/{e}  (same family as .sh)
-//   Videasy : /movie/{id}                  /tv/{id}/{s}/{e}   (player.videasy.to)
+//   Videasy : /movie/{id}                  /tv/{id}/{s}/{e}   (player.videasy.to / .net)
+//   VidFast : /movie/{id}                  /tv/{id}/{s}/{e}   (vidfast.pro — tmdb + imdb in the
+//              same path shape; widest international catalog incl. Nordic titles)
+//   VidLink : /movie/{id}                  /tv/{id}/{s}/{e}   (vidlink.pro — tmdb + imdb; honest
+//              500 when a title is NOT carried → scan can rule it out)
 //
 // Dead domains measured and removed (2026-10): 2embed.to/.org/.live/.pro/.net,
-// vidsrc.to/.xyz/.vip/.in/.nl, vidlink.org, embed.su, vidjoy.pro (parked),
-// superembed/multiembed.mov (hard CF wall), spencerdevs.xyz (site, not embed API).
+// vidsrc.to/.xyz/.vip/.in/.nl, vidjoy.pro (landing shell, no per-title player),
+// 111movies.com, autoembed.cc, moviesapi.club, vidora.su (unreachable),
+// multiembed.mov (hard CF wall), embed.su, vidlink.org, spencerdevs.xyz.
 // ---------------------------------------------------------------------------
 
 const twoEmbedMovie = (base: string) => (id: number | string) => `${base}/embed/${id}`;
@@ -166,6 +183,35 @@ export const PROVIDERS: Provider[] = [
     tvImdb: vidsrcTv('https://vidsrc.su'),
   },
 
+  // ----- Modern players (probed live 2026-10, unproven by the user) -----
+  {
+    id: 'vidfast',
+    name: 'VidFast',
+    short: 'Fast',
+    group: 'modern',
+    // Live player shell for both TMDB + IMDB paths; widest international
+    // catalog of the pool. Not user-proven → manual pick or post-proven try.
+    reliability: 'maybe',
+    movie: (id) => `https://vidfast.pro/movie/${id}`,
+    tv: (id, s, e) => `https://vidfast.pro/tv/${id}/${s}/${e}`,
+    movieImdb: (imdb) => `https://vidfast.pro/movie/${imdb}`,
+    tvImdb: (imdb, s, e) => `https://vidfast.pro/tv/${imdb}/${s}/${e}`,
+  },
+  {
+    id: 'vidlink',
+    name: 'VidLink',
+    short: 'Link',
+    group: 'modern',
+    // Honest about misses: uncarried titles return a real 500, so the scan
+    // rules it out instead of shipping a dead shell like the 200-for-anything
+    // families. Playback itself unproven → 'maybe'.
+    reliability: 'maybe',
+    movie: (id) => `https://vidlink.pro/movie/${id}`,
+    tv: (id, s, e) => `https://vidlink.pro/tv/${id}/${s}/${e}`,
+    movieImdb: (imdb) => `https://vidlink.pro/movie/${imdb}`,
+    tvImdb: (imdb, s, e) => `https://vidlink.pro/tv/${imdb}/${s}/${e}`,
+  },
+
   // ----- Extra (modern alternative player) -----
   {
     id: 'videasy',
@@ -182,6 +228,20 @@ export const PROVIDERS: Provider[] = [
     tv: (id, s, e) => `https://player.videasy.to/tv/${id}/${s}/${e}`,
     movieImdb: (imdb) => `https://player.videasy.to/movie/imdb/${imdb}`,
     tvImdb: (imdb, s, e) => `https://player.videasy.to/tv/imdb/${imdb}/${s}/${e}`,
+  },
+  {
+    id: 'videasy_net',
+    name: 'Videasy.net',
+    short: 'VDS.net',
+    group: 'other',
+    // Mirror of the Videasy player on the .net domain (probed live 2026-10).
+    // Same family as Videasy → same last-resort trust.
+    reliability: 'lastresort',
+    dubParam: 'language',
+    movie: (id) => `https://player.videasy.net/movie/${id}`,
+    tv: (id, s, e) => `https://player.videasy.net/tv/${id}/${s}/${e}`,
+    movieImdb: (imdb) => `https://player.videasy.net/movie/imdb/${imdb}`,
+    tvImdb: (imdb, s, e) => `https://player.videasy.net/tv/imdb/${imdb}/${s}/${e}`,
   },
 ];
 

@@ -82,7 +82,7 @@ function buildStats(history: HistoryItem[], ratings: RatingRow[]): StatsPayload 
   };
 }
 
-const PIE_COLORS = ['#fbbf24', '#38bdf8'];
+const PIE_COLORS = ['#e50914', '#38bdf8'];
 
 function StatCard({ icon: Icon, label, value, hint }: { icon: typeof Clock; label: string; value: string; hint?: string }) {
   return (

@@ -42,7 +42,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
         {children}
-        <Toaster richColors position="bottom-right" />
+        <Toaster richColors position="bottom-right" visibleToasts={3} duration={4000} />
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -108,6 +108,24 @@ export function SiteFooter() {
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-4 text-[11px] text-zinc-500 dark:border-zinc-800/60 dark:text-zinc-400">
           <p>© {new Date().getFullYear()} CineDeck — movies &amp; shows, one press away.</p>
+          <nav aria-label="Legal" className="flex flex-wrap items-center gap-3">
+            {([
+              { label: 'Privacy Policy', anchor: 'privacy' },
+              { label: 'Terms of Service', anchor: 'terms' },
+              { label: 'Contact', anchor: 'contact' },
+            ]).map(({ label, anchor }) => (
+              <button
+                key={anchor}
+                type="button"
+                onClick={() =>
+                  router.push(`/?view=legal#${anchor}`, { scroll: false })
+                }
+                className="rounded-md transition-colors hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
           <p className="flex items-center gap-2">
             <span className="relative flex size-1.5" aria-hidden>
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-70" />

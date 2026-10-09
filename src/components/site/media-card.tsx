@@ -3,10 +3,15 @@
 import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Film, Lock, Play, Star, Tv } from 'lucide-react';
+import { Check, Film, Lock, Play, Plus, Star, Tv } from 'lucide-react';
+import { toast } from 'sonner';
 import { tmdbImg } from '@/lib/languages';
+import { POSTER_BLUR } from '@/lib/img-blur';
 import { yearOf, type MediaType } from '@/lib/tmdb';
+import { fetchRatings, type RatingRow } from '@/lib/library';
 import { usePlaybackLocked } from '@/components/site/sign-in-gate';
+import { useWatchlist, useToggleWatchlist } from '@/hooks/use-media';
+import { useQuery } from '@tanstack/react-query';
 
 export interface MediaCardItem {
   /** TMDB ID — used to build the watch URL (?id=…&type=…). */
@@ -26,13 +31,19 @@ export interface MediaCardItem {
   /** Optional genre label shown next to the year. Optional because not every
    * upstream source returns genres — we just hide it when missing. */
   genre?: string;
+  /** Finnish-content badge (small FI flag chip, Section 9). */
+  finnish?: boolean;
 }
 
 /**
- * Premium poster card: spring-back 3D tilt on pointer move (fine pointers
- * only), a shine sweep on hover, a scale-in center play button, and a
- * staggered rise-in entrance. All motion is transform/opacity only and
- * collapses to static under prefers-reduced-motion.
+ * Premium poster card, streaming-grade hover state.
+ *
+ * Poster fills the card edge-to-edge. On hover (desktop) the card scales to
+ * 1.05 and a gradient overlay fades in carrying the title, year, rating and
+ * a quick-add-to-list affordance top-right; a play button springs in dead
+ * center. On touch devices the overlay is always visible (no hover to rely
+ * on). Quick-add writes straight to My List with toast feedback. All motion
+ * is transform/opacity and collapses under prefers-reduced-motion.
  */
 export function MediaCard({
   item,
@@ -49,6 +60,22 @@ export function MediaCard({
   // Guests see a subtle lock badge on the play affordance — the click still
   // navigates to the watch view, where the full "Sign in to watch" gate lives.
   const playbackLocked = usePlaybackLocked();
+  const { data: watchlist } = useWatchlist();
+  const toggleWatchlist = useToggleWatchlist();
+  // Shared, deduped ratings fetch — one request across every card on the
+  // page (React Query collapses identical queryKeys). Drives the tiny
+  // watched/rated badges on the poster.
+  const ratingsQuery = useQuery<RatingRow[]>({
+    queryKey: ['ratings'],
+    queryFn: fetchRatings,
+    staleTime: 60 * 1000,
+  });
+  const ratingRow =
+    item.id > 0
+      ? ratingsQuery.data?.find(
+          (r) => r.tmdbId === item.id && r.mediaType === item.mediaType,
+        )
+      : undefined;
 
   // 3D tilt motion values (springs return the card to flat on leave).
   const rotateX = useMotionValue(0);
@@ -61,8 +88,8 @@ export function MediaCard({
     const rect = e.currentTarget.getBoundingClientRect();
     const nx = (e.clientX - rect.left) / rect.width - 0.5;
     const ny = (e.clientY - rect.top) / rect.height - 0.5;
-    rotateY.set(nx * 9);
-    rotateX.set(-ny * 7);
+    rotateY.set(nx * 7);
+    rotateX.set(-ny * 5);
   };
 
   const resetTilt = () => {
@@ -83,6 +110,35 @@ export function MediaCard({
       ? `/?imdb=${item.imdbId}&type=${item.mediaType}`
       : null;
 
+  const existingRow = watchlist?.find(
+    (w) => w.tmdbId === item.id && w.mediaType === item.mediaType,
+  );
+  const inList = Boolean(existingRow);
+
+  const quickAdd = (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!watchTarget) return;
+    toggleWatchlist.mutate(
+      {
+        tmdbId: item.id,
+        mediaType: item.mediaType,
+        title: item.title,
+        posterPath: item.posterPath,
+        backdropPath: null,
+        imdbId: item.imdbId ?? null,
+        existingRowId: existingRow?.id,
+      },
+      {
+        onSuccess: (res) =>
+          toast.success(res.added ? 'Added to My List' : 'Removed from My List', {
+            description: item.title,
+          }),
+        onError: () => toast.error('Could not update My List — try again.'),
+      },
+    );
+  };
+
   return (
     <motion.button
       type="button"
@@ -92,30 +148,31 @@ export function MediaCard({
         duration: 0.3,
         delay: reduceMotion || priority ? 0 : Math.min(index * 0.035, 0.32),
       }}
-      whileHover={reduceMotion ? undefined : { y: -6 }}
+      whileHover={reduceMotion ? undefined : { scale: 1.05, zIndex: 10 }}
       whileTap={reduceMotion ? undefined : { scale: 0.97 }}
       style={{ rotateX: tiltX, rotateY: tiltY, transformPerspective: 750 }}
       onPointerMove={onPointerMove}
       onPointerLeave={resetTilt}
       disabled={!watchTarget}
       onClick={() => watchTarget && router.push(watchTarget, { scroll: false })}
-      // No aria-label on purpose: the visible text (type chip + title + year
-      // + genres) IS the accessible name — a summary label would trigger
+      // No aria-label on purpose: the visible text (title + year + rating in
+      // the overlay) IS the accessible name — a summary label would trigger
       // label-content-name-mismatch. The card opens the watch page.
-      className="group relative block w-[130px] shrink-0 snap-start text-left focus-visible:outline-none disabled:cursor-not-allowed sm:w-[160px] md:w-[180px]"
+      className="group relative block w-[130px] shrink-0 snap-start rounded-lg text-left focus-visible:outline-none disabled:cursor-not-allowed sm:w-[160px] md:w-[180px]"
     >
-      <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 transition-all duration-300 group-hover:border-brand/40 group-hover:shadow-[0_14px_40px_-8px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)] group-focus-visible:border-brand/60 dark:border-zinc-800/80 dark:bg-zinc-900/60">
+      <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-all duration-300 group-hover:border-brand/50 group-hover:shadow-[0_16px_40px_-10px_rgba(0,0,0,0.55)] group-focus-visible:border-brand/60">
         {poster ? (
           // TMDB posters (posterPath) run through next/image optimization;
           // third-party URLs (Cinemeta's Amazon CDN etc.) use a plain <img>
           // because their hosts can't be allowlisted in next.config.
           item.posterUrl ? (
+             
             <img
               src={poster}
               alt={`${item.title} poster`}
               loading={priority ? 'eager' : 'lazy'}
               decoding="async"
-              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.06]"
+              className="size-full object-cover"
             />
           ) : (
             <Image
@@ -124,47 +181,62 @@ export function MediaCard({
               fill
               sizes='(max-width: 640px) 130px, (max-width: 768px) 160px, 180px'
               priority={priority}
-              className="object-cover transition-transform duration-300 group-hover:scale-[1.06]"
+              placeholder="blur"
+              blurDataURL={POSTER_BLUR}
+              className="object-cover"
             />
           )
         ) : (
-          <span className="flex size-full flex-col items-center justify-center gap-2 bg-zinc-200/40 dark:bg-zinc-900/40">
+          <span className="flex size-full flex-col items-center justify-center gap-2 bg-muted/40">
             {item.mediaType === 'tv' ? (
-              <Tv className="size-8 text-zinc-400 dark:text-zinc-700" aria-hidden />
+              <Tv className="size-8 text-muted-foreground/40" aria-hidden />
             ) : (
-              <Film className="size-8 text-zinc-400 dark:text-zinc-700" aria-hidden />
+              <Film className="size-8 text-muted-foreground/40" aria-hidden />
             )}
-            <span className="px-2 text-center text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">
+            <span className="px-2 text-center text-[11px] leading-tight text-muted-foreground">
               {item.title}
             </span>
           </span>
         )}
 
-        {/* Top-left media-type badge — small pill with the icon + label. */}
-        <span className="absolute left-2 top-2 inline-flex h-5 items-center gap-1 rounded-md border border-transparent bg-zinc-950/70 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
-          {item.mediaType === 'tv' ? (
-            <Tv className="size-2.5" aria-hidden />
-          ) : (
-            <Film className="size-2.5" aria-hidden />
-          )}
-          {item.mediaType === 'tv' ? 'TV' : 'Movie'}
-        </span>
+        {/* Quick-add-to-list — top right, fades in with the overlay
+            (always visible on touch where there is no hover). */}
+        {watchTarget && (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={
+              inList ? `Remove ${item.title} from My List` : `Add ${item.title} to My List`
+            }
+            onClick={quickAdd}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') quickAdd(e);
+            }}
+            className={`absolute right-1.5 top-1.5 z-20 flex size-7 cursor-pointer items-center justify-center rounded-full border border-white/25 bg-black/55 text-white opacity-100 backdrop-blur-md transition-all duration-200 hover:scale-110 hover:bg-brand hover:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 md:opacity-0 md:group-hover:opacity-100 ${
+              inList ? 'text-emerald-400 md:text-emerald-400' : ''
+            }`}
+          >
+            {inList ? <Check className="size-3.5" aria-hidden /> : <Plus className="size-3.5" aria-hidden />}
+          </span>
+        )}
 
-        {/* Rating chip top-right — shown only when vote > 0. */}
-        {item.voteAverage > 0 && (
-          <span className="absolute right-2 top-2 inline-flex h-5 items-center gap-0.5 rounded-md bg-zinc-950/70 px-1.5 text-[10px] font-semibold text-amber-300 backdrop-blur-sm">
-            <Star className="size-2.5 fill-amber-400 text-amber-400" aria-hidden />
-            {item.voteAverage.toFixed(1)}
+        {/* Finnish-content badge — FI flag chip (blue field, white text). */}
+        {item.finnish && (
+          <span
+            title="Finnish production"
+            className="absolute left-1.5 top-1.5 z-10 inline-flex h-5 items-center rounded-md bg-[#002f6c]/90 px-1.5 text-[9px] font-bold tracking-wider text-white ring-1 ring-white/25 backdrop-blur-sm"
+          >
+            FI
           </span>
         )}
 
         {/* Center play button — springs in on hover. Guests get a lock. */}
         <span
           aria-hidden
-          className="absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 group-hover:opacity-100"
+          className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         >
-          <span className="relative flex size-11 scale-50 items-center justify-center rounded-full bg-brand text-zinc-950 shadow-[0_0_28px_color-mix(in_srgb,var(--cinedeck-accent)_45%,transparent)] transition-transform duration-300 group-hover:scale-100">
-            <Play className="size-5 translate-x-[1px] fill-zinc-950" aria-hidden />
+          <span className="relative flex size-11 scale-50 items-center justify-center rounded-full bg-brand text-white shadow-[0_0_28px_rgba(229,9,20,0.5)] transition-transform duration-300 group-hover:scale-100">
+            <Play className="size-5 translate-x-[1px] fill-white" aria-hidden />
             {playbackLocked && (
               <span className="absolute -right-1.5 -top-1.5 flex size-4.5 items-center justify-center rounded-full bg-zinc-950 text-amber-300 ring-1 ring-white/25">
                 <Lock className="size-2.5" aria-hidden />
@@ -173,22 +245,55 @@ export function MediaCard({
           </span>
         </span>
 
-        {/* Shine sweep on hover. */}
-        <span aria-hidden className="cd-shine rounded-xl" />
+        {/* Watched / rated badges — bottom-left, tiny, only when present. */}
+        {(ratingRow?.watched || ratingRow?.score != null) && (
+          <span className="absolute bottom-1.5 right-1.5 z-10 flex items-center gap-1">
+            {ratingRow?.watched && (
+              <span
+                aria-label="Watched"
+                title="Watched"
+                className="flex size-4.5 items-center justify-center rounded-full bg-emerald-500 text-white shadow"
+              >
+                <Check className="size-2.5" aria-hidden />
+              </span>
+            )}
+            {ratingRow?.score != null && (
+              <span
+                title={`You rated this ${ratingRow.score}/10`}
+                className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-brand px-1 text-[9px] font-bold text-white shadow"
+              >
+                {ratingRow.score}
+              </span>
+            )}
+          </span>
+        )}
 
-        {/* Bottom gradient + title overlay so the title reads cleanly over
-            busy poster artwork. */}
-        <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-80 transition-opacity duration-300 group-hover:opacity-95" />
+        {/* Shine sweep on hover. */}
+        <span aria-hidden className="cd-shine rounded-lg" />
+
+        {/* Bottom gradient + title overlay — everything lives here, no text
+            below the card. Always visible on touch, fades in on desktop. */}
+        <span className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-t from-black/95 via-black/45 to-transparent transition-opacity duration-300 opacity-100 md:opacity-0 md:group-hover:opacity-100" />
         <span className="absolute inset-x-0 bottom-0 p-2.5 md:p-3">
-          <span className="block line-clamp-2 text-xs font-semibold text-white drop-shadow md:text-sm">
+          <span className="block line-clamp-2 text-sm font-semibold leading-snug text-white drop-shadow md:text-lg">
             {item.title}
           </span>
-          <span className="mt-1 flex items-center gap-1.5 text-[10px] text-zinc-200">
+          <span className="mt-1 flex items-center gap-1.5 text-xs text-zinc-300">
             {year && <span>{year}</span>}
-            {year && item.genre && (
-              <span className="size-1 rounded-full bg-zinc-400" aria-hidden />
+            {item.voteAverage > 0 && (
+              <>
+                {(year || item.genre) && (
+                  <span className="size-1 rounded-full bg-zinc-500" aria-hidden />
+                )}
+                <span className="inline-flex items-center gap-0.5 font-semibold text-amber-400">
+                  <Star className="size-3 fill-amber-400" aria-hidden />
+                  {item.voteAverage.toFixed(1)}
+                </span>
+              </>
             )}
-            {item.genre && <span className="truncate">{item.genre}</span>}
+            {item.genre && (
+              <span className="min-w-0 truncate text-zinc-400">{item.genre}</span>
+            )}
           </span>
         </span>
       </span>
@@ -199,7 +304,7 @@ export function MediaCard({
 export function MediaCardSkeleton() {
   return (
     <div aria-hidden className="w-[130px] shrink-0 sm:w-[160px] md:w-[180px]">
-      <div className="cd-shimmer aspect-[2/3] w-full animate-pulse rounded-xl border border-zinc-200 bg-zinc-200 dark:border-zinc-800/80 dark:bg-zinc-900" />
+      <div className="cd-shimmer aspect-[2/3] w-full animate-pulse rounded-lg border border-border bg-muted" />
     </div>
   );
 }

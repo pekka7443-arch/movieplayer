@@ -53,6 +53,7 @@ import { tmdbImg } from '@/lib/languages';
 import type { MetaSearchItem } from '@/lib/meta';
 import { useFinnishCatalog } from '@/hooks/use-meta';
 import { CustomLists } from '@/components/site/custom-lists';
+import { EmptyState } from '@/components/site/empty-state';
 import { fetchProfiles, type ProfileRow } from '@/lib/library';
 
 type AnyRowItem = SearchItem | MetaSearchItem;
@@ -85,21 +86,34 @@ function SectionHeading({
   icon: Icon,
   title,
   hint,
+  seeAll,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   hint?: string;
+  seeAll?: { label?: string; onClick: () => void };
 }) {
-  // Section heading: small accent vertical bar + bold tracking-tight title.
-  // Repaints live with the user's chosen accent color (bg-brand).
+  // Section heading: small accent vertical bar + bold tracking-tight title,
+  // optional "See all" affordance on the right edge.
   return (
     <div className="mb-3 flex flex-wrap items-baseline gap-2.5">
-      <h2 className="flex items-center gap-2 text-lg font-bold tracking-tight text-zinc-900 md:text-xl dark:text-zinc-100">
-        <span className="size-4 rounded-full bg-brand md:h-5 md:w-1" aria-hidden />
+      <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900 md:text-2xl dark:text-zinc-100">
+        <span className="h-4 w-1 rounded-full bg-brand md:h-5" aria-hidden />
         <Icon className="size-5 text-brand" aria-hidden />
         {title}
       </h2>
-      {hint && <span className="text-xs text-zinc-500 dark:text-zinc-400">{hint}</span>}
+      {hint && <span className="hidden text-xs text-zinc-500 sm:inline dark:text-zinc-400">{hint}</span>}
+      {seeAll && (
+        <button
+          type="button"
+          onClick={seeAll.onClick}
+          aria-label={seeAll.label ?? `See all — ${title}`}
+          className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md text-xs font-medium text-zinc-500 transition-colors hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 md:text-[13px] dark:text-zinc-400"
+        >
+          {seeAll.label ?? 'See all'}
+          <ArrowRight className="size-3.5" aria-hidden />
+        </button>
+      )}
     </div>
   );
 }
@@ -110,7 +124,7 @@ function RowSkeletonStripe() {
     <div className="flex gap-3 overflow-hidden sm:gap-4">
       {Array.from({ length: 10 }).map((_, i) => (
         <div key={i} className="w-[130px] shrink-0 sm:w-[160px] md:w-[180px]">
-          <Skeleton className="cd-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+          <Skeleton className="cd-shimmer aspect-[2/3] w-full rounded-lg bg-zinc-200 dark:bg-zinc-900" />
         </div>
       ))}
     </div>
@@ -221,13 +235,13 @@ function HistoryCard({ item }: { item: HistoryItem }) {
         aria-label={`Continue ${item.title}${item.season && item.episode ? ` S${item.season}E${item.episode}` : ''}`}
         className="block w-full text-left focus-visible:outline-none"
       >
-        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-white/70 transition-all duration-200 group-hover:border-amber-400/50 dark:border-zinc-800/80 dark:bg-zinc-900/60">
+        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-lg border border-border bg-card transition-all duration-200 group-hover:border-brand/50 dark:bg-zinc-900/60">
           {poster ? (
             <img
               src={poster}
               alt={`${item.title} poster`}
               loading="lazy"
-              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.05]"
             />
           ) : (
             <span className="flex size-full items-center justify-center font-mono text-xs text-zinc-500 dark:text-zinc-700">
@@ -236,12 +250,12 @@ function HistoryCard({ item }: { item: HistoryItem }) {
           )}
           {/* hover play overlay */}
           <span className="absolute inset-0 flex items-center justify-center bg-zinc-950/60 opacity-0 backdrop-blur-[2px] transition-opacity duration-200 group-hover:opacity-100">
-            <span className="flex size-11 items-center justify-center rounded-full bg-amber-400 text-zinc-950">
-              <Play className="size-5 fill-zinc-950" aria-hidden />
+            <span className="flex size-11 items-center justify-center rounded-full bg-brand text-white">
+              <Play className="size-5 fill-white" aria-hidden />
             </span>
           </span>
           {item.mediaType === 'tv' && item.season != null && item.episode != null && (
-            <span className="absolute left-2 top-2 rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-300 backdrop-blur">
+            <span className="absolute left-2 top-2 rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-red-400 backdrop-blur">
               S{item.season}·E{item.episode}
             </span>
           )}
@@ -257,7 +271,7 @@ function HistoryCard({ item }: { item: HistoryItem }) {
             </span>
           )}
         </span>
-        <span className="mt-2 block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-amber-600 dark:text-zinc-200 dark:group-hover:text-amber-300">
+        <span className="mt-2 block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-brand dark:text-zinc-200">
           {item.title}
         </span>
         <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">
@@ -299,13 +313,13 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
         aria-label={`Open ${item.title}`}
         className="block w-full text-left focus-visible:outline-none"
       >
-        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-xl border border-zinc-200 bg-white/70 transition-all duration-200 group-hover:border-amber-400/50 dark:border-zinc-800/80 dark:bg-zinc-900/60">
+        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-lg border border-border bg-card transition-all duration-200 group-hover:border-brand/50 dark:bg-zinc-900/60">
           {poster ? (
             <img
               src={poster}
               alt={`${item.title} poster`}
               loading="lazy"
-              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.05]"
             />
           ) : (
             <span className="flex size-full items-center justify-center font-mono text-xs text-zinc-500 dark:text-zinc-700">
@@ -316,7 +330,7 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
             {item.mediaType}
           </span>
         </span>
-        <span className="mt-2 block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-amber-600 dark:text-zinc-200 dark:group-hover:text-amber-300">
+        <span className="mt-2 block truncate text-sm font-medium text-zinc-800 transition-colors group-hover:text-brand dark:text-zinc-200">
           {item.title}
         </span>
         <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">In My List</span>
@@ -483,6 +497,7 @@ function CatalogRow({
  * embed servers actually index the title under.
  */
 function FinnishSection() {
+  const router = useRouter();
   const contentType = useCinedeckStore((s) => s.contentType);
   const reduceMotion = useReducedMotion();
   const wantMovies = contentType !== 'tv';
@@ -523,12 +538,13 @@ function FinnishSection() {
   };
 
   return (
-    <motion.section {...reveal} ref={ref} aria-labelledby="finnish-picks">
-      <div id="finnish-picks" className="scroll-mt-24">
+    <motion.section {...reveal} ref={ref} id="finnish" aria-labelledby="finnish-picks" className="scroll-mt-24">
+      <div id="finnish-picks">
         <SectionHeading
           icon={Flag}
           title={title}
           hint="Finnish originals — Yle Areena fallback on every title page"
+          seeAll={{ onClick: () => router.push('/?view=finnish', { scroll: false }) }}
         />
       </div>
       {loading || !near ? (
@@ -536,7 +552,7 @@ function FinnishSection() {
       ) : items.length > 0 ? (
         <MediaRow label={title}>
           {items.map((item, index) => (
-            <MediaCard key={rowKeyOf(item)} item={toCardItem(item)} priority={index < 4} index={index} />
+            <MediaCard key={rowKeyOf(item)} item={{ ...toCardItem(item), finnish: true }} priority={index < 4} index={index} />
           ))}
         </MediaRow>
       ) : (
@@ -930,7 +946,19 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
     [trending, contentType, kidsFilter],
   );
   const filteredHistory = useMemo(
-    () => (contentType === 'all' ? historyItems : historyItems.filter((i) => i.mediaType === contentType)),
+    () =>
+      historyItems.filter((i) => {
+        // Auto-remove from Continue Watching past 95% — the title is done;
+        // it lives in Stats/history, not in the pick-up-where-you-left row.
+        if (
+          i.durationSeconds != null &&
+          i.durationSeconds > 0 &&
+          i.positionSeconds / i.durationSeconds > 0.95
+        ) {
+          return false;
+        }
+        return contentType === 'all' ? true : i.mediaType === contentType;
+      }),
     [historyItems, contentType],
   );
   const filteredWatchlist = useMemo(
@@ -951,7 +979,7 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
   };
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-8 sm:space-y-10">
       <HeroSection
         trending={filteredTrending}
         trendingLoading={trendingQuery.isPending}
@@ -1019,15 +1047,15 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
           type="button"
           id="sports-teaser"
           onClick={() => router.push('/?view=sports', { scroll: false })}
-          className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 px-5 py-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-[0_16px_44px_-14px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-800 dark:bg-zinc-900/60"
+          className="group relative flex w-full items-center gap-3.5 overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 px-4 py-3 text-left transition-all duration-300 hover:border-brand/40 hover:shadow-[0_16px_44px_-14px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-800 dark:bg-zinc-900/60"
         >
           <span
             aria-hidden
             className="pointer-events-none absolute -right-10 -top-16 h-44 w-72 rounded-full bg-brand-soft blur-3xl"
           />
           <span aria-hidden className="cd-shine" />
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
-            <Trophy className="size-5 text-brand" aria-hidden />
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
+            <Trophy className="size-4.5 text-brand" aria-hidden />
           </span>
           <span className="min-w-0">
             <span className="flex items-center gap-2 text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
@@ -1068,11 +1096,17 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
             ))}
           </div>
         ) : filteredHistory.length === 0 ? (
-          <RowEmptyState
-            text={
+          <EmptyState
+            variant="history"
+            title={
               historyItems.length > 0
-                ? `No ${contentType === 'tv' ? 'series' : 'movies'} in progress — switch the browse filter to All.`
-                : 'Nothing in progress yet — play something to pick up where you left off.'
+                ? `No ${contentType === 'tv' ? 'series' : 'movies'} in progress`
+                : 'Nothing watched yet'
+            }
+            subtitle={
+              historyItems.length > 0
+                ? 'Switch the browse filter to All to see everything in progress.'
+                : 'Press play on anything — CineDeck remembers exactly where you left off, down to the second.'
             }
           />
         ) : (
@@ -1098,13 +1132,15 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
             ))}
           </div>
         ) : filteredWatchlist.length === 0 ? (
-          <RowEmptyState
-            text={
+          <EmptyState
+            variant="list"
+            title="Your list is empty"
+            subtitle={
               watchlistItems.length > 0
-                ? `No ${contentType === 'tv' ? 'series' : 'movies'} saved — switch the browse filter to All.`
+                ? 'Switch the browse filter to All to see everything you saved.'
                 : user
-                  ? 'Your list is empty — tap the bookmark on any title to save it here.'
-                  : 'Your list is empty — bookmark titles or create an account to sync them everywhere.'
+                  ? 'Hover any poster and hit + to save it here — your queue for movie night.'
+                  : 'Save titles with the + on any poster, or create a free account to sync them everywhere.'
             }
           />
         ) : (
@@ -1133,6 +1169,7 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
             icon={TrendingUp}
             title={contentType === 'movie' ? 'Trending Movies' : contentType === 'tv' ? 'Trending Series' : 'Trending Now'}
             hint={hasKey ? 'This week on TMDB' : 'Top picks'}
+            seeAll={{ onClick: () => router.push('/?view=search&browse=trending', { scroll: false }) }}
           />
         </div>
         {trendingQuery.isPending ? (
@@ -1172,7 +1209,12 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
       {contentType !== 'tv' && (
       <motion.section {...fadeIn} aria-labelledby="popular-movies">
         <div id="popular-movies" className="scroll-mt-24">
-          <SectionHeading icon={Film} title="Popular Movies" hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'} />
+          <SectionHeading
+            icon={Film}
+            title="Popular Movies"
+            hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'}
+            seeAll={{ onClick: () => router.push('/?view=search&browse=popular&type=movie', { scroll: false }) }}
+          />
         </div>
         {popularMoviesQuery.isPending ? (
           <RowSkeletonStripe />
@@ -1197,7 +1239,12 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
       {contentType !== 'movie' && (
       <motion.section {...fadeIn} aria-labelledby="popular-tv">
         <div id="popular-tv" className="scroll-mt-24">
-          <SectionHeading icon={Tv} title="Popular TV Shows" hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'} />
+          <SectionHeading
+            icon={Tv}
+            title="Popular TV Shows"
+            hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'}
+            seeAll={{ onClick: () => router.push('/?view=search&browse=popular&type=tv', { scroll: false }) }}
+          />
         </div>
         {popularTVQuery.isPending ? (
           <RowSkeletonStripe />

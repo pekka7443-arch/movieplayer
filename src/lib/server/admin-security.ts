@@ -1,8 +1,11 @@
 // Admin-specific login security (spec: admin device/session limits).
 //
 // 1. DEVICE CAP — role="admin" accounts may hold at most ADMIN_SESSION_LIMIT
-//    active sessions. A login that would exceed the cap is rejected with a
-//    clear, actionable message. Regular (role="user") accounts are unlimited.
+//    active sessions. A login that would exceed the cap EVICTS THE OLDEST
+//    active session(s) to make room and audit-logs the eviction — the admin
+//    has just proven the password (and TOTP when enabled), so the correct
+//    move is to retire the stalest device, never to lock the owner out.
+//    Regular (role="user") accounts are unlimited.
 // 2. IP ALLOWLIST — when ADMIN_IP_ALLOWLIST is set (comma-separated), admin
 //    logins from any other IP are rejected. When the variable is unset or
 //    empty the check is skipped entirely (dev + z.ai previews keep working).
@@ -23,7 +26,11 @@ import { mailer } from '@/lib/server/mailer';
 /** Maximum concurrent active sessions for role="admin" accounts. */
 export const ADMIN_SESSION_LIMIT = 3;
 
-/** Exact copy required by the spec — surfaced verbatim in the auth dialog. */
+/**
+ * Legacy copy for the pre-eviction rejection. The guard no longer rejects
+ * on the device cap, but the code+message pair stays so any cached client
+ * or external consumer keeps a stable contract.
+ */
 export const ADMIN_DEVICE_LIMIT_MESSAGE =
   "Maximum device limit reached. Log out from another device first or use 'Log out all devices' in settings.";
 export const ADMIN_IP_BLOCKED_MESSAGE = 'Login not allowed from this network.';
@@ -38,8 +45,8 @@ export async function countActiveSessions(userId: string): Promise<number> {
 }
 
 /**
- * True when the account already holds >= limit active sessions, i.e. a new
- * login must be rejected. Only meaningful for admin accounts.
+ * True when the account already holds >= limit active sessions. Only
+ * meaningful for admin accounts (the guard evicts instead of rejecting).
  */
 export async function adminSessionLimitReached(
   userId: string,
@@ -47,6 +54,57 @@ export async function adminSessionLimitReached(
 ): Promise<boolean> {
   const count = await countActiveSessions(userId);
   return count >= limit;
+}
+
+/**
+ * Delete the admin's OLDEST active sessions until exactly one free slot
+ * remains under `limit`. Returns the number of sessions evicted.
+ *
+ * Never throws outward-critical errors by itself, but callers wrap it in a
+ * try/catch anyway: an eviction failure must fall back to ADMITTING the
+ * login (fail-open for the authenticated owner) rather than blocking it.
+ */
+export async function evictOldestAdminSessions(
+  userId: string,
+  limit: number = ADMIN_SESSION_LIMIT,
+): Promise<{ evicted: number; details: Array<{ id: string; userAgent: string | null; createdAt: Date }> }> {
+  const active = await db.session.findMany({
+    where: { userId, expiresAt: { gt: new Date() } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, userAgent: true, createdAt: true },
+  });
+  const overflow = active.length - (limit - 1);
+  if (overflow <= 0) return { evicted: 0, details: [] };
+  const doomed = active.slice(0, overflow);
+  await db.session.deleteMany({ where: { id: { in: doomed.map((s) => s.id) } } });
+  return { evicted: doomed.length, details: doomed };
+}
+
+/** Audit-log an eviction so the admin sees which device was retired. */
+async function auditSessionEviction(
+  user: { id: string; email: string },
+  evicted: Array<{ id: string; userAgent: string | null; createdAt: Date }>,
+): Promise<void> {
+  try {
+    await writeAudit({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'admin.session_evicted',
+      targetType: 'user',
+      targetId: user.id,
+      targetLabel: user.email,
+      details: {
+        evicted: evicted.length,
+        sessions: evicted.map((s) => ({
+          id: s.id,
+          device: classifyUserAgent(s.userAgent),
+          signedInAt: s.createdAt.toISOString(),
+        })),
+      },
+    });
+  } catch {
+    // Audit is best-effort — never block the login over bookkeeping.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -207,8 +265,11 @@ export interface AdminLoginGuardInput {
  * always pass through untouched.
  *
  * Order matters: the network-level allowlist rejects before anything else,
- * then the device cap. A rejected attempt is recorded in the LoginAttempt
- * ledger (shows up in the admin overview's failed-login chart).
+ * then the device cap. The device cap NEVER rejects — it evicts the oldest
+ * active session(s) so the freshly authenticated admin always gets in
+ * (fail-open for the owner; the cap invariant "max N active sessions" is
+ * preserved because the new session occupies the freed slot). The IP
+ * allowlist remains a hard block: it is a network-level control.
  */
 export async function adminLoginGuard(input: AdminLoginGuardInput): Promise<Response | null> {
   if (input.user.role !== 'admin') return null;
@@ -223,12 +284,22 @@ export async function adminLoginGuard(input: AdminLoginGuardInput): Promise<Resp
   }
 
   if (await adminSessionLimitReached(input.user.id)) {
-    input.logAttempt?.(input.user.id, false, 'admin_device_limit');
-    logger.warn(
-      { email: input.user.email, active: await countActiveSessions(input.user.id), limit: ADMIN_SESSION_LIMIT },
-      'admin login rejected: device limit reached',
-    );
-    return apiError(403, 'admin_device_limit', ADMIN_DEVICE_LIMIT_MESSAGE);
+    try {
+      const { evicted, details } = await evictOldestAdminSessions(input.user.id);
+      if (evicted > 0) {
+        await auditSessionEviction(input.user, details);
+        logger.warn(
+          { email: input.user.email, evicted, limit: ADMIN_SESSION_LIMIT },
+          'admin device cap: evicted oldest session(s) to admit new login',
+        );
+      }
+    } catch (error) {
+      // Eviction failed — admit the authenticated owner anyway.
+      logger.error(
+        { err: error instanceof Error ? { message: error.message } : error, email: input.user.email },
+        'admin session eviction failed (admitting login regardless)',
+      );
+    }
   }
 
   return null;

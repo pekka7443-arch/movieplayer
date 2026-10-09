@@ -25,10 +25,10 @@ function envFromDotEnv(key: string): string | undefined {
 const uniqueEmail = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@cinedeck.test`;
 
 /**
- * Admin logins are capped at 3 active sessions (admin device-limit rule).
- * The suite runs repeatedly against the same dev DB, so clear the admin's
- * sessions directly before signing in — otherwise run #4 would hit
- * "Maximum device limit reached" and fail for the right reason.
+ * Admin logins are capped at 3 active sessions; a 4th login now evicts the
+ * oldest session automatically (the admin is never locked out). Clearing
+ * sessions here keeps the suite deterministic anyway — tests assert exact
+ * session counts and must not inherit leftovers from previous runs.
  */
 function clearAdminSessions(email: string): void {
   try {

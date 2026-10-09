@@ -338,14 +338,14 @@ function SettingsBody() {
               }
             }}
             className="h-9 w-32 rounded-lg border-zinc-200 bg-white/80 font-mono text-sm text-zinc-800 focus-visible:border-brand/60 focus-visible:ring-brand/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
-            placeholder="#fbbf24"
+            placeholder="#e50914"
             aria-label="Accent color hex value"
           />
           <button
             type="button"
             onClick={() => {
-              updateSettings({ accentColor: '#fbbf24' });
-              applyAccentColor('#fbbf24');
+              updateSettings({ accentColor: '#e50914' });
+              applyAccentColor('#e50914');
               toast('Accent reset to amber', { description: 'Back to the default brand color.' });
             }}
             className="text-xs text-zinc-500 underline-offset-2 transition-colors hover:text-brand hover:underline"

@@ -776,12 +776,20 @@ const BOARD_GAMES = [
   { id: 'year-quiz', label: 'Year Quiz' },
 ] as const;
 
+const BOARD_PERIODS = [
+  { id: 'all', label: 'All time' },
+  { id: 'month', label: 'This month' },
+  { id: 'week', label: 'This week' },
+  { id: 'today', label: 'Today' },
+] as const;
+
 function Leaderboard() {
   const [game, setGame] = useState<(typeof BOARD_GAMES)[number]['id']>('emoji-quiz');
+  const [period, setPeriod] = useState<(typeof BOARD_PERIODS)[number]['id']>('all');
   const query = useQuery({
-    queryKey: ['arcade-board', game],
+    queryKey: ['arcade-board', game, period],
     queryFn: async () => {
-      const res = await fetch(`/api/arcade?game=${game}`);
+      const res = await fetch(`/api/arcade?game=${game}&period=${period}`);
       if (!res.ok) throw new Error('arcade_unreachable');
       return (await res.json()) as { rows: ArcadeBoardRow[]; mine: { score: number; rank: number | null } | null };
     },
@@ -801,11 +809,30 @@ function Leaderboard() {
             className={
               'rounded-full px-3 py-1 text-xs font-medium transition-colors ' +
               (game === g.id
-                ? 'bg-amber-400 text-zinc-950'
+                ? 'bg-brand text-white'
                 : 'bg-zinc-200/70 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:bg-zinc-800/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200')
             }
           >
             {g.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pick a time period">
+        {BOARD_PERIODS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => setPeriod(p.id)}
+            aria-pressed={period === p.id}
+            className={
+              'rounded-full border px-3 py-1 text-[11px] font-medium transition-colors ' +
+              (period === p.id
+                ? 'border-brand/50 bg-brand/10 text-brand'
+                : 'border-zinc-200 text-zinc-500 hover:text-zinc-800 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200')
+            }
+          >
+            {p.label}
           </button>
         ))}
       </div>

@@ -77,6 +77,10 @@ const CSP = [
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: false,
+  // Tree-shake barrel imports — lucide-react pulls 1500+ icons otherwise.
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+  },
   // Native/dirname-dependent server packages must stay outside the bundler:
   // geoip-lite loads its MaxMind .dat files relative to __dirname, which the
   // bundler rewrites to a virtual /ROOT and breaks module init.

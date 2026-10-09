@@ -14,7 +14,7 @@ export interface CinedeckSettings {
   saveHistory: boolean;
   /** Preferred provider id (null → default server) */
   preferredServer: string | null;
-  /** Hex accent color (e.g. "#fbbf24"). Applied to :root as --cinedeck-accent. */
+  /** Hex accent color (e.g. "#e50914"). Applied to :root as --cinedeck-accent. */
   accentColor: string;
   /** After the source scan, auto-jump to the healthiest mirror (off = stay on your preferred server). */
   autoPickSource: boolean;
@@ -50,7 +50,7 @@ export const DEFAULT_SETTINGS: CinedeckSettings = {
   language: DEFAULT_LANGUAGE,
   saveHistory: true,
   preferredServer: null,
-  accentColor: '#fbbf24',
+  accentColor: '#e50914',
   autoPickSource: true,
   autoFailover: true,
   failoverSeconds: FAILOVER_SECONDS_DEFAULT,
@@ -78,7 +78,7 @@ function normalizeContentType(value: unknown): 'all' | 'movie' | 'tv' {
 export function applyAccentColor(color: string | null | undefined): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  const value = color && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color) ? color : '#fbbf24';
+  const value = color && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color) ? color : '#e50914';
   root.style.setProperty('--cinedeck-accent', value);
   // Auto-pick foreground based on luminance: dark text on bright accents,
   // white text on dark accents. Keeps button text readable for any color.
@@ -166,7 +166,13 @@ export function getSettings(): CinedeckSettings {
     try {
       const raw = window.localStorage.getItem(SETTINGS_STORAGE);
       if (!raw) {
-        cachedSettings = DEFAULT_SETTINGS;
+        // First boot, nothing saved: pick the metadata language from the
+        // browser locale (Finnish browsers get fi-FI) before defaulting.
+        const locale = typeof navigator !== 'undefined' ? navigator.language : '';
+        cachedSettings = {
+          ...DEFAULT_SETTINGS,
+          language: locale.toLowerCase().startsWith('fi') ? 'fi-FI' : DEFAULT_SETTINGS.language,
+        };
       } else {
         const parsed = JSON.parse(raw) as Partial<CinedeckSettings>;
         cachedSettings = {
@@ -185,7 +191,7 @@ export function getSettings(): CinedeckSettings {
             typeof parsed.accentColor === 'string' &&
             /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(parsed.accentColor)
               ? parsed.accentColor
-              : '#fbbf24',
+              : '#e50914',
           autoPickSource: typeof parsed.autoPickSource === 'boolean' ? parsed.autoPickSource : true,
           autoFailover: typeof parsed.autoFailover === 'boolean' ? parsed.autoFailover : true,
           failoverSeconds: clampFailoverSeconds(parsed.failoverSeconds),

@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Bell, BellRing } from 'lucide-react';
+import { Bell, BellRing, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { useSettings } from '@/lib/settings';
 import {
   fetchNotifications,
   markNotificationsRead,
+  deleteNotifications,
   type NotificationRow,
 } from '@/lib/library';
 
@@ -86,6 +87,24 @@ export function NotificationsButton() {
     }
   };
 
+  const removeOne = (item: NotificationRow) => {
+    void deleteNotifications({ id: item.id })
+      .then(() => {
+        toast.success('Notification removed');
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      })
+      .catch(() => toast.error('Could not remove notification'));
+  };
+
+  const removeAll = () => {
+    void deleteNotifications({ all: true })
+      .then(() => {
+        toast.success('All notifications cleared');
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      })
+      .catch(() => toast.error('Could not clear notifications'));
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild onClick={open}>
@@ -108,9 +127,20 @@ export function NotificationsButton() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 rounded-xl border-zinc-200 p-1.5 dark:border-zinc-800">
-        <p className="px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          Notifications
-        </p>
+        <div className="flex items-center justify-between px-2.5 py-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+            Notifications
+          </p>
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={removeAll}
+              className="rounded-md text-[11px] font-medium text-zinc-400 transition-colors hover:text-brand"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
         {items.length === 0 ? (
           <p className="px-2.5 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
             Nothing yet — save shows to My List and CineDeck will tell you when new episodes drop.
@@ -118,7 +148,7 @@ export function NotificationsButton() {
         ) : (
           <ul className="max-h-96 overflow-y-auto">
             {items.map((item) => (
-              <li key={item.id}>
+              <li key={item.id} className="group/item relative">
                 <button
                   type="button"
                   onClick={() => openTitle(item)}
@@ -139,6 +169,17 @@ export function NotificationsButton() {
                   </span>
                   <span className="shrink-0 text-[10px] text-zinc-400">{timeAgo(item.createdAt)}</span>
                 </button>
+                <button
+                  type="button"
+                  aria-label={`Delete notification: ${item.title}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeOne(item);
+                  }}
+                  className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full text-zinc-400 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 group-hover/item:opacity-100"
+                >
+                  <X className="size-3.5" aria-hidden />
+                </button>
               </li>
             ))}
           </ul>
@@ -147,5 +188,3 @@ export function NotificationsButton() {
     </DropdownMenu>
   );
 }
-
-void toast;

@@ -69,7 +69,8 @@ const adminUser = async () => prisma.user.findUniqueOrThrow({ where: { email: AD
 const memberUser = async () => prisma.user.findUniqueOrThrow({ where: { email: USER_EMAIL } });
 
 // ---------------------------------------------------------------------------
-// Device cap: first 3 logins work, the 4th is rejected
+// Device cap: first 3 logins fill the slots, the 4th EVICTS the oldest —
+// the authenticated admin is never locked out of their own account.
 // ---------------------------------------------------------------------------
 
 describe('admin device cap', () => {
@@ -86,29 +87,52 @@ describe('admin device cap', () => {
     expect(count).toBe(3);
   });
 
-  it('rejects the 4th login with the exact spec message', async () => {
+  it('evicts the oldest session to admit a 4th login (never locks the admin out)', async () => {
     const user = await adminUser();
+    // Distinct createdAt so "oldest" is deterministic (createSession uses now()).
+    const base = Date.now() - 60_000;
     for (let i = 0; i < 3; i++) {
-      await auth.createSession(user.id, { userAgent: UA_A, ip: '62.78.226.59' });
+      await prisma.session.create({
+        data: {
+          userId: user.id,
+          tokenHash: auth.sha256(`cap-${i}`),
+          userAgent: i === 0 ? UA_B : UA_A,
+          createdAt: new Date(base + i * 1000),
+          expiresAt: new Date(base + i * 1000 + 30 * 24 * 3600 * 1000),
+        },
+      });
     }
+
     const blocked = await adminSec.adminLoginGuard({ user, ip: '62.78.226.59', userAgent: UA_A });
-    expect(blocked).toBeInstanceOf(Response);
-    expect(blocked?.status).toBe(403);
-    const body = (await blocked?.json()) as { error: { code: string; message: string } };
-    expect(body.error.code).toBe('admin_device_limit');
-    expect(body.error.message).toBe(
-      "Maximum device limit reached. Log out from another device first or use 'Log out all devices' in settings.",
-    );
+    expect(blocked).toBeNull(); // admitted, not rejected
+
+    // Exactly one slot freed — and it was the OLDEST session that left.
+    expect(await adminSec.countActiveSessions(user.id)).toBe(2);
+    const survivorHashes = (
+      await prisma.session.findMany({ where: { userId: user.id }, select: { tokenHash: true } })
+    ).map((s) => s.tokenHash);
+    expect(survivorHashes).toContain(auth.sha256('cap-1'));
+    expect(survivorHashes).toContain(auth.sha256('cap-2'));
+    expect(survivorHashes).not.toContain(auth.sha256('cap-0'));
+
+    // The eviction is audit-visible for the admin.
+    const audit = await prisma.auditLog.findFirst({ where: { action: 'admin.session_evicted' } });
+    expect(audit).not.toBeNull();
+
+    // Cap invariant holds: the new session occupies the freed slot.
+    await auth.createSession(user.id, { userAgent: UA_A, ip: '62.78.226.59' });
+    expect(await adminSec.countActiveSessions(user.id)).toBe(3);
   });
 
-  it('frees a slot after revoking a session (re-login works again)', async () => {
+  it('still admits login when no eviction is needed (revoked sessions free slots)', async () => {
     const user = await adminUser();
     for (let i = 0; i < 3; i++) {
       await auth.createSession(user.id, { userAgent: UA_A });
     }
-    expect(await adminSec.adminLoginGuard({ user, ip: null, userAgent: UA_A })).toBeInstanceOf(Response);
+    expect(await adminSec.adminLoginGuard({ user, ip: null, userAgent: UA_A })).toBeNull(); // evicts one and admits…
+    expect(await adminSec.countActiveSessions(user.id)).toBe(2); // …freeing exactly one slot
     await auth.revokeAllSessionsForUser(user.id);
-    expect(await adminSec.adminLoginGuard({ user, ip: null, userAgent: UA_A })).toBeNull();
+    expect(await adminSec.adminLoginGuard({ user, ip: null, userAgent: UA_A })).toBeNull(); // …and revoke-all admits cleanly
   });
 
   it('expired sessions do not count against the cap', async () => {

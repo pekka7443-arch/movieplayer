@@ -178,8 +178,8 @@ function useSportsEvents(date: string, sport: string) {
       return json.events;
     },
     staleTime: 30_000,
-    // Live scores change — keep polling while the user is on the sports view.
-    refetchInterval: 60_000,
+    // Live scores change — 30s poll while the user is on the sports view.
+    refetchInterval: 30_000,
     retry: 1,
   });
 }

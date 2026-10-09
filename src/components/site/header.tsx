@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMotionValueEvent, useScroll } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -9,15 +9,21 @@ import {
   Bookmark,
   ChevronsUpDown,
   Command as CommandIcon,
+  Film,
   Gamepad2,
   History,
+  Home as HomeIcon,
   LogIn,
   LogOut,
+  Menu,
   Settings2,
+  Sparkles,
   Trophy,
+  Tv as TvIcon,
   UserRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,10 +58,13 @@ function initialsOf(name: string | null, email: string): string {
 
 export function Header() {
   const router = useRouter();
+  const params = useSearchParams();
   const queryClient = useQueryClient();
   const openSettings = useCinedeckStore((s) => s.openSettings);
   const openArcade = useCinedeckStore((s) => s.openArcade);
   const openAuth = useCinedeckStore((s) => s.openAuth);
+  const contentType = useCinedeckStore((s) => s.contentType);
+  const setContentType = useCinedeckStore((s) => s.setContentType);
   const hasKey = useHasTmdbKey();
   const { user, loading } = useSession();
   // The session cache lives in localStorage: SSR and the first client render
@@ -68,6 +77,9 @@ export function Header() {
   const setPaletteOpen = useCinedeckStore((s) => s.setPaletteOpen);
   const activeProfileId = useCinedeckStore((s) => s.activeProfileId);
   const setActiveProfile = useCinedeckStore((s) => s.setActiveProfile);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const onSportsView = params.get('view') === 'sports';
 
   const profilesQuery = useQuery<ProfileRow[]>({
     queryKey: ['profiles'],
@@ -93,6 +105,24 @@ export function Header() {
       description: 'Guest mode keeps working on this device — sign back in any time.',
     });
   };
+
+  const goHome = () => {
+    setMobileMenuOpen(false);
+    router.push('/', { scroll: false });
+  };
+
+  const browseByType = (type: 'movie' | 'tv') => {
+    setContentType(type);
+    setMobileMenuOpen(false);
+    router.push('/', { scroll: false });
+  };
+
+  const navLinkClasses = (active: boolean) =>
+    `rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+      active
+        ? 'text-brand'
+        : 'text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100'
+    }`;
 
   return (
     <header
@@ -130,12 +160,68 @@ export function Header() {
           </span>
         </button>
 
+        {/* Center text navigation — desktop only */}
+        <nav
+          aria-label="Primary"
+          className="order-none hidden flex-1 items-center justify-center gap-0.5 lg:flex"
+        >
+          <button type="button" onClick={goHome} aria-current={!onSportsView && contentType === 'all' ? 'page' : undefined} className={navLinkClasses(!onSportsView && contentType === 'all')}>
+            Home
+          </button>
+          <button
+            type="button"
+            onClick={() => browseByType('movie')}
+            aria-current={contentType === 'movie' ? 'page' : undefined}
+            className={navLinkClasses(contentType === 'movie')}
+          >
+            Movies
+          </button>
+          <button
+            type="button"
+            onClick={() => browseByType('tv')}
+            aria-current={contentType === 'tv' ? 'page' : undefined}
+            className={navLinkClasses(contentType === 'tv')}
+          >
+            TV Shows
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/?view=finnish', { scroll: false })}
+            aria-current={params.get('view') === 'finnish' ? 'page' : undefined}
+            className={navLinkClasses(params.get('view') === 'finnish')}
+          >
+            Finnish
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/?view=sports', { scroll: false })}
+            aria-current={onSportsView ? 'page' : undefined}
+            className={navLinkClasses(onSportsView)}
+          >
+            Sports
+          </button>
+          <button type="button" onClick={openArcade} className={navLinkClasses(false)}>
+            Arcade
+          </button>
+        </nav>
+
         {/* Search takes the full second row on <md */}
         <div className="order-3 w-full md:order-none md:w-72 md:flex-1 lg:w-96">
           <SearchBar />
         </div>
 
         <nav aria-label="Site actions" className="ml-auto flex items-center gap-1">
+          {/* Mobile menu — slides in from the right */}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Open menu"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(true)}
+            className="size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 lg:hidden dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+          >
+            <Menu className="size-5" aria-hidden />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -328,6 +414,97 @@ export function Header() {
             </div>
           )}
         </nav>
+
+        {/* Mobile slide-in menu — right side, primary destinations + account */}
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <SheetContent
+            side="right"
+            className="w-80 border-l border-border bg-background/95 backdrop-blur-xl"
+          >
+            <SheetHeader className="border-b border-border pb-4">
+              <SheetTitle className="flex items-center gap-2 text-lg font-semibold">
+                <span className="text-lg font-semibold tracking-tight">
+                  Cine<span className="text-brand">Deck</span>
+                </span>
+              </SheetTitle>
+            </SheetHeader>
+            <nav aria-label="Mobile primary" className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-4">
+              {([
+                { label: 'Home', icon: HomeIcon, action: goHome, active: !onSportsView && contentType === 'all' },
+                { label: 'Movies', icon: Film, action: () => browseByType('movie'), active: contentType === 'movie' },
+                { label: 'TV Shows', icon: TvIcon, action: () => browseByType('tv'), active: contentType === 'tv' },
+                { label: 'Finnish', icon: Sparkles, action: () => { setMobileMenuOpen(false); router.push('/?view=finnish', { scroll: false }); }, active: params.get('view') === 'finnish' },
+                { label: 'Sports', icon: Trophy, action: () => { setMobileMenuOpen(false); router.push('/?view=sports', { scroll: false }); }, active: onSportsView },
+                { label: 'Arcade', icon: Gamepad2, action: () => { setMobileMenuOpen(false); openArcade(); }, active: false },
+              ]).map(({ label, icon: Icon, action, active }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={action}
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex min-h-[48px] items-center gap-3 rounded-lg px-3 text-[15px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                    active
+                      ? 'bg-brand/10 text-brand'
+                      : 'text-zinc-700 hover:bg-muted dark:text-zinc-300'
+                  }`}
+                >
+                  <Icon className={`size-4.5 ${active ? 'text-brand' : 'text-muted-foreground'}`} aria-hidden />
+                  {label}
+                </button>
+              ))}
+            </nav>
+            <div className="mt-auto flex flex-col gap-1 border-t border-border px-2 py-4">
+              {user ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { setMobileMenuOpen(false); goSection('my-list'); }}
+                    className="flex min-h-[48px] items-center gap-3 rounded-lg px-3 text-[15px] font-medium text-zinc-700 hover:bg-muted dark:text-zinc-300"
+                  >
+                    <Bookmark className="size-4.5 text-muted-foreground" aria-hidden />
+                    My List
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMobileMenuOpen(false); openSettings(); }}
+                    className="flex min-h-[48px] items-center gap-3 rounded-lg px-3 text-[15px] font-medium text-zinc-700 hover:bg-muted dark:text-zinc-300"
+                  >
+                    <Settings2 className="size-4.5 text-muted-foreground" aria-hidden />
+                    Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMobileMenuOpen(false); signOut(); }}
+                    className="flex min-h-[48px] items-center gap-3 rounded-lg px-3 text-[15px] font-medium text-red-600 hover:bg-muted dark:text-red-400"
+                  >
+                    <LogOut className="size-4.5" aria-hidden />
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    onClick={() => { setMobileMenuOpen(false); openAuth('signin'); }}
+                    variant="outline"
+                    className="min-h-[48px] justify-start gap-2"
+                  >
+                    <UserRound className="size-4" aria-hidden />
+                    Sign in
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => { setMobileMenuOpen(false); openAuth('signup'); }}
+                    className="min-h-[48px] justify-start gap-2 bg-brand text-white hover:bg-brand/90"
+                  >
+                    <LogIn className="size-4" aria-hidden />
+                    Sign up
+                  </Button>
+                </>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </header>
   );

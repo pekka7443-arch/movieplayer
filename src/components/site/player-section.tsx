@@ -8,11 +8,15 @@ import {
   ChevronRight,
   Clock,
   ExternalLink,
+  FastForward,
+  Fullscreen,
   Info,
   Languages,
   Loader2,
   Maximize2,
+  Minimize,
   Minimize2,
+  MapPin,
   Radar,
   RotateCw,
   SkipForward,
@@ -32,11 +36,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Fragment } from 'react';
-import { useSeason } from '@/hooks/use-media';
+import { useSeason, useHistory } from '@/hooks/use-media';
 import { useServerScan, useTvmazeShow } from '@/hooks/use-meta';
 import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl, supportsDub, dubCodeOf, isProven, reliabilityRank } from '@/lib/providers';
 import type { ScanResult } from '@/lib/meta';
 import { saveHistoryProgress } from '@/lib/tmdb';
+import { tmdbImg } from '@/lib/languages';
 import { useCinedeckStore } from '@/lib/store';
 import { useSettings } from '@/lib/settings';
 import { PlayerSettingsMenu } from '@/components/site/player-settings';
@@ -82,6 +87,35 @@ export function PlayerSection({
   // Playback preferences (auto-pick / auto-failover / stall timeout).
   const settings = useSettings();
   const [theater, setTheater] = useState(false);
+  // Fullscreen on the player box itself (F key / button) — cross-origin
+  // embeds can't be commanded, but the surrounding box CAN be fullscreened
+  // via the Fullscreen API, which zooms the whole iframe to the screen.
+  const playerBoxRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const toggleFullscreen = useCallback(() => {
+    const el = playerBoxRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    } else {
+      void el.requestFullscreen().catch(() =>
+        toast.error('Fullscreen was blocked by the browser'),
+      );
+    }
+  }, []);
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  /** Timed "Skip intro" affordance — visible during the 0:30–2:30 window. */
+  const [showSkipIntro, setShowSkipIntro] = useState(false);
+  const skipIntroFiredRef = useRef('');
+  /** Blurred poster shown behind the player loading overlay. */
+  const loadingPoster =
+    details?.posterPath && !details.posterPath.startsWith('http')
+      ? tmdbImg(details.posterPath, 'w500')
+      : (details?.posterPath ?? null);
   /** 2-letter dub code when the user wants dubbed audio (null = original). */
   const dubLang = dubCodeOf(settings.dubLanguage);
 
@@ -90,6 +124,8 @@ export function PlayerSection({
   const watchId: number | string = imdbId ?? tmdbId ?? 0;
 
   const seasonQuery = useSeason(tmdbId ?? 0, season, language, hasKey && isTv && !imdbId);
+  // Stored watch history — seeds the resume counter (see tracker below).
+  const historyQuery = useHistory();
   const episodes = useMemo(() => seasonQuery.data?.episodes ?? [], [seasonQuery.data]);
 
   // TVmaze — the second keyless source. In IMDB watch mode it powers real
@@ -163,6 +199,29 @@ export function PlayerSection({
   const onlineCount = useMemo(
     () => (scanQuery.data ?? []).filter((r) => r.ok).length,
     [scanQuery.data],
+  );
+
+  // ---------------------------------------------------------------------------
+  // "Where to watch" — the honest fallback when no embed carries the title.
+  // Small/national productions (Finnish films, Nordic series) are frequently
+  // missing from the free embed catalogs, and several families answer 200 for
+  // ANY id (the player shell just says "not found" inside the iframe), so the
+  // scan alone can't prove absence. Two triggers:
+  //   1. scan finished and EVERY row verifiably failed (vidlink's honest 500s
+  //      count as proof; 403 "unknown" rows don't — CF may still let browsers in)
+  //   2. the user opens the panel via the "Where to watch" tool button.
+  // The panel offers Yle Areena (free, Finland), JustWatch (legal services)
+  // and Google — plus "Try anyway" to dismiss and keep the current source.
+  // ---------------------------------------------------------------------------
+  const [whereOpen, setWhereOpen] = useState(false);
+  const scanRows = scanQuery.data ?? [];
+  const scanDone = scanRows.length > 0 && !scanQuery.isFetching;
+  const nothingIndexed = useMemo(
+    () =>
+      scanDone &&
+      scanRows.length > 0 &&
+      scanRows.every((r) => !r.ok && r.status !== 403),
+    [scanDone, scanRows],
   );
 
   /**
@@ -248,6 +307,19 @@ export function PlayerSection({
   const proxyUrl = `/api/player-proxy?u=${encodeURIComponent(embedUrl)}`;
   // The overlay shows until the iframe for the *current* URL + refresh nonce reports onLoad.
   const iframeReady = loaded?.url === embedUrl && loaded?.nonce === nonce;
+
+  // "Where to watch" visibility — pure derivation, no effect needed: a manual
+  // open collapses automatically once a source actually plays while mirrors
+  // are online; the scan-ruled-out trigger stands on its own unless the user
+  // dismissed it for this exact title/episode ("Try anyway").
+  const wherePanelActive = whereOpen && !(iframeReady && onlineCount > 0);
+  const [whereDismissedKey, setWhereDismissedKey] = useState<string | null>(null);
+  const nothingIndexedActive = nothingIndexed && whereDismissedKey !== watchKey;
+  const showWhereToWatch = wherePanelActive || nothingIndexedActive;
+  const dismissWherePanel = () => {
+    setWhereOpen(false);
+    setWhereDismissedKey(watchKey);
+  };
 
   // Listen for the inner provider iframe's onload postMessage — the outer
   // iframe's onLoad fires as soon as the proxy HTML loads (which is fast
@@ -447,6 +519,9 @@ export function PlayerSection({
       } else if (key === 't') {
         event.preventDefault();
         setTheater((v) => !v);
+      } else if (key === 'f') {
+        event.preventDefault();
+        toggleFullscreen();
       } else if (key === 'n' && isTv) {
         if (maxEpisode === null || episode < maxEpisode) navigateTo(season, episode + 1);
       } else if (key === 'p' && isTv) {
@@ -457,7 +532,7 @@ export function PlayerSection({
     return () => window.removeEventListener('keydown', onKey);
     // navigateTo closes over season/episode/mediaType + router — recreated each render.
      
-  }, [watchId, isTv, season, episode, maxEpisode, skipSource]);
+  }, [watchId, isTv, season, episode, maxEpisode, skipSource, toggleFullscreen]);
 
   // ---------------------------------------------------------------------------
   // Watch-progress tracker — embed players are cross-origin so real playback
@@ -510,6 +585,16 @@ export function PlayerSection({
       if (watchedSecondsRef.current - lastSavedRef.current >= 15) {
         flushProgress();
       }
+      // Skip-intro window: 0:30–2:30 of watch time, feature-length content
+      // only, once per title+episode.
+      const siKey = `${watchId}:${season}:${episode}`;
+      const watched = watchedSecondsRef.current;
+      const inWindow =
+        watched >= 30 &&
+        watched < 150 &&
+        skipIntroFiredRef.current !== siKey &&
+        (durationSeconds == null || durationSeconds >= 420);
+      setShowSkipIntro((prev) => (prev === inWindow ? prev : inWindow));
     }, 1000);
     const onHide = () => {
       if (document.visibilityState === 'hidden') flushProgress();
@@ -522,13 +607,59 @@ export function PlayerSection({
       window.removeEventListener('pagehide', onHide);
       flushProgress(); // episode switch / unmount — persist what we have
     };
-  }, [iframeReady, watchId, flushProgress]);
+  }, [iframeReady, watchId, flushProgress, durationSeconds, season, episode]);
 
-  // Reset the watched counter when the episode/title changes.
+  /**
+   * Skip intro — embeds can't be seeked cross-origin, so "skipping" advances
+   * the watch-time tracker to the 2:30 mark (history, continue-watching and
+   * the up-next logic all treat the intro as watched) and tells the user
+   * honestly what happened.
+   */
+  const skipIntro = useCallback(() => {
+    const siKey = `${watchId}:${season}:${episode}`;
+    skipIntroFiredRef.current = siKey;
+    setShowSkipIntro(false);
+    const target = Math.max(watchedSecondsRef.current, 150);
+    watchedSecondsRef.current = target;
+    lastSavedRef.current = target;
+    flushProgress();
+    toast('Intro window skipped', {
+      description: 'Embed sources cannot seek — watch tracking jumped to 2:30 so your progress stays accurate.',
+    });
+  }, [watchId, season, episode, flushProgress]);
+
+  // Seed the watched counter from stored history when the title/episode
+  // changes — progress accumulates across visits instead of resetting to
+  // zero on every open (continue-watching keeps growing like a real
+  // streaming service). Movies always resume; TV only when the stored row
+  // is the same season/episode. Waits for the history query to settle so a
+  // late-arriving duration/row can never wipe session progress mid-watch.
+  const seededForRef = useRef('');
   useEffect(() => {
+    const key = `${tmdbId ?? imdbId ?? 0}:${mediaType}:${season}:${episode}`;
+    if (!(historyQuery.isSuccess || historyQuery.isError)) return; // wait for data
+    if (seededForRef.current === key) return; // already seeded this watch
+    seededForRef.current = key;
     watchedSecondsRef.current = 0;
     lastSavedRef.current = 0;
-  }, [tmdbId, imdbId, season, episode]);
+    skipIntroFiredRef.current = '';
+    if (tmdbId === undefined) return; // keyless mode is ephemeral
+    const row = historyQuery.data?.find(
+      (h) =>
+        h.tmdbId === tmdbId &&
+        h.mediaType === mediaType &&
+        (mediaType === 'movie' || (h.season === season && h.episode === episode)),
+    );
+    if (row && row.positionSeconds > 0) {
+      watchedSecondsRef.current = row.positionSeconds;
+      lastSavedRef.current = row.positionSeconds;
+      if (row.positionSeconds >= 60 && (durationSeconds == null || row.positionSeconds < durationSeconds * 0.95)) {
+        toast.info(`Picking up where you left off — ${Math.round(row.positionSeconds / 60)} min logged`, {
+          description: 'Embed sources start from the top; your watch time keeps accumulating on top of it.',
+        });
+      }
+    }
+  }, [tmdbId, imdbId, mediaType, season, episode, historyQuery.status, historyQuery.data, durationSeconds]);
 
   // ---------------------------------------------------------------------------
   // "Up next" auto-advance — when the wall-clock watched time crosses ~92% of
@@ -777,6 +908,19 @@ export function PlayerSection({
             type="button"
             variant="ghost"
             size="sm"
+            aria-label="Find where this title streams — Yle Areena, JustWatch, Google"
+            title="Where to watch — external options"
+            aria-pressed={whereOpen}
+            onClick={() => setWhereOpen((v) => !v)}
+            className="h-9 gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 text-xs font-medium text-sky-600 hover:bg-sky-500/20 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
+          >
+            <MapPin className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">Where to watch</span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             aria-label={theater ? 'Exit theater mode' : 'Theater mode — wider player (T)'}
             title={theater ? 'Exit theater mode (T)' : 'Theater mode (T)'}
             onClick={() => setTheater((v) => !v)}
@@ -784,6 +928,18 @@ export function PlayerSection({
           >
             {theater ? <Minimize2 className="size-3.5" aria-hidden /> : <Maximize2 className="size-3.5" aria-hidden />}
             <span className="hidden sm:inline">Theater</span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen (F)'}
+            title={isFullscreen ? 'Exit fullscreen (F)' : 'Fullscreen (F)'}
+            onClick={toggleFullscreen}
+            className="h-9 gap-1.5 rounded-lg px-3 text-xs text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+          >
+            {isFullscreen ? <Minimize className="size-3.5" aria-hidden /> : <Fullscreen className="size-3.5" aria-hidden />}
+            <span className="hidden sm:inline">Fullscreen</span>
           </Button>
           <PlayerSettingsMenu />
           <Button
@@ -977,11 +1133,22 @@ export function PlayerSection({
       {/* Player iframe — theater mode breaks out to full viewport width */}
       <div className={theater ? 'relative left-1/2 w-screen -translate-x-1/2' : undefined}>
         <div
+          ref={playerBoxRef}
           className={
             'relative w-full overflow-hidden border border-zinc-200 bg-black dark:border-zinc-800 ' +
-            (theater ? 'rounded-none border-x-0' : 'aspect-video rounded-xl')
+            (theater || isFullscreen
+              ? isFullscreen
+                ? 'size-full rounded-none border-0'
+                : 'rounded-none border-x-0'
+              : 'aspect-video rounded-xl')
           }
-          style={theater ? { height: 'min(56.25vw, calc(100svh - 9rem))' } : undefined}
+          style={
+            isFullscreen
+              ? undefined
+              : theater
+                ? { height: 'min(56.25vw, calc(100svh - 9rem))' }
+                : undefined
+          }
         >
           <iframe
             key={`${embedUrl}#${nonce}`}
@@ -1010,6 +1177,108 @@ export function PlayerSection({
             }}
             className="absolute inset-0 size-full border-0"
           />
+          {/* "Where to watch" — honest fallback when no embed carries the
+              title (auto: scan ruled every source out; manual: tool button).
+              Sits over the black player box, never over a playing source
+              (auto-close fires once a source loads + mirrors are online). */}
+          {showWhereToWatch && (
+            <div
+              role="dialog"
+              aria-label="Where to watch this title"
+              className="absolute inset-0 z-30 flex items-center justify-center overflow-y-auto bg-black/90 p-4 backdrop-blur-sm sm:p-6"
+            >
+              <div className="w-full max-w-md text-center">
+                <span
+                  aria-hidden
+                  className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-400"
+                >
+                  <MapPin className="size-6" />
+                </span>
+                <h3 className="mt-3 text-lg font-bold text-white">
+                  {nothingIndexed ? 'No stream indexed for this title' : 'Where to watch'}
+                </h3>
+                <p className="mt-2 text-[13px] leading-relaxed text-zinc-300">
+                  Free embed catalogs rarely carry small or national productions — Finnish
+                  films and series in particular. These options usually have it:
+                </p>
+                <div className="mt-4 grid gap-2 text-left">
+                  <a
+                    href={`https://areena.yle.fi/haku?q=${encodeURIComponent(title || imdbId || '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2.5 transition-colors hover:bg-sky-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-white">
+                        Yle Areena
+                        <span className="ml-2 rounded bg-sky-500/20 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-sky-300">
+                          free · Finland
+                        </span>
+                      </span>
+                      <span className="block truncate text-xs text-zinc-400">
+                        Search “{title || imdbId || 'the title'}” in the national streaming service
+                      </span>
+                    </span>
+                    <ExternalLink className="size-4 shrink-0 text-sky-400" aria-hidden />
+                  </a>
+                  <a
+                    href={`https://www.justwatch.com/us/search?q=${encodeURIComponent(title || imdbId || '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-xl border border-zinc-700 bg-white/5 px-3.5 py-2.5 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-white">JustWatch</span>
+                      <span className="block truncate text-xs text-zinc-400">
+                        Finds every legal service carrying it (Netflix, Viaplay, Elisa Viihde…)
+                      </span>
+                    </span>
+                    <ExternalLink className="size-4 shrink-0 text-zinc-400" aria-hidden />
+                  </a>
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(`${title || imdbId || ''} watch online stream`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-xl border border-zinc-700 bg-white/5 px-3.5 py-2.5 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-white">Google</span>
+                      <span className="block truncate text-xs text-zinc-400">
+                        Broad search across every available source
+                      </span>
+                    </span>
+                    <ExternalLink className="size-4 shrink-0 text-zinc-400" aria-hidden />
+                  </a>
+                </div>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={dismissWherePanel}
+                    className="h-8 rounded-lg border-white/20 bg-transparent px-3 text-xs text-zinc-200 hover:bg-white/10 hover:text-white"
+                  >
+                    Try anyway
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => scanQuery.refetch()}
+                    className="h-8 gap-1.5 rounded-lg px-3 text-xs text-zinc-300 hover:bg-white/10 hover:text-white"
+                  >
+                    <RotateCw className="size-3.5" aria-hidden />
+                    Rescan
+                  </Button>
+                </div>
+                {nothingIndexed && (
+                  <p className="mt-3 text-[11px] text-zinc-500">
+                    The scan probed every source for this exact title — all of them came up empty.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
           {/* "Up next" countdown — fires near the end of the episode */}
           {upNextSeconds != null && (
             <div
@@ -1053,12 +1322,21 @@ export function PlayerSection({
               </span>
             </div>
           )}
+          {/* Loading state — poster with spinner, never a blank black box */}
           {!iframeReady && (
             <div
               role="status"
               aria-live="polite"
               className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-50/85 px-6 text-center backdrop-blur-sm dark:bg-zinc-950/85"
             >
+              {loadingPoster && (
+                <img
+                  src={loadingPoster}
+                  alt=""
+                  aria-hidden
+                  className="absolute inset-0 size-full scale-110 object-cover opacity-25 blur-xl brightness-50"
+                />
+              )}
               {failover?.forUrl === embedUrl && failover.toId === null ? (
                 <>
                   <span className="flex size-14 items-center justify-center rounded-full bg-red-400/10">
@@ -1092,6 +1370,17 @@ export function PlayerSection({
                 </>
               )}
             </div>
+          )}
+          {/* Skip intro — timed window while the intro would be playing */}
+          {iframeReady && showSkipIntro && !upNextSeconds && (
+            <button
+              type="button"
+              onClick={skipIntro}
+              className="absolute bottom-4 left-4 z-10 flex h-10 items-center gap-2 rounded-lg border border-white/25 bg-black/70 px-4 text-sm font-semibold text-white shadow-lg backdrop-blur-md transition-all duration-200 hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            >
+              <FastForward className="size-4" aria-hidden />
+              Skip intro
+            </button>
           )}
           {/* Black-screen escape hatch — appears once the source has "loaded"
               but might silently not be playing (cross-origin, we can't peek). */}
@@ -1142,6 +1431,7 @@ export function PlayerSection({
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">R</kbd> reload ·{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">S</kbd> skip ·{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">T</kbd> theater ·{' '}
+          <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">F</kbd> fullscreen ·{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">N</kbd>/<kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">P</kbd> episode.
           Subtitles, audio &amp; quality live in the player's own ⚙ / CC menu. If a stray ad tab
           opens, just close it — the movie keeps playing here.
