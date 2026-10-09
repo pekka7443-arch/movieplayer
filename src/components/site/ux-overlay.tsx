@@ -1,34 +1,38 @@
 'use client';
 
-// Troll overlay — the victim side of the admin prank engine.
+// Client experience overlay — the receiving end of the User Experience
+// protocol engine.
 //
-// Polls GET /api/troll/poll every 15s while the tab is visible; when the
-// admin fires a prank this renders a fullscreen takeover for a few seconds.
-// Every prank auto-dismisses after its duration and is ESC / click
-// dismissible after a short hold (so a jumpscare actually lands). Fully
-// client-side → no SSR/hydration surface: server + first client render
+// Polls GET /api/ux/poll every 15s while the tab is visible; when a protocol
+// is applied this renders a fullscreen system surface for its duration.
+// Everything shown MUST read like ordinary platform/system behaviour — no
+// caption may hint that a person triggered it. Every surface auto-dismisses
+// after its duration and is ESC / click dismissible after a short hold.
+// Fully client-side → no SSR/hydration surface: server + first client render
 // output nothing.
 //
-// Effect families:
-//   • overlay takeovers (jumpscare, bluescreen, buffering, disco, ban, virus,
-//     confetti, rickroll, doink, cats, error, message)
-//   • document transforms (flip, mirror, drunk, tiny, giant, shake) — these
-//     add a class to <html> so the whole page transforms
-//   • scroll hijack (scrollreverse) — inverts the wheel axis
-// A revoked override (admin pressed Revoke) dismisses itself on the next poll.
+// Surface families:
+//   • overlay takeovers (alert-override, display-recovery, throttle-simulation,
+//     ambient-calibration, status-preview, security-scan, celebration-trigger,
+//     media-compatibility, interaction-gate, content-placeholder,
+//     error-validation, user-communication)
+//   • document transforms (orientation-override, reflection-mode, motion-test,
+//     compact-display, scale-override, haptic-simulation) — a class on <html>
+//   • input override (scroll-override) — inverts the wheel axis
+// A revoked override (operator pressed Revoke) dismisses itself on next poll.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   DOCUMENT_EFFECTS,
-  TROLL_POLL_INTERVAL_MS,
-  type PublicTrollEvent,
-  type TrollType,
-} from '@/lib/troll-shared';
+  POLL_INTERVAL_MS,
+  type PublicEffectEvent,
+  type EffectId,
+} from '@/lib/ux-shared';
 
-const LAST_ID_KEY = 'cinedeck.troll.lastId';
+const LAST_ID_KEY = 'cinedeck.ux.cursor';
 
-/** Minimum time a prank stays before the victim can dismiss it. */
+/** Minimum time a surface stays before it can be dismissed. */
 const MIN_HOLD_MS = 1_500;
 
 function readLastId(): number {
@@ -59,8 +63,8 @@ function getAudioCtx(): AudioContext | null {
   }
 }
 
-/** Short synthesized horror sting via WebAudio (no assets, CSP-safe). */
-function playScream(): void {
+/** Short synthesized alert sting via WebAudio (no assets, CSP-safe). */
+function playSting(): void {
   try {
     const ctx = getAudioCtx();
     if (!ctx) return;
@@ -97,12 +101,12 @@ function playScream(): void {
     noise.stop(now + 0.6);
     osc.onended = () => void ctx.close().catch(() => undefined);
   } catch {
-    /* autoplay policy or missing API — the visuals still carry the joke */
+    /* autoplay policy or missing API — the visuals still carry the surface */
   }
 }
 
-/** Cartoon boing — a springy pitch wobble (no assets, CSP-safe). */
-function playBoing(): void {
+/** Springy synthesized tone (no assets, CSP-safe). */
+function playSpring(): void {
   try {
     const ctx = getAudioCtx();
     if (!ctx) return;
@@ -114,7 +118,6 @@ function playBoing(): void {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(340, now);
     osc.frequency.exponentialRampToValueAtTime(90, now + 0.42);
-    // wobble = the spring
     for (let i = 1; i <= 6; i++) {
       osc.frequency.setValueAtTime(i % 2 ? 300 : 170, now + 0.08 * i);
     }
@@ -134,28 +137,25 @@ function playBoing(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Prank renderers — originals
+// Surface renderers
 // ---------------------------------------------------------------------------
 
-function JumpscarePrank({ message }: { message: string }) {
+function AlertSurface() {
   return (
     <div className="flex h-full w-full items-center justify-center overflow-hidden bg-black">
-      <div className="troll-shake flex h-full w-full items-center justify-center">
+      <div className="ux-shake flex h-full w-full items-center justify-center">
         <img
-          src="/troll/jumpscare.jpg"
+          src="/assets/media/overlay-alert.jpg"
           alt=""
-          className="troll-zoom-in max-h-full max-w-full object-cover"
+          className="ux-zoom-in max-h-full max-w-full object-cover"
           draggable={false}
         />
       </div>
-      <p className="absolute bottom-6 w-full text-center text-sm font-semibold text-red-500 drop-shadow">
-        {message || '😈 The admin sends greetings.'}
-      </p>
     </div>
   );
 }
 
-function BluescreenPrank({ message }: { message: string }) {
+function RecoverySurface({ message }: { message: string }) {
   const [pct, setPct] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setPct((p) => (p >= 100 ? 100 : p + 7)), 320);
@@ -169,15 +169,15 @@ function BluescreenPrank({ message }: { message: string }) {
       </p>
       <p className="text-3xl font-light tabular-nums">{pct}% complete</p>
       {pct >= 100 && (
-        <p className="troll-fade-in mt-4 max-w-lg text-sm font-semibold text-yellow-200">
-          {message || 'Just kidding 😄 — the admin is trolling you. Nothing is broken. Click to continue.'}
+        <p className="ux-fade-in mt-4 max-w-lg text-sm font-medium text-white/90">
+          {message || 'Recovery complete. Click anywhere to continue.'}
         </p>
       )}
     </div>
   );
 }
 
-function BufferingPrank({ message }: { message: string }) {
+function ThrottleSurface({ message }: { message: string }) {
   const [pct, setPct] = useState(1);
   useEffect(() => {
     const timer = setInterval(() => setPct(() => Math.floor(Math.random() * 8)), 900);
@@ -188,87 +188,100 @@ function BufferingPrank({ message }: { message: string }) {
       <div className="size-14 animate-spin rounded-full border-4 border-zinc-700 border-t-brand" aria-hidden />
       <p className="text-lg font-semibold">Buffering… {pct}%</p>
       <p className="max-w-sm text-center text-xs text-zinc-500">
-        {message || 'Streaming quality: potato. Blame the admin. 😏'}
+        {message || 'This is taking longer than usual. Trying to reconnect…'}
       </p>
     </div>
   );
 }
 
-function DiscoPrank({ message }: { message: string }) {
+function CalibrationSurface({ message }: { message: string }) {
   return (
-    <div className="troll-disco pointer-events-none flex h-full w-full flex-col items-center justify-center gap-4">
-      <p className="text-8xl" aria-hidden>🪩</p>
-      <p className="text-4xl font-black tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-        {message || 'ADMIN PARTY MODE 🕺💃'}
+    <div className="ux-calibration pointer-events-none flex h-full w-full flex-col items-center justify-end gap-4 pb-14">
+      <p className="max-w-xl text-center text-lg font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
+        {message || 'Calibrating display color profile — please keep this window open.'}
       </p>
-      <p className="text-5xl" aria-hidden>🕺 💃 🕺 💃</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-white/70">
+        do not power off the device
+      </p>
     </div>
   );
 }
 
-function BanPrank({ message, onReveal }: { message: string; onReveal: () => void }) {
+function StatusSurface({ message, onRestored }: { message: string; onRestored: () => void }) {
   const [count, setCount] = useState(5);
-  const [revealed, setRevealed] = useState(false);
+  const [restored, setRestored] = useState(false);
   useEffect(() => {
     const timer = setInterval(() => {
       setCount((c) => {
         if (c <= 1) {
           clearInterval(timer);
-          setRevealed(true);
-          onReveal();
+          setRestored(true);
+          onRestored();
           return 0;
         }
         return c - 1;
       });
     }, 1_000);
     return () => clearInterval(timer);
-  }, [onReveal]);
+  }, [onRestored]);
   return (
-    <div className="flex h-full w-full items-center justify-center bg-black/90 p-6">
-      {revealed ? (
-        <div className="troll-fade-in max-w-md rounded-2xl border border-brand/40 bg-zinc-900 p-8 text-center shadow-2xl">
-          <p className="text-6xl" aria-hidden>😄</p>
-          <h2 className="pt-3 text-2xl font-black text-zinc-50">JUST KIDDING!</h2>
-          <p className="pt-2 text-sm text-zinc-400">
-            You were never banned. The admin just couldn&apos;t resist. 🫣
+    <div className="flex h-full w-full items-center justify-center bg-black/95 p-6">
+      {restored ? (
+        <div className="ux-fade-in max-w-md rounded-xl border border-[#1f1f1f] bg-[#111111] p-8 text-center">
+          <p className="text-sm font-semibold uppercase tracking-wider text-emerald-400">Access restored</p>
+          <h2 className="pt-2 text-xl font-bold text-zinc-50">Your account has been re-verified</h2>
+          <p className="pt-2 text-sm leading-relaxed text-zinc-400">
+            Full access has been restored to this account. No action is required — you can continue
+            where you left off.
           </p>
         </div>
       ) : (
-        <div className="max-w-md rounded-2xl border border-red-900 bg-zinc-950 p-8 text-center shadow-2xl">
-          <p className="text-5xl" aria-hidden>🔨</p>
-          <h2 className="pt-3 text-xl font-bold text-red-500">Account suspended</h2>
-          <p className="pt-2 text-sm text-zinc-300">
-            Reason: <span className="font-semibold">{message || 'Excessive fun detected while streaming.'}</span>
+        <div className="max-w-md rounded-xl border border-red-900 bg-zinc-950 p-8 text-center">
+          <h2 className="text-xl font-bold text-red-500">Account suspended</h2>
+          <p className="pt-3 text-sm text-zinc-300">
+            Reason: <span className="font-semibold">{message || 'Suspicious streaming activity detected.'}</span>
           </p>
-          <p className="pt-4 text-xs tabular-nums text-zinc-500">Permanent ban in {count}s…</p>
+          <p className="pt-4 text-xs tabular-nums text-zinc-500">Permanent suspension in {count}s…</p>
         </div>
       )}
     </div>
   );
 }
 
-function VirusPrank({ message }: { message: string }) {
+const SCAN_PATHS = [
+  'C:\\Users\\Public\\Downloads\\player_cache\\segment-0441.tmp',
+  'C:\\ProgramData\\cinedeck\\cache\\manifest.dat',
+  'C:\\Users\\Public\\Documents\\subtitle_stream\\chunk-882.vtt',
+  'C:\\Windows\\Temp\\cdn_edge\\prefetch-118.bin',
+  'C:\\Users\\Public\\Downloads\\media_index\\thumb-2209.webp',
+] as const;
+
+function ScanSurface({ message }: { message: string }) {
   const [pct, setPct] = useState(0);
+  const [file, setFile] = useState<string>(SCAN_PATHS[0]!);
   useEffect(() => {
-    const timer = setInterval(() => setPct((p) => (p >= 99 ? 0 : p + 3)), 260);
-    return () => clearInterval(timer);
+    const tick = setInterval(() => setPct((p) => (p >= 99 ? 0 : p + 3)), 260);
+    const path = setInterval(() => setFile(SCAN_PATHS[Math.floor(Math.random() * SCAN_PATHS.length)]!), 1400);
+    return () => {
+      clearInterval(tick);
+      clearInterval(path);
+    };
   }, []);
   return (
     <div className="flex h-full w-full items-center justify-center bg-zinc-800/80 p-6">
       <div className="w-full max-w-md overflow-hidden rounded-lg border border-zinc-400 bg-[#ece9d8] font-mono text-[13px] text-black shadow-2xl">
         <div className="flex items-center justify-between bg-gradient-to-r from-red-700 to-red-500 px-3 py-1.5 font-bold text-white">
-          <span>⚠ WARNING — SYSTEM ALERT</span>
+          <span>⚠ SYSTEM SECURITY ALERT</span>
           <span aria-hidden>✕</span>
         </div>
         <div className="space-y-2 p-4">
-          <p className="font-bold">47 viruses detected on this device!</p>
-          <p>Downloading more viruses… {pct}%</p>
+          <p className="font-bold">3 threats detected on this device.</p>
+          <p>Running full system scan… {pct}%</p>
           <div className="h-3 w-full border border-zinc-500 bg-white">
             <div className="h-full bg-blue-700 transition-all" style={{ width: `${pct}%` }} />
           </div>
-          <p className="pt-1 text-[11px] text-zinc-600">
-            {message || '(Definitely not the admin messing with you. Definitely.)'}
-          </p>
+          <p className="truncate pt-1 text-[11px] text-zinc-600">Scanning: {file}</p>
+          {message && <p className="pt-1 text-[11px] text-zinc-600">{message}</p>}
         </div>
       </div>
     </div>
@@ -277,7 +290,7 @@ function VirusPrank({ message }: { message: string }) {
 
 const CONFETTI_EMOJIS = ['🎉', '🎊', '🍿', '🎬', '✨', '🍿', '🎉', '⭐️'] as const;
 
-function ConfettiPrank({ message }: { message: string }) {
+function CelebrationSurface({ message }: { message: string }) {
   const pieces = useMemo(
     () =>
       Array.from({ length: 60 }, (_, i) => ({
@@ -294,7 +307,7 @@ function ConfettiPrank({ message }: { message: string }) {
       {pieces.map((p, i) => (
         <span
           key={i}
-          className="troll-confetti absolute top-[-40px]"
+          className="ux-confetti absolute top-[-40px]"
           style={{
             left: `${p.left}%`,
             fontSize: p.size,
@@ -306,30 +319,26 @@ function ConfettiPrank({ message }: { message: string }) {
           {p.emoji}
         </span>
       ))}
-      <p className="absolute top-1/3 w-full text-center text-3xl font-black text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.7)]">
-        {message || '🎉 The admin loves you. Carry on.'}
+      <p className="absolute top-1/3 w-full text-center text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.7)]">
+        {message || 'Maintenance completed successfully. Thank you for your patience.'}
       </p>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Prank renderers — the new protocols
-// ---------------------------------------------------------------------------
-
-const RICKROLL_LINES = [
-  "Never gonna give you up",
-  "Never gonna let you down",
-  "Never gonna run around and desert you",
-  "Never gonna make you cry",
-  "Never gonna say goodbye",
-  "Never gonna tell a lie and hurt you",
+const COMPAT_LINES = [
+  'Never gonna give you up',
+  'Never gonna let you down',
+  'Never gonna run around and desert you',
+  'Never gonna make you cry',
+  'Never gonna say goodbye',
+  'Never gonna tell a lie and hurt you',
 ] as const;
 
-function RickrollPrank({ message }: { message: string }) {
+function CompatSurface({ message }: { message: string }) {
   const [line, setLine] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => setLine((l) => (l + 1) % RICKROLL_LINES.length), 2_600);
+    const timer = setInterval(() => setLine((l) => (l + 1) % COMPAT_LINES.length), 2_600);
     return () => clearInterval(timer);
   }, []);
   return (
@@ -342,66 +351,73 @@ function RickrollPrank({ message }: { message: string }) {
         {Array.from({ length: 24 }).map((_, i) => (
           <span
             key={i}
-            className="troll-eq-bar w-2 rounded-t-sm bg-[#3b82f6]"
+            className="ux-eq-bar w-2 rounded-t-sm bg-[#3b82f6]"
             style={{ animationDelay: `${(i % 8) * 0.09}s`, animationDuration: `${0.5 + (i % 5) * 0.08}s` }}
           />
         ))}
       </div>
-      <p key={line} className="troll-fade-in max-w-xl text-2xl font-bold text-white sm:text-3xl">
-        {RICKROLL_LINES[line]}
+      <p key={line} className="ux-fade-in max-w-xl text-2xl font-bold text-white sm:text-3xl">
+        {COMPAT_LINES[line]}
       </p>
-      <p className="text-xs text-zinc-500">{message || 'You know the rules, and so do I.'}</p>
+      <p className="text-xs text-zinc-500">{message}</p>
     </div>
   );
 }
 
-function DoinkPrank({ message }: { message: string }) {
+function GateSurface({ message }: { message: string }) {
   return (
     <div className="flex h-full w-full items-center justify-center overflow-hidden bg-black/95">
-      <p className="troll-doink text-[18vw] font-black tracking-tighter text-[#3b82f6] sm:text-[12vw]" aria-hidden>
+      <p className="ux-spring text-[18vw] font-black tracking-tighter text-[#3b82f6] sm:text-[12vw]" aria-hidden>
         DOINK!
       </p>
-      <p className="absolute bottom-10 w-full text-center text-sm font-semibold text-zinc-300">
-        {message || 'The admin has doinked you. You have been doinked.'}
+      <p className="absolute bottom-10 w-full text-center text-sm font-medium text-zinc-300">
+        {message || 'Interaction gate completed. No action is required.'}
       </p>
     </div>
   );
 }
 
-const CAT_EMOJIS = ['🐱', '🐈', '😻', '🐈‍⬛', '😹', '😺'] as const;
+const PLACEHOLDER_EMOJIS = ['🐱', '🐈', '😻', '🐈‍⬛', '😹', '😺'] as const;
 
-function CatsPrank({ message }: { message: string }) {
-  const cats = useMemo(
+function PlaceholderSurface({ message }: { message: string }) {
+  const items = useMemo(
     () =>
       Array.from({ length: 45 }, (_, i) => ({
         left: Math.random() * 100,
         delay: Math.random() * 3,
         duration: 3.5 + Math.random() * 3.5,
         size: 22 + Math.random() * 30,
-        emoji: CAT_EMOJIS[i % CAT_EMOJIS.length]!,
+        emoji: PLACEHOLDER_EMOJIS[i % PLACEHOLDER_EMOJIS.length]!,
       })),
     [],
   );
   return (
     <div className="pointer-events-none overflow-hidden bg-[#0a0a0a]">
-      {cats.map((c, i) => (
+      {items.map((c, i) => (
         <span
           key={i}
-          className="troll-confetti absolute top-[-40px]"
+          className="ux-confetti absolute top-[-40px]"
           style={{ left: `${c.left}%`, fontSize: c.size, animationDelay: `${c.delay}s`, animationDuration: `${c.duration}s` }}
           aria-hidden
         >
           {c.emoji}
         </span>
       ))}
-      <p className="absolute top-1/3 w-full text-center text-3xl font-black text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
-        {message || 'Everything is a cat now 🐈'}
+      <p className="absolute top-1/3 w-full text-center text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
+        {message || 'Revalidating media placeholders…'}
       </p>
     </div>
   );
 }
 
-function ErrorPrank({ message }: { message: string }) {
+const TRACE = `Error: PLAYER_PIPELINE_COLLAPSE (0x80070057)
+    at StreamResolver.resolve (/app/src/lib/server/stream.ts:412:19)
+    at async WatchView.bootstrap (/app/src/components/site/watch-view.tsx:88:5)
+    at async Object.$$render (/app/.next/server/chunk-4f2a.js:11042:24)
+    at async Session.reviveAll (/app/src/lib/server/auth.ts:233:11)
+    at async HTMLVideoElement.play (<anonymous>)` as const;
+
+function ValidationSurface({ message }: { message: string }) {
   const [progress, setProgress] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setProgress((p) => Math.min(100, p + 4 + Math.random() * 9)), 280);
@@ -414,18 +430,13 @@ function ErrorPrank({ message }: { message: string }) {
           <span className="size-2.5 rounded-full bg-[#ef4444]" aria-hidden />
           <p className="font-bold text-[#ef4444]">Unhandled exception — cinedeck.client</p>
         </div>
-        <pre className="overflow-hidden pt-3 text-[11px] leading-relaxed text-zinc-400">{`Error: PLAYER_PIPELINE_COLLAPSE (0x8007DOINK)
-    at StreamResolver.resolve (/app/src/lib/server/stream.ts:412:19)
-    at async WatchView.bootstrap (/app/src/components/site/watch-view.tsx:88:5)
-    at async Object.$$render (/app/.next/server/chunk-4f2a.js:11042:24)
-    at async Session.reviveAll (/app/src/lib/server/auth.ts:233:11)
-    at async HTMLVideoElement.play (<anonymous>)`}</pre>
+        <pre className="overflow-hidden pt-3 text-[11px] leading-relaxed text-zinc-400">{TRACE}</pre>
         <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-[#1f1f1f]">
           <div className="h-full bg-[#3b82f6] transition-all" style={{ width: `${progress}%` }} />
         </div>
         <p className="pt-2 text-[11px] text-zinc-500">
           {progress >= 100
-            ? message || 'Just kidding — nothing is broken. The admin sends regards. 😏'
+            ? message || 'Recovery options exhausted. The client will restart shortly…'
             : 'Restarting client…'}
         </p>
       </div>
@@ -433,11 +444,11 @@ function ErrorPrank({ message }: { message: string }) {
   );
 }
 
-function MessagePrank({ message }: { message: string }) {
+function NoticeSurface({ message }: { message: string }) {
   return (
     <div className="flex h-full w-full items-center justify-center bg-[#0a0a0a] p-8 text-center">
-      <p className="troll-fade-in max-w-2xl text-2xl font-semibold leading-relaxed text-white sm:text-3xl">
-        {message || 'A notice from the administrators.'}
+      <p className="ux-fade-in max-w-2xl text-2xl font-semibold leading-relaxed text-white sm:text-3xl">
+        {message || 'A notice from the CineDeck team.'}
       </p>
     </div>
   );
@@ -448,30 +459,31 @@ function MessagePrank({ message }: { message: string }) {
 // ---------------------------------------------------------------------------
 
 /** Document-level transforms: class added to <html> while active. */
-const DOC_CLASS: Partial<Record<TrollType, string>> = {
-  flip: 'troll-flip',
-  mirror: 'troll-mirror',
-  drunk: 'troll-drunk',
-  tiny: 'troll-tiny',
-  giant: 'troll-giant',
-  shake: 'troll-shake-doc',
+const DOC_CLASS: Partial<Record<EffectId, string>> = {
+  'orientation-override': 'ux-orientation',
+  'reflection-mode': 'ux-reflection',
+  'motion-test': 'ux-motion',
+  'compact-display': 'ux-compact',
+  'scale-override': 'ux-scale',
+  'haptic-simulation': 'ux-shake-doc',
 };
 
-const NON_BLOCKING: readonly TrollType[] = [...DOCUMENT_EFFECTS, 'scrollreverse'];
+const NON_BLOCKING: readonly EffectId[] = [...DOCUMENT_EFFECTS, 'scroll-override'];
 
-const MODE_HINTS: Partial<Record<TrollType, string>> = {
-  flip: '🙃 Upside-down mode — the admin\u2019s idea. Click anywhere to fix.',
-  mirror: '🪞 Mirror mode — the admin\u2019s idea. Click anywhere to fix.',
-  drunk: '🥴 Motion test in progress — click anywhere to opt out.',
-  tiny: '🔍 Compact display protocol engaged. Click anywhere to restore.',
-  giant: '🔭 Accessibility scale override engaged. Click anywhere to restore.',
-  scrollreverse: '⇅ Scroll direction override — click anywhere to restore.',
-  shake: '📳 Haptic feedback simulation — click anywhere to stop.',
+/** Neutral system-style hints for the non-blocking modes. */
+const MODE_HINTS: Partial<Record<EffectId, string>> = {
+  'orientation-override': 'Display compatibility mode is active — click anywhere to restore.',
+  'reflection-mode': 'Interface reflection mode is active — click anywhere to restore.',
+  'motion-test': 'Motion calibration in progress — click anywhere to opt out.',
+  'compact-display': 'Compact display protocol is active — click anywhere to restore.',
+  'scale-override': 'Accessibility scale override is active — click anywhere to restore.',
+  'scroll-override': 'Scroll direction override is active — click anywhere to restore.',
+  'haptic-simulation': 'Haptic feedback simulation is active — click anywhere to stop.',
 };
 
-export function TrollOverlay() {
-  const [event, setEvent] = useState<PublicTrollEvent | null>(null);
-  const eventRef = useRef<PublicTrollEvent | null>(null);
+export function UxOverlay() {
+  const [event, setEvent] = useState<PublicEffectEvent | null>(null);
+  const eventRef = useRef<PublicEffectEvent | null>(null);
   const lastIdRef = useRef(0);
   const startedAtRef = useRef(0);
   const [canDismiss, setCanDismiss] = useState(false);
@@ -483,7 +495,7 @@ export function TrollOverlay() {
   }, []);
 
   // Poll loop — visible tabs only; immediate catch-up when the tab returns.
-  // While a prank is on screen the cursor stays one behind it so a REVOKE
+  // While a surface is on screen the cursor stays one behind it so a REVOKE
   // (revokedAt set on the same event id) is observed and dismisses early.
   useEffect(() => {
     let cancelled = false;
@@ -494,9 +506,9 @@ export function TrollOverlay() {
       const active = eventRef.current;
       const cursor = active ? active.id - 1 : lastIdRef.current;
       try {
-        const res = await fetch(`/api/troll/poll?after=${cursor}`);
+        const res = await fetch(`/api/ux/poll?after=${cursor}`);
         if (res.ok) {
-          const data = (await res.json()) as { event: PublicTrollEvent | null };
+          const data = (await res.json()) as { event: PublicEffectEvent | null };
           if (cancelled || !data.event) return;
           if (active && data.event.id === active.id) {
             if (data.event.revokedAt) dismiss();
@@ -515,7 +527,7 @@ export function TrollOverlay() {
       }
     };
 
-    const timer = setInterval(poll, TROLL_POLL_INTERVAL_MS);
+    const timer = setInterval(poll, POLL_INTERVAL_MS);
     const onVisible = () => {
       if (document.visibilityState === 'visible') void poll();
     };
@@ -529,7 +541,7 @@ export function TrollOverlay() {
     };
   }, [dismiss]);
 
-  // Auto-dismiss after the prank's duration + allow dismissal after a hold.
+  // Auto-dismiss after the surface's duration + allow dismissal after a hold.
   useEffect(() => {
     if (!event) return;
     const auto = setTimeout(dismiss, event.durationSec * 1_000);
@@ -543,8 +555,8 @@ export function TrollOverlay() {
   // ESC dismiss + audio stings.
   useEffect(() => {
     if (!event) return;
-    if (event.type === 'jumpscare') playScream();
-    if (event.type === 'doink') playBoing();
+    if (event.effect === 'alert-override') playSting();
+    if (event.effect === 'interaction-gate') playSpring();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && Date.now() - startedAtRef.current >= MIN_HOLD_MS) dismiss();
     };
@@ -552,10 +564,10 @@ export function TrollOverlay() {
     return () => window.removeEventListener('keydown', onKey);
   }, [event, dismiss]);
 
-  // Document-transform pranks (flip / mirror / drunk / tiny / giant / shake).
+  // Document-transform surfaces (orientation / reflection / motion / compact / scale / haptic).
   useEffect(() => {
     if (!event) return;
-    const cls = DOC_CLASS[event.type];
+    const cls = DOC_CLASS[event.effect];
     if (!cls) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduced) return;
@@ -563,9 +575,9 @@ export function TrollOverlay() {
     return () => document.documentElement.classList.remove(cls);
   }, [event]);
 
-  // Reversed scroll — invert the wheel axis while active.
+  // Scroll override — invert the wheel axis while active.
   useEffect(() => {
-    if (!event || event.type !== 'scrollreverse') return;
+    if (!event || event.effect !== 'scroll-override') return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduced) return;
     const onWheel = (e: WheelEvent) => {
@@ -578,7 +590,8 @@ export function TrollOverlay() {
 
   if (!event) return null;
 
-  const nonBlocking = NON_BLOCKING.includes(event.type);
+  const nonBlocking = NON_BLOCKING.includes(event.effect);
+  const message = event.message;
 
   return (
     <div
@@ -589,27 +602,27 @@ export function TrollOverlay() {
         nonBlocking ? 'pointer-events-none bg-transparent' : 'bg-black',
         canDismiss && nonBlocking ? 'cursor-pointer' : '',
       ].join(' ')}
-      aria-label="Prank overlay — click or press Escape to dismiss"
+      aria-label="System overlay — click or press Escape to dismiss"
     >
-      {event.type === 'jumpscare' && <JumpscarePrank message={event.message} />}
-      {event.type === 'bluescreen' && <BluescreenPrank message={event.message} />}
-      {event.type === 'buffering' && <BufferingPrank message={event.message} />}
-      {event.type === 'disco' && <DiscoPrank message={event.message} />}
-      {event.type === 'ban' && <BanPrank message={event.message} onReveal={() => setCanDismiss(true)} />}
-      {event.type === 'virus' && <VirusPrank message={event.message} />}
-      {event.type === 'confetti' && <ConfettiPrank message={event.message} />}
-      {event.type === 'rickroll' && <RickrollPrank message={event.message} />}
-      {event.type === 'doink' && <DoinkPrank message={event.message} />}
-      {event.type === 'cats' && <CatsPrank message={event.message} />}
-      {event.type === 'error' && <ErrorPrank message={event.message} />}
-      {event.type === 'message' && <MessagePrank message={event.message} />}
+      {event.effect === 'alert-override' && <AlertSurface />}
+      {event.effect === 'display-recovery' && <RecoverySurface message={message} />}
+      {event.effect === 'throttle-simulation' && <ThrottleSurface message={message} />}
+      {event.effect === 'ambient-calibration' && <CalibrationSurface message={message} />}
+      {event.effect === 'status-preview' && <StatusSurface message={message} onRestored={() => setCanDismiss(true)} />}
+      {event.effect === 'security-scan' && <ScanSurface message={message} />}
+      {event.effect === 'celebration-trigger' && <CelebrationSurface message={message} />}
+      {event.effect === 'media-compatibility' && <CompatSurface message={message} />}
+      {event.effect === 'interaction-gate' && <GateSurface message={message} />}
+      {event.effect === 'content-placeholder' && <PlaceholderSurface message={message} />}
+      {event.effect === 'error-validation' && <ValidationSurface message={message} />}
+      {event.effect === 'user-communication' && <NoticeSurface message={message} />}
       {nonBlocking && (
-        <p className="troll-fade-in absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs font-semibold text-white">
-          {event.message || MODE_HINTS[event.type] || 'Override active — click anywhere to restore.'}
+        <p className="ux-fade-in absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs font-medium text-white">
+          {message || MODE_HINTS[event.effect] || 'Override active — click anywhere to restore.'}
         </p>
       )}
     </div>
   );
 }
 
-export type { TrollType };
+export type { EffectId };

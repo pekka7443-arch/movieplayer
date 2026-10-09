@@ -28,15 +28,16 @@ import { Switch } from '@/components/ui/switch';
 import { timeAgo } from '@/lib/format';
 
 interface UxTool {
-  type: string;
+  effect: string;
   label: string;
   description: string;
+  effectNote: string;
   needsMessage: boolean;
 }
 
 interface OverrideEvent {
   id: number;
-  type: string;
+  effect: string;
   message: string;
   durationSec: number;
   createdAt: number;
@@ -45,7 +46,7 @@ interface OverrideEvent {
   createdBy: string;
 }
 
-interface TrollPayload {
+interface ProtocolPayload {
   tools: UxTool[];
   events: OverrideEvent[];
 }
@@ -73,7 +74,7 @@ export function UxTab() {
 
   const { data, isLoading, dataUpdatedAt, refetch } = useQuery({
     queryKey: ['admin', 'ux'],
-    queryFn: () => adminGet<TrollPayload>('/api/admin/troll'),
+    queryFn: () => adminGet<ProtocolPayload>('/api/admin/user-experience'),
     refetchInterval: 30_000,
   });
   useRefreshPing(dataUpdatedAt);
@@ -108,8 +109,8 @@ export function UxTab() {
     );
   }, [data]);
 
-  const apply = async (tool: UxTool) => {
-    if (targetMode === 'user' && !targetEmail.trim()) {
+  const apply = async (tool: UxTool, targetOverride?: 'self') => {
+    if (!targetOverride && targetMode === 'user' && !targetEmail.trim()) {
       toast.error('Select a target user first.');
       return;
     }
@@ -117,24 +118,28 @@ export function UxTab() {
       toast.error('A notice body is required for this protocol.');
       return;
     }
-    setFiring(tool.type);
+    setFiring(tool.effect);
     try {
-      const res = await fetch('/api/admin/troll', {
+      const res = await fetch('/api/admin/user-experience', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: tool.type,
-          target: targetMode === 'all' ? 'all' : targetEmail.trim().toLowerCase(),
+          effect: tool.effect,
+          target: targetOverride ?? (targetMode === 'all' ? 'all' : targetEmail.trim().toLowerCase()),
           message: notice.trim() || undefined,
-          durationSec: durations[tool.type] ?? 30,
+          durationSec: durations[tool.effect] ?? 30,
         }),
       });
       if (!res.ok) {
         const payload = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
         throw new Error(payload.error?.message ?? `ux_${res.status}`);
       }
-      toast.success(`${tool.label} applied`);
-      setNotice('');
+      toast.success(
+        targetOverride === 'self'
+          ? `${tool.label} preview is running on your screen`
+          : `${tool.label} applied`,
+      );
+      if (targetOverride !== 'self') setNotice('');
       void refetch();
       void queryClient.invalidateQueries({ queryKey: ['admin', 'audit'] });
     } catch (error) {
@@ -146,7 +151,7 @@ export function UxTab() {
 
   const revoke = async (id: number) => {
     try {
-      const res = await fetch('/api/admin/troll', {
+      const res = await fetch('/api/admin/user-experience', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
@@ -347,14 +352,17 @@ export function UxTab() {
           ) : (
             <ul className="divide-y divide-[#1a1a1a] border-t border-[#1a1a1a]">
               {tools.map((tool) => (
-                <li key={tool.type} className="flex flex-wrap items-center gap-3 py-3 first:border-t-0 sm:flex-nowrap">
+                <li key={tool.effect} className="flex flex-wrap items-center gap-3 py-3 first:border-t-0 sm:flex-nowrap">
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-medium text-[#d1d5db]">{tool.label}</p>
                     <p className="pt-0.5 text-xs leading-relaxed text-[#6b7280]">{tool.description}</p>
+                    <p className="pt-1 font-mono text-[10px] leading-relaxed text-[#4b5563]" title="Technical effect delivered to the client">
+                      {tool.effectNote}
+                    </p>
                   </div>
                   <AdmSelect
-                    value={String(durations[tool.type] ?? 30)}
-                    onChange={(e) => setDurations((d) => ({ ...d, [tool.type]: Number(e.target.value) }))}
+                    value={String(durations[tool.effect] ?? 30)}
+                    onChange={(e) => setDurations((d) => ({ ...d, [tool.effect]: Number(e.target.value) }))}
                     aria-label={`Duration for ${tool.label}`}
                     className="w-32 shrink-0"
                   >
@@ -362,15 +370,25 @@ export function UxTab() {
                       <option key={d.value} value={d.value}>{d.label}</option>
                     ))}
                   </AdmSelect>
-                  <AdmButton
-                    variant="primary"
-                    disabled={firing !== null || (tool.needsMessage && notice.trim().length < 2)}
-                    onClick={() => void apply(tool)}
-                    className="shrink-0"
-                    aria-label={`Apply ${tool.label}`}
-                  >
-                    {firing === tool.type ? 'Applying…' : 'Apply'}
-                  </AdmButton>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <AdmButton
+                      variant="ghost"
+                      disabled={firing !== null || (tool.needsMessage && notice.trim().length < 2)}
+                      onClick={() => void apply(tool, 'self')}
+                      aria-label={`Preview ${tool.label} on your own screen`}
+                      title="Runs this protocol on your screen only — no user is affected"
+                    >
+                      {firing === tool.effect ? 'Applying…' : 'Preview'}
+                    </AdmButton>
+                    <AdmButton
+                      variant="primary"
+                      disabled={firing !== null || (tool.needsMessage && notice.trim().length < 2)}
+                      onClick={() => void apply(tool)}
+                      aria-label={`Apply ${tool.label}`}
+                    >
+                      Apply
+                    </AdmButton>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -399,12 +417,12 @@ export function UxTab() {
                 </thead>
                 <tbody>
                   {activeOverrides.map((e) => {
-                    const tool = tools.find((t) => t.type === e.type);
+                    const tool = tools.find((t) => t.effect === e.effect);
                     const expiresAt = e.createdAt + e.durationSec * 1_000;
                     return (
                       <tr key={e.id} className="border-b border-[#1a1a1a] last:border-0">
                         <td className="py-2.5 font-mono text-xs text-[#d1d5db]">{e.target === 'all' ? 'All users' : e.target}</td>
-                        <td className="py-2.5 text-xs text-[#d1d5db]">{tool?.label ?? e.type}</td>
+                        <td className="py-2.5 text-xs text-[#d1d5db]">{tool?.label ?? e.effect}</td>
                         <td className="py-2.5 font-mono text-xs text-[#6b7280]" title={fmtDate(new Date(e.createdAt).toISOString())}>
                           {timeAgo(new Date(e.createdAt).toISOString())}
                         </td>

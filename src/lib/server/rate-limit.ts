@@ -104,11 +104,9 @@ export const RATE_LIMITS = {
   reactions: { limit: 60, windowSec: 60 },
   reports: { limit: 10, windowSec: 60 * 60 },
   account: { limit: 20, windowSec: 5 * 60 },
-  /** Admin prank trigger — a joke, but still bounded. */
-  trollTrigger: { limit: 20, windowSec: 60 },
-  /** Prank poller — clients poll every ~15s, room for retries. */
-  trollPoll: { limit: 60, windowSec: 60 },
-  /** UX protocol apply/revoke (the disguised admin prank endpoints). */
+  /** Client experience poller — clients poll every ~15s, room for retries. */
+  uxPoll: { limit: 60, windowSec: 60 },
+  /** UX protocol apply/revoke (the admin User Experience endpoints). */
   uxProtocol: { limit: 20, windowSec: 60 },
 } as const satisfies Record<string, RateLimitSpec>;
 

@@ -377,11 +377,12 @@ html {
   }
 }
 
-/* ---- Troll engine (admin pranks) -----------------------------------------
-   Fullscreen prank animations. All short-lived, overlay-scoped, and skipped
-   entirely under prefers-reduced-motion (flip is skipped in JS too). */
+/* ---- Client UX protocol surfaces -----------------------------------------
+   Fullscreen client-experience surfaces (admin User Experience protocols).
+   Short-lived, overlay-scoped, and skipped entirely under
+   prefers-reduced-motion (document transforms are skipped in JS too). */
 
-@keyframes troll-shake-keyframes {
+@keyframes ux-shake-keyframes {
   0%, 100% { transform: scale(1) translate(0, 0) rotate(0deg); }
   10% { transform: scale(1.08) translate(-14px, 8px) rotate(-1.5deg); }
   20% { transform: scale(1.12) translate(12px, -10px) rotate(1.5deg); }
@@ -394,31 +395,31 @@ html {
   90% { transform: scale(1.08) translate(-8px, 10px) rotate(-1.5deg); }
 }
 
-.troll-shake {
-  animation: troll-shake-keyframes 0.45s linear infinite;
+.ux-shake {
+  animation: ux-shake-keyframes 0.45s linear infinite;
 }
 
-@keyframes troll-zoom-in-keyframes {
+@keyframes ux-zoom-in-keyframes {
   0% { transform: scale(0.15); opacity: 0; }
   35% { opacity: 1; }
   60% { transform: scale(1.15); }
   100% { transform: scale(1.02); }
 }
 
-.troll-zoom-in {
-  animation: troll-zoom-in-keyframes 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+.ux-zoom-in {
+  animation: ux-zoom-in-keyframes 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
 
-@keyframes troll-fade-in-keyframes {
+@keyframes ux-fade-in-keyframes {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.troll-fade-in {
-  animation: troll-fade-in-keyframes 0.6s ease both;
+.ux-fade-in {
+  animation: ux-fade-in-keyframes 0.6s ease both;
 }
 
-@keyframes troll-disco-keyframes {
+@keyframes ux-calibration-keyframes {
   0% { background: linear-gradient(120deg, #ff0080, #ff8c00, #ffee00); }
   25% { background: linear-gradient(120deg, #00ff88, #00cfff, #7a00ff); }
   50% { background: linear-gradient(120deg, #ffee00, #ff0080, #00cfff); }
@@ -426,66 +427,66 @@ html {
   100% { background: linear-gradient(120deg, #ff0080, #ff8c00, #ffee00); }
 }
 
-.troll-disco {
-  animation: troll-disco-keyframes 1.2s linear infinite;
+.ux-calibration {
+  animation: ux-calibration-keyframes 1.2s linear infinite;
   opacity: 0.92;
 }
 
-@keyframes troll-confetti-keyframes {
+@keyframes ux-confetti-keyframes {
   0% { transform: translateY(0) rotate(0deg); opacity: 1; }
   100% { transform: translateY(110vh) rotate(720deg); opacity: 0.6; }
 }
 
-.troll-confetti {
-  animation: troll-confetti-keyframes 4s linear infinite;
+.ux-confetti {
+  animation: ux-confetti-keyframes 4s linear infinite;
   will-change: transform;
 }
 
-@keyframes troll-flip-in {
+@keyframes ux-orientation-in {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(180deg); }
 }
 
-html.troll-flip {
+html.ux-orientation {
   transform: rotate(180deg);
   transition: transform 1.1s cubic-bezier(0.3, 1.2, 0.4, 1);
   transform-origin: center center;
   background: var(--background);
 }
 
-/* Document-transform prank modes (mirror / drunk / tiny / giant / shake). */
-html.troll-mirror {
+/* Document-level transform modes (reflection / motion / compact / scale / shake). */
+html.ux-reflection {
   transform: scaleX(-1);
   transform-origin: center center;
   background: var(--background);
 }
 
-@keyframes troll-wobble-keyframes {
+@keyframes ux-motion-keyframes {
   0%, 100% { transform: rotate(0deg) translateX(0); }
   25% { transform: rotate(1.6deg) translateX(12px); }
   50% { transform: rotate(-1.3deg) translateX(-10px); }
   75% { transform: rotate(0.9deg) translateX(7px); }
 }
 
-html.troll-drunk {
-  animation: troll-wobble-keyframes 5s ease-in-out infinite;
+html.ux-motion {
+  animation: ux-motion-keyframes 5s ease-in-out infinite;
   transform-origin: center center;
 }
 
-html.troll-tiny {
+html.ux-compact {
   transform: scale(0.55);
   transform-origin: center center;
   background: var(--background);
 }
 
-html.troll-giant {
+html.ux-scale {
   transform: scale(1.45);
   transform-origin: center center;
   background: var(--background);
   overflow: hidden;
 }
 
-@keyframes troll-shake-doc-keyframes {
+@keyframes ux-shake-doc-keyframes {
   0%, 100% { transform: translate(0, 0); }
   20% { transform: translate(-7px, 5px); }
   40% { transform: translate(6px, -6px); }
@@ -493,12 +494,12 @@ html.troll-giant {
   80% { transform: translate(7px, 6px); }
 }
 
-html.troll-shake-doc {
-  animation: troll-shake-doc-keyframes 0.35s linear infinite;
+html.ux-shake-doc {
+  animation: ux-shake-doc-keyframes 0.35s linear infinite;
 }
 
-/* DOINK — springy flythrough for the Administrative Interaction Gate prank. */
-@keyframes troll-doink-keyframes {
+/* Springy flythrough for the Administrative Interaction Gate surface. */
+@keyframes ux-spring-keyframes {
   0% { transform: translateX(-140%) scale(0.5) rotate(-16deg); }
   30% { transform: translateX(46%) scale(1.3) rotate(7deg); }
   50% { transform: translateX(18%) scale(0.9) rotate(-4deg); }
@@ -506,20 +507,20 @@ html.troll-shake-doc {
   100% { transform: translateX(150%) scale(0.7) rotate(0deg); }
 }
 
-.troll-doink {
-  animation: troll-doink-keyframes 1.5s cubic-bezier(0.3, 1.2, 0.5, 1) infinite;
+.ux-spring {
+  animation: ux-spring-keyframes 1.5s cubic-bezier(0.3, 1.2, 0.5, 1) infinite;
   will-change: transform;
 }
 
-/* Rickroll equalizer bars. */
-@keyframes troll-eq-keyframes {
+/* Legacy-media compatibility equalizer bars. */
+@keyframes ux-eq-keyframes {
   0%, 100% { height: 18%; }
   50% { height: 95%; }
 }
 
-.troll-eq-bar {
+.ux-eq-bar {
   height: 40%;
-  animation: troll-eq-keyframes 0.7s ease-in-out infinite;
+  animation: ux-eq-keyframes 0.7s ease-in-out infinite;
   will-change: height;
 }
 
@@ -534,23 +535,23 @@ html.troll-shake-doc {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .troll-shake,
-  .troll-zoom-in,
-  .troll-disco,
-  .troll-confetti,
-  .troll-doink,
-  .troll-eq-bar {
+  .ux-shake,
+  .ux-zoom-in,
+  .ux-calibration,
+  .ux-confetti,
+  .ux-spring,
+  .ux-eq-bar {
     animation: none !important;
   }
-  html.troll-flip,
-  html.troll-mirror,
-  html.troll-tiny,
-  html.troll-giant {
+  html.ux-orientation,
+  html.ux-reflection,
+  html.ux-compact,
+  html.ux-scale {
     transform: none;
     transition: none;
   }
-  html.troll-drunk,
-  html.troll-shake-doc {
+  html.ux-motion,
+  html.ux-shake-doc {
     animation: none !important;
   }
 }

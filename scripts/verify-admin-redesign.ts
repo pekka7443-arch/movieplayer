@@ -90,7 +90,7 @@ const SIDEBAR_ITEMS = [
   'Settings',
 ];
 
-const BANNED_WORDS = ['troll', 'prank', 'jumpscare', 'rickroll', 'victim', '😈', '🎯', '👻', '😱'];
+const BANNED_WORDS = ['troll', 'prank', 'jumpscare', 'rickroll', 'victim', 'just kidding', '😈', '🎯', '👻', '😱'];
 
 async function main(): Promise<void> {
   clearAdminSessions(ADMIN_EMAIL);
@@ -180,6 +180,9 @@ async function main(): Promise<void> {
   const applyButtons = await page.getByRole('button', { name: /^Apply/ }).count();
   check('19 Apply buttons (15 + 4 legacy probes)', applyButtons === 19, `found ${applyButtons}`);
 
+  const previewButtons = await page.getByRole('button', { name: /^Preview/ }).count();
+  check('19 Preview buttons (operator self-test)', previewButtons === 19, `found ${previewButtons}`);
+
   const overridesTable = await page.getByRole('heading', { name: 'Active User Experience Overrides' }).isVisible();
   check('"Active User Experience Overrides" table present', overridesTable);
 
@@ -194,18 +197,42 @@ async function main(): Promise<void> {
   }
 
   // --- 5. apply + revoke through the real API -------------------------------
-  const apply = await api(page, 'POST', '/api/admin/troll', { type: 'flip', target: 'all', durationSec: 15 });
+  const apply = await api(page, 'POST', '/api/admin/user-experience', {
+    effect: 'orientation-override',
+    target: 'all',
+    durationSec: 15,
+  });
   check('apply protocol via API', apply.status === 200, `status ${apply.status}`);
   const applyBody = apply.json as { event?: { id: number } };
-  const list = await api(page, 'GET', '/api/admin/troll');
+  const list = await api(page, 'GET', '/api/admin/user-experience');
   const listBody = list.json as { tools?: unknown[]; events?: { id: number }[] };
   check('tool catalog served (19 tools)', Array.isArray(listBody.tools) && listBody.tools.length === 19, `got ${listBody.tools?.length}`);
   check('event visible in overrides list', Array.isArray(listBody.events) && listBody.events.some((e) => e.id === applyBody.event?.id));
 
+  // Operator preview — target 'self' reaches the admin's own screen only.
+  const preview = await api(page, 'POST', '/api/admin/user-experience', {
+    effect: 'celebration-trigger',
+    target: 'self',
+    durationSec: 5,
+  });
+  check('preview (target self) via API', preview.status === 200, `status ${preview.status}`);
+  if (preview.json?.event?.id) {
+    const revokePreview = await api(page, 'DELETE', '/api/admin/user-experience', { id: preview.json.event.id });
+    check('revoke preview via API', revokePreview.status === 200, `status ${revokePreview.status}`);
+  }
+
   if (applyBody.event?.id) {
-    const revoke = await api(page, 'DELETE', '/api/admin/troll', { id: applyBody.event.id });
+    const revoke = await api(page, 'DELETE', '/api/admin/user-experience', { id: applyBody.event.id });
     check('revoke protocol via API', revoke.status === 200, `status ${revoke.status}`);
   }
+
+  // The client pickup endpoint is neutral and the old prank route is gone.
+  const guestPoll = await api(page, 'GET', '/api/ux/poll?after=0');
+  check('GET /api/ux/poll serves guests', guestPoll.status === 200 && 'event' in (guestPoll.json ?? {}), `status ${guestPoll.status}`);
+  const oldPoll = await api(page, 'GET', '/api/troll/poll?after=0');
+  check('old /api/troll/poll is gone', oldPoll.status === 404 || oldPoll.status === 405, `status ${oldPoll.status}`);
+  const oldAdminRoute = await api(page, 'GET', '/api/admin/troll');
+  check('old /api/admin/troll is gone', oldAdminRoute.status === 404 || oldAdminRoute.status === 405, `status ${oldAdminRoute.status}`);
 
   // Audit trail uses the disguised action name.
   const audit = await api(page, 'GET', '/api/admin?view=audit');

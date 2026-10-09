@@ -131,6 +131,7 @@ export function AuditTab() {
           <option value="report.dismissed">report.dismissed</option>
           <option value="announcement.set">announcement.set</option>
           <option value="ux.protocol_applied">ux.protocol_applied</option>
+          <option value="ux.protocol_previewed">ux.protocol_previewed</option>
           <option value="ux.protocol_revoked">ux.protocol_revoked</option>
         </AdmSelect>
         <input

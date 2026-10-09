@@ -1,25 +1,26 @@
-// Troll engine — server-side in-memory prank broadcast store.
+// User Experience protocol engine — server-side in-memory broadcast store.
 //
-// The admin triggers an effect from the admin panel's User Experience tab;
+// The admin applies a protocol from the admin panel's User Experience tab;
 // every open CineDeck browser tab picks it up within ~15 seconds via
-// GET /api/troll/poll and renders it (see components/site/troll-overlay.tsx).
+// GET /api/ux/poll and renders it (see components/site/ux-overlay.tsx).
 //
-// Deliberately EPHEMERAL and in-memory: overrides are jokes with a shelf
-// life of seconds — they must not survive a reload, a restart, or populate
+// Deliberately EPHEMERAL and in-memory: overrides are transient with a shelf
+// life of minutes — they must not survive a reload, a restart, or populate
 // the database. A small ring buffer keeps the last 50 events so slow pollers
 // still catch the latest one; each event additionally expires after
-// POLL_WINDOW_MS so an effect never replays minutes later.
+// POLL_WINDOW_MS so an effect never replays later.
 //
 // UX_TOOLS below is the ADMIN-FACING catalog: boring, professional names and
-// descriptions. It is served by the admin API only — never shipped in the
-// client bundle — so nothing in the admin UI hints at what these really are.
+// descriptions, plus an `effect` line that spells out technically what the
+// client will render (operator clarity). It is served by the admin API only —
+// never shipped in the client bundle.
 
 import {
-  TROLL_DURATION_RANGE,
-  TROLL_TYPES,
-  type PublicTrollEvent,
-  type TrollType,
-} from '@/lib/troll-shared';
+  EFFECT_DURATION_RANGE,
+  EFFECT_IDS,
+  type EffectId,
+  type PublicEffectEvent,
+} from '@/lib/ux-shared';
 
 /** How long an event stays fetchable by pollers (2 minutes). */
 export const POLL_WINDOW_MS = 2 * 60 * 1000;
@@ -27,163 +28,184 @@ export const POLL_WINDOW_MS = 2 * 60 * 1000;
 /** Ring buffer cap — slow pollers still catch the latest effect. */
 const RING_SIZE = 50;
 
-export { TROLL_DURATION_RANGE } from '@/lib/troll-shared';
+export { EFFECT_DURATION_RANGE } from '@/lib/ux-shared';
 
-export interface TrollEvent {
+export interface UxEvent {
   /** Monotonic id (process-lifetime); clients pass it back as ?after=. */
   id: number;
-  type: TrollType;
-  /** Optional custom notice shown by the overlay. */
+  effect: EffectId;
+  /** Optional custom notice rendered by the overlay. */
   message: string;
   /** 'all' or the target user's lowercased email. */
   target: 'all' | string;
   durationSec: number;
   createdAt: number;
   expiresAt: number;
-  /** Timestamp if an admin revoked the override while it was running. */
+  /** Timestamp if an operator revoked the override while it was running. */
   revokedAt?: number;
   /** Admin email that applied it (audit trail). */
   createdBy: string;
 }
 
 export interface UxTool {
-  type: TrollType;
+  effect: EffectId;
   label: string;
   description: string;
+  /** One dry technical line stating exactly what the client renders. */
+  effectNote: string;
   /** Whether the custom notice field is required for this tool. */
   needsMessage: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// The disguise. Names/descriptions deliberately read like internal QA
-// tooling — see the admin "User Experience" tab. Order = display order.
+// The catalog. Names/descriptions deliberately read like internal QA tooling —
+// see the admin "User Experience" tab. Order = display order.
 // ---------------------------------------------------------------------------
 export const UX_TOOLS: UxTool[] = [
   {
-    type: 'flip',
+    effect: 'orientation-override',
     label: 'Display Orientation Override',
     description: 'Rotates the client rendering surface 180° to verify layout resilience under extreme transforms.',
+    effectNote: 'Client transform: rotate(180deg) — the entire viewport turns upside down.',
     needsMessage: false,
   },
   {
-    type: 'mirror',
+    effect: 'reflection-mode',
     label: 'Interface Reflection Mode',
     description: 'Mirrors the interface horizontally across the client viewport for render-pipeline verification.',
+    effectNote: 'Client transform: scale(-1, 1) — the viewport mirrors horizontally.',
     needsMessage: false,
   },
   {
-    type: 'drunk',
+    effect: 'motion-test',
     label: 'Motion Accessibility Test',
     description: 'Applies a slow spatial oscillation to validate client motion-tolerance settings.',
+    effectNote: 'Client transform: slow ±1.5° viewport sway on a 5s loop.',
     needsMessage: false,
   },
   {
-    type: 'tiny',
+    effect: 'compact-display',
     label: 'Compact Display Protocol',
-    description: 'Scales the interface down to 55% to exercise compact-density breakpoints.',
+    description: 'Scales the interface down to exercise compact-density breakpoints.',
+    effectNote: 'Client transform: scale(0.55) — the whole interface shrinks.',
     needsMessage: false,
   },
   {
-    type: 'giant',
+    effect: 'scale-override',
     label: 'Accessibility Scale Override',
-    description: 'Scales the interface up to 145% to exercise large-type accessibility thresholds.',
+    description: 'Scales the interface up to exercise large-type accessibility thresholds.',
+    effectNote: 'Client transform: scale(1.45) — the whole interface enlarges.',
     needsMessage: false,
   },
   {
-    type: 'buffering',
+    effect: 'throttle-simulation',
     label: 'Network Throttle Simulation',
     description: 'Simulates a stalled network condition at low progress to validate loader states.',
+    effectNote: 'Client surface: fullscreen loader pinned at a random 0–8%.',
     needsMessage: false,
   },
   {
-    type: 'rickroll',
+    effect: 'media-compatibility',
     label: 'Legacy Media Compatibility Check',
     description: 'Runs the legacy media decoder against a reference clip from the internal archive.',
+    effectNote: 'Client surface: fullscreen reference clip with equalizer bars and lyric captions.',
     needsMessage: false,
   },
   {
-    type: 'doink',
+    effect: 'interaction-gate',
     label: 'Administrative Interaction Gate',
     description: 'Emits a spring-loaded interaction event through the client notification channel.',
+    effectNote: 'Client surface: oversized spring-animated word with a synthesized tone.',
     needsMessage: false,
   },
   {
-    type: 'ban',
+    effect: 'status-preview',
     label: 'Account Status Preview',
-    description: 'Previews the account suspension screen exactly as the affected user would see it.',
+    description: 'Previews the account suspension screen exactly as the affected user would see it, then auto-restores.',
+    effectNote: 'Client surface: suspension screen with countdown, ending in a believable "access restored" notice.',
     needsMessage: false,
   },
   {
-    type: 'confetti',
+    effect: 'celebration-trigger',
     label: 'Celebration Event Trigger',
     description: 'Triggers a positive-reinforcement animation across the client surface.',
+    effectNote: 'Client surface: falling particle overlay over a completion notice.',
     needsMessage: false,
   },
   {
-    type: 'cats',
+    effect: 'content-placeholder',
     label: 'Content Placeholder Protocol',
     description: 'Fills media placeholders with approved stock imagery while layout QA is running.',
+    effectNote: 'Client surface: falling cat pictures with a revalidation notice.',
     needsMessage: false,
   },
   {
-    type: 'scrollreverse',
+    effect: 'scroll-override',
     label: 'Scroll Direction Override',
     description: 'Inverts the scroll axis to verify bidirectional navigation support.',
+    effectNote: 'Client input: wheel axis inverted for the duration.',
     needsMessage: false,
   },
   {
-    type: 'shake',
+    effect: 'haptic-simulation',
     label: 'Haptic Feedback Simulation',
     description: 'Simulates haptic feedback via rapid viewport translation on the client.',
+    effectNote: 'Client transform: rapid viewport shake on a 0.35s loop.',
     needsMessage: false,
   },
   {
-    type: 'error',
+    effect: 'error-validation',
     label: 'Error Handling Validation Mode',
     description: 'Renders a synthetic stack trace to validate error-boundary coverage.',
+    effectNote: 'Client surface: synthetic stack trace with a recovery progress bar.',
     needsMessage: false,
   },
   {
-    type: 'message',
+    effect: 'user-communication',
     label: 'Direct User Communication',
     description: 'Delivers a plain-text notice to the selected audience over all active sessions.',
+    effectNote: 'Client surface: fullscreen plain-text notice (your message body).',
     needsMessage: true,
   },
   // Legacy probes — kept for compatibility with earlier protocol versions.
   {
-    type: 'jumpscare',
+    effect: 'alert-override',
     label: 'Priority Alert Simulation',
     description: 'Full-attention overlay used to validate client alert rendering paths.',
+    effectNote: 'Client surface: fullscreen alert image with a synthesized sting and no caption.',
     needsMessage: false,
   },
   {
-    type: 'bluescreen',
+    effect: 'display-recovery',
     label: 'Display Recovery Drill',
     description: 'Simulates a client display reset to verify session-restore behavior.',
+    effectNote: 'Client surface: simulated OS crash with a progress counter, ending in a recovery notice.',
     needsMessage: false,
   },
   {
-    type: 'disco',
+    effect: 'ambient-calibration',
     label: 'Ambient Lighting Calibration',
     description: 'Cycles the client color profile to exercise GPU compositing.',
+    effectNote: 'Client surface: full-color cycling overlay with a calibration caption.',
     needsMessage: false,
   },
   {
-    type: 'virus',
+    effect: 'security-scan',
     label: 'Security Scan Notification Test',
     description: 'Renders a legacy antivirus notification to verify dialog stacking order.',
+    effectNote: 'Client surface: legacy security dialog with scan progress and file paths.',
     needsMessage: false,
   },
 ];
 
-const globalForTroll = globalThis as unknown as {
-  __cinedeckTrollEvents?: TrollEvent[];
-  __cinedeckTrollSeq?: number;
+const globalForUx = globalThis as unknown as {
+  __cinedeckUxEvents?: UxEvent[];
+  __cinedeckUxSeq?: number;
 };
 
-function ring(): TrollEvent[] {
-  globalForTroll.__cinedeckTrollEvents ??= [];
-  return globalForTroll.__cinedeckTrollEvents;
+function ring(): UxEvent[] {
+  globalForUx.__cinedeckUxEvents ??= [];
+  return globalForUx.__cinedeckUxEvents;
 }
 
 function prune(): void {
@@ -194,7 +216,7 @@ function prune(): void {
 }
 
 export interface TriggerInput {
-  type: TrollType;
+  effect: EffectId;
   target: 'all' | string;
   message?: string;
   durationSec: number;
@@ -202,17 +224,17 @@ export interface TriggerInput {
 }
 
 /** Apply an override. Returns the stored event. */
-export function triggerTroll(input: TriggerInput): TrollEvent {
-  globalForTroll.__cinedeckTrollSeq = (globalForTroll.__cinedeckTrollSeq ?? 0) + 1;
+export function triggerEffect(input: TriggerInput): UxEvent {
+  globalForUx.__cinedeckUxSeq = (globalForUx.__cinedeckUxSeq ?? 0) + 1;
   const now = Date.now();
-  const event: TrollEvent = {
-    id: globalForTroll.__cinedeckTrollSeq,
-    type: input.type,
+  const event: UxEvent = {
+    id: globalForUx.__cinedeckUxSeq,
+    effect: input.effect,
     message: input.message?.slice(0, 200) ?? '',
     target: input.target === 'all' ? 'all' : input.target.trim().toLowerCase(),
     durationSec: Math.min(
-      TROLL_DURATION_RANGE.max,
-      Math.max(TROLL_DURATION_RANGE.min, Math.round(input.durationSec)),
+      EFFECT_DURATION_RANGE.max,
+      Math.max(EFFECT_DURATION_RANGE.min, Math.round(input.durationSec)),
     ),
     createdAt: now,
     expiresAt: now + POLL_WINDOW_MS,
@@ -225,31 +247,31 @@ export function triggerTroll(input: TriggerInput): TrollEvent {
 }
 
 /** Revoke a still-running override. Returns true when an event was revoked. */
-export function revokeTroll(id: number): boolean {
+export function revokeEffect(id: number): boolean {
   const event = ring().find((e) => e.id === id && !e.revokedAt);
   if (!event) return false;
   event.revokedAt = Date.now();
   return true;
 }
 
-export function isTrollType(value: unknown): value is TrollType {
-  return typeof value === 'string' && (TROLL_TYPES as readonly string[]).includes(value);
+export function isEffectType(value: unknown): value is EffectId {
+  return typeof value === 'string' && (EFFECT_IDS as readonly string[]).includes(value);
 }
 
 /**
  * Newest event this client should play. `email` is the signed-in user's
  * email (null for guests → only 'all' events). `after` is the last event id
- * the client already handled. Events the triggering admin applied are hidden
+ * the client already handled. Events the applying admin triggered are hidden
  * from the admin's own 'all'-targeted polls so they never hit their own
- * screen (targeting their own email explicitly still works — handy for
- * previewing). Revoked events are still returned (with revokedAt) so an
- * actively playing client can dismiss itself early.
+ * screen (self-targeting still works — used by Preview). Revoked events are
+ * still returned (with revokedAt) so an actively playing client can dismiss
+ * itself early.
  */
-export function latestTrollFor(options: {
+export function latestEffectFor(options: {
   email: string | null;
   after: number;
   excludeCreatedBy?: string;
-}): TrollEvent | null {
+}): UxEvent | null {
   prune();
   const { email, after, excludeCreatedBy } = options;
   const candidates = ring().filter(
@@ -263,15 +285,15 @@ export function latestTrollFor(options: {
 }
 
 /** Recent events for the admin overrides table (newest first). */
-export function recentTrolls(limit = 20): TrollEvent[] {
+export function recentEffects(limit = 20): UxEvent[] {
   prune();
   return ring().slice(-limit).reverse();
 }
 
-export function toPublicEvent(event: TrollEvent): PublicTrollEvent {
+export function toPublicEffect(event: UxEvent): PublicEffectEvent {
   return {
     id: event.id,
-    type: event.type,
+    effect: event.effect,
     message: event.message,
     durationSec: event.durationSec,
     createdAt: event.createdAt,
