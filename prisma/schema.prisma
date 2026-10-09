@@ -400,3 +400,14 @@ model AdminNote {
 
   @@index([targetUserId, createdAt])
 }
+
+/// Boot-persistent key/value store for process-lifetime invariants —
+/// currently the AUTH_SECRET restore copy (`auth_secret`) and its SHA-256
+/// fingerprint (`auth_secret_hash`) used by the boot hook and `bun run
+/// doctor` so the secret survives .env wipes / redeploys (Task 44).
+/// NOT user data; never exposed through any API.
+model SystemState {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

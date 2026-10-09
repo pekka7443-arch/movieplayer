@@ -12,6 +12,7 @@
 import { connect } from 'node:net';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import type { PrismaClient as PrismaClientT } from '@prisma/client';
 
 type Row = { name: string; ok: boolean; required: boolean; detail: string };
 
@@ -30,13 +31,13 @@ const dbUrl = envGet('DATABASE_URL');
 record('env: DATABASE_URL', !!dbUrl, dbUrl || 'missing');
 
 const authSecret = envGet('AUTH_SECRET');
-const authOk = !!authSecret && authSecret.length >= 32;
+const secretValid = !!authSecret && authSecret.length >= 32 && !/replace[-_]?me|change[-_]?me|placeholder|example|dummy/i.test(authSecret);
 record(
   'env: AUTH_SECRET',
-  authOk,
-  authOk
+  secretValid,
+  secretValid
     ? 'present (32+ chars)'
-    : 'missing — self-heals on first authenticated request (or set PUBLISH_STRICT=1 to hard-fail instead)',
+    : 'missing/placeholder — the boot hook restores it from the DB (or set PUBLISH_STRICT=1 to hard-fail instead)',
   false,
 );
 
@@ -56,10 +57,11 @@ record(
 // 3. DB CONNECTION ----------------------------------------------------
 let dbOk = false;
 let dbDetail = 'failed';
+let prisma: PrismaClientT | null = null;
 if (dbUrl) {
   try {
     const { PrismaClient } = await import('@prisma/client').then((m) => m);
-    const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
+    prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
     await prisma.$queryRaw`SELECT 1`;
     dbOk = true;
     dbDetail = 'SELECT 1 ok';
@@ -81,9 +83,69 @@ if (dbUrl) {
       missing.length === 0,
       missing.length === 0 ? `${applied.length}/${expected.length} applied` : `NOT APPLIED: ${missing.join(', ')} — run \`bunx prisma migrate deploy\``,
     );
+
+    // 4b. SESSIONS ARE DB-BACKED ------------------------------------------
+    // Sessions must live in the Session table (SQLite), never in memory —
+    // in-memory sessions are wiped on every restart/redeploy.
+    try {
+      const sessions = await prisma.session.count();
+      record(
+        'db: Session table (DB-backed sessions)',
+        true,
+        `${sessions} session row(s) — sessions survive restarts/redeploys`,
+      );
+    } catch {
+      record('db: Session table (DB-backed sessions)', false, 'Session table missing/unreadable — run `bunx prisma migrate deploy`');
+    }
+
+    // 4c. DB FILE PERSISTENCE ----------------------------------------------
+    // The SQLite file must live at a fixed path inside the project (which
+    // persists across redeploys) — never in a tmp/build-artifact dir.
+    if (dbUrl.startsWith('file:')) {
+      const dbFile = dbUrl.slice('file:'.length);
+      const isAbsolute = path.isAbsolute(dbFile);
+      const inTmp = /\/(tmp|\.next)\//.test(dbFile);
+      record(
+        'db: persistent file path',
+        isAbsolute && !inTmp,
+        `${dbFile} ${isAbsolute && !inTmp ? '(fixed absolute path, never deleted on deploy)' : '— WARNING: use a fixed absolute path inside the project'}`,
+        false,
+      );
+    }
+
+    // 4d. AUTH_SECRET FINGERPRINT (stability across restarts) ---------------
+    // First boot stores SHA-256(AUTH_SECRET) in SystemState; later boots
+    // compare — a changed secret is reported (reset/verify links would die;
+    // sessions are unaffected because they are DB-backed).
+    if (secretValid && authSecret) {
+      const { createHash } = await import('node:crypto');
+      const current = createHash('sha256').update(authSecret).digest('hex');
+      try {
+        const stored = await prisma.systemState.findUnique({ where: { key: 'auth_secret_hash' } });
+        if (!stored) {
+          await prisma.systemState.create({ data: { key: 'auth_secret_hash', value: current } });
+          record('auth: secret fingerprint', true, 'stored (first boot) — changes will be detected from now on', false);
+        } else if (stored.value === current) {
+          record('auth: secret fingerprint', true, 'unchanged since first boot — no logouts from secret churn', false);
+        } else {
+          await prisma.systemState.update({ where: { key: 'auth_secret_hash' }, data: { value: current } });
+          record(
+            'auth: secret fingerprint',
+            false,
+            'CHANGED since first boot — outstanding reset/verification links were invalidated (sessions unaffected). Stored fingerprint updated.',
+            false,
+          );
+        }
+      } catch (e) {
+        record('auth: secret fingerprint', false, `SystemState unreadable: ${e instanceof Error ? e.message : e}`, false);
+      }
+    }
+
     await prisma.$disconnect();
+    prisma = null;
   } catch (e) {
     dbDetail = e instanceof Error ? e.message : String(e);
+    await prisma?.$disconnect().catch(() => undefined);
   }
 }
 record('db: connection', dbOk, dbOk ? dbDetail : dbDetail);

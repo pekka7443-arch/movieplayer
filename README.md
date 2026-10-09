@@ -10,7 +10,7 @@ Everything in this README is also true for the platform preview/publish flow: th
 
 ```bash
 bun install
-bun run db:push        # or: bunx prisma migrate deploy
+bun run deploy         # safe deploy: restores/generates AUTH_SECRET once, DB backup, prisma migrate deploy, build (never resets data)
 bun run dev            # http://localhost:3000 (0.0.0.0:3000)
 ```
 
@@ -26,7 +26,7 @@ bun run start
 | Variable | Required | Purpose |
 |---|---|---|
 | `DATABASE_URL` | yes | SQLite file (`file:./db/custom.db`). Prisma migrate works out of the box on a fresh file. |
-| `AUTH_SECRET` | no (dev) / effectively yes (prod) | Session/token signing. If missing, the app **self-heals**: it generates a stable random secret and persists it into `.env` (a warning is logged). It only hard-fails when `NODE_ENV=production` **and** `PUBLISH_STRICT=1`. |
+| `AUTH_SECRET` | no (dev) / effectively yes (prod) | Signs stateless tokens (reset/verify/2FA). Sessions are DB-backed and never depend on it. Stability contract: a valid secret is **never regenerated** — the boot hook restores it from the `SystemState` DB row when `.env` is wiped, `bun run deploy` does the same, and `bun run doctor` compares a SHA-256 fingerprint and warns on change. Generation happens exactly once (literal first boot). Hard-fails only when `NODE_ENV=production` **and** `PUBLISH_STRICT=1`. |
 | `TMDB_API_KEY` | no | Optional server-wide TMDB key. Users can also paste their own free key in Settings (stored in their browser, sent per-request). Without any key the app runs fully keyless via Cinemeta/TVmaze/ESPN/TheSportsDB. |
 | `PUBLISH_STRICT` | no | Set to `1` to make missing critical env vars a hard startup failure instead of a warning. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | no | Seed admin account, created idempotently on boot (or `bun run seed`). Admin logins are capped at **3 active device sessions** and can be restricted with `ADMIN_IP_ALLOWLIST` (comma-separated IPs; unset = check skipped). New-device admin logins are audit-logged, and emailed when `SMTP_URL` is set. |
@@ -44,8 +44,8 @@ See `.env.example` for the annotated list.
 | `bun run start` | Serves the standalone build. |
 | `bun run lint` | ESLint (strict, react-hooks rules). |
 | `bunx tsc --noEmit` | Typecheck. |
-| `bun run db:push` | Fast schema sync for development. |
-| `bunx prisma migrate deploy` | Applies migrations (the only supported way in production). |
+| `bun run deploy` | The only supported deploy path: AUTH_SECRET restore/generate-once, DB snapshot backup, `prisma migrate deploy`, `prisma generate`, build. NEVER resets data. |
+| `bunx prisma migrate deploy` | Applies pending migrations. `prisma db push` / `migrate reset` are deliberately NOT available — they can wipe all users/sessions. |
 | `bun run doctor` | PASS/FAIL self-check: env vars, DB connection, migrations, port 3000, `GET /` 200, CSP frame-ancestors, build artifacts, `/api/health`. |
 | `bunx vitest run` | Unit tests (security core + feature logic). |
 | `bun run test:e2e` | Playwright e2e (auth persistence). |

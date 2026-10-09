@@ -20,10 +20,9 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { db } from '@/lib/db';
+import { envFileGet, upsertEnvValue } from '@/lib/server/env-file';
 import { truncateIp } from '@/lib/server/geo';
 
 export const SESSION_COOKIE = 'cinedeck_session';
@@ -35,31 +34,49 @@ export const GUEST_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year
 export const SESSION_ROTATE_AFTER_SECONDS = 60 * 60 * 24;
 
 // ---------------------------------------------------------------------------
-// AUTH_SECRET — required only under PUBLISH_STRICT; otherwise self-healed:
-// a stable random secret is generated and persisted into .env on first run
-// (best effort — read-only filesystems fall back to a per-process secret).
+// AUTH_SECRET — required only under PUBLISH_STRICT; otherwise self-healed.
+// Stability contract (Task 44): a valid secret is NEVER regenerated. Lookup
+// order: process.env → project .env → generate ONCE and persist to the
+// project .env (root-anchored — never the build-output cwd). The boot hook
+// (src/instrumentation.ts) additionally mirrors the secret into the
+// SystemState table so a wiped .env can be restored from the database.
 // ---------------------------------------------------------------------------
 
 let devSecret: string | null = null;
 
 /**
- * Persist a freshly generated AUTH_SECRET into .env so it survives restarts.
- * Replaces an existing invalid (too-short/placeholder) line if present.
- * Returns the secret that should be used for this process.
+ * Resolve the AUTH_SECRET synchronously. NEVER replaces a valid existing
+ * value — generation happens only when neither the environment nor the
+ * project .env file holds a usable (32+ chars, non-placeholder) secret.
+ */
+function resolveAuthSecret(): string {
+  const fromEnv = process.env.AUTH_SECRET;
+  if (fromEnv && fromEnv.length >= 32 && !isPlaceholderSecret(fromEnv)) return fromEnv;
+
+  // Fall back to the project .env file (covers standalone runtimes whose
+  // process env was not hydrated from the root .env).
+  const fromFile = envFileGet('AUTH_SECRET');
+  if (fromFile && fromFile.length >= 32 && !isPlaceholderSecret(fromFile)) {
+    process.env.AUTH_SECRET = fromFile;
+    return fromFile;
+  }
+  return '';
+}
+
+function isPlaceholderSecret(value: string): boolean {
+  return /replace[-_]?me|change[-_]?me|placeholder|example|dummy/i.test(value);
+}
+
+/**
+ * Last-resort generation: create a random secret, persist it into the
+ * PROJECT .env (never the cwd — build artifact dirs are wiped on rebuild)
+ * and adopt it for this process. Read-only filesystems degrade to an
+ * ephemeral per-process secret (stateless auth links reset on restart).
  */
 function persistAuthSecret(): string {
   const generated = randomBytes(32).toString('hex');
   try {
-    const envPath = path.join(process.cwd(), '.env');
-    let content = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
-    const line = new RegExp(`^AUTH_SECRET=.*$`, 'm');
-    if (line.test(content)) {
-      content = content.replace(line, `AUTH_SECRET=${generated}`);
-      writeFileSync(envPath, content);
-    } else {
-      if (content.length > 0 && !content.endsWith('\n')) content += '\n';
-      appendFileSync(envPath, `${content}AUTH_SECRET=${generated}\n`);
-    }
+    upsertEnvValue('AUTH_SECRET', generated);
     console.warn(
       '[auth] AUTH_SECRET was missing — generated a stable random secret and wrote it to .env. ' +
         'Set an explicit AUTH_SECRET via `openssl rand -hex 32` for production.',
@@ -77,11 +94,11 @@ function persistAuthSecret(): string {
  * Stateful-token signing secret. Hard-fails ONLY when NODE_ENV=production AND
  * PUBLISH_STRICT=1 (explicit operator opt-in) — a missing secret must never
  * crash the platform's publish/preview flow, so every other environment
- * self-heals: the secret is generated and persisted to .env on first use.
+ * self-heals without ever churning an existing value.
  */
 export function authSecret(): string {
-  const secret = process.env.AUTH_SECRET;
-  if (secret && secret.length >= 32) return secret;
+  const resolved = resolveAuthSecret();
+  if (resolved) return resolved;
   if (process.env.NODE_ENV === 'production' && process.env.PUBLISH_STRICT === '1') {
     throw new Error(
       'AUTH_SECRET is missing or too short (PUBLISH_STRICT=1). Generate one with `openssl rand -hex 32` and set it in the environment.',
