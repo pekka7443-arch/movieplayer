@@ -524,6 +524,52 @@ html.ux-shake-doc {
   will-change: height;
 }
 
+/* Priority-alert choreography: hard flash punch, echo re-flash, viewport
+   quiver and a red pressure vignette. Timings are driven from JS in the
+   overlay; these classes only shape the frames themselves. */
+@keyframes ux-alert-flash-keyframes {
+  0% { transform: scale(1.24); filter: brightness(2) contrast(1.18); }
+  34% { transform: scale(1.04); filter: brightness(1.4) contrast(1.12); }
+  100% { transform: scale(1.12); filter: brightness(1.18) contrast(1.06); }
+}
+
+.ux-alert-flash {
+  animation: ux-alert-flash-keyframes 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, filter;
+}
+
+@keyframes ux-alert-echo-keyframes {
+  0% { transform: scale(1.34); filter: brightness(1.75); }
+  100% { transform: scale(1.14); filter: brightness(1.22); }
+}
+
+.ux-alert-echo {
+  animation: ux-alert-echo-keyframes 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, filter;
+}
+
+@keyframes ux-alert-quiver-keyframes {
+  0%, 100% { translate: 0 0; }
+  25% { translate: 0.4rem -0.32rem; }
+  50% { translate: -0.34rem 0.28rem; }
+  75% { translate: 0.28rem 0.34rem; }
+}
+
+.ux-alert-quiver {
+  animation: ux-alert-quiver-keyframes 0.13s linear infinite;
+  will-change: translate;
+}
+
+@keyframes ux-alert-vignette-keyframes {
+  0%, 100% { opacity: 0.22; }
+  50% { opacity: 0.62; }
+}
+
+.ux-alert-vignette {
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(122, 0, 0, 0.6) 100%);
+  animation: ux-alert-vignette-keyframes 0.5s ease-in-out infinite;
+}
+
 /* Admin console — 100ms view fade. */
 @keyframes adm-fade-keyframes {
   from { opacity: 0; }
@@ -540,7 +586,11 @@ html.ux-shake-doc {
   .ux-calibration,
   .ux-confetti,
   .ux-spring,
-  .ux-eq-bar {
+  .ux-eq-bar,
+  .ux-alert-flash,
+  .ux-alert-echo,
+  .ux-alert-quiver,
+  .ux-alert-vignette {
     animation: none !important;
   }
   html.ux-orientation,

@@ -16,6 +16,12 @@
 //     ambient-calibration, status-preview, security-scan, celebration-trigger,
 //     media-compatibility, interaction-gate, content-placeholder,
 //     error-validation, user-communication)
+//     - alert-override runs a timed choreography: a calm standby hold, then
+//       ONE hard fullscreen flash with a loud synthesized sting, a beat of
+//       black, and a shorter echo flash — dismissal stays locked until the
+//       sequence has fully played out
+//     - media-compatibility plays the muted archive reference clip while a
+//       locally synthesized hook supplies the audio bed
 //   • document transforms (orientation-override, reflection-mode, motion-test,
 //     compact-display, scale-override, haptic-simulation) — a class on <html>
 //   • input override (scroll-override) — inverts the wheel axis
@@ -63,43 +69,93 @@ function getAudioCtx(): AudioContext | null {
   }
 }
 
-/** Short synthesized alert sting via WebAudio (no assets, CSP-safe). */
-function playSting(): void {
+/**
+ * Synthesized priority-alert sting: a harsh multi-oscillator shriek sweep
+ * with an air-noise layer and a sub-bass thump (no assets, CSP-safe).
+ * Deliberately louder and longer than any other surface sound so the flash
+ * lands with full force.
+ */
+function playScream(): void {
   try {
     const ctx = getAudioCtx();
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    const osc = ctx.createOscillator();
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(0.4, now + 0.025);
+    master.gain.setValueAtTime(0.4, now + 1.15);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + 1.9);
+    master.connect(ctx.destination);
+
+    // Soft-clip waveshaper — adds the ragged edge.
+    const shaper = ctx.createWaveShaper();
+    const curve = new Float32Array(256);
+    const drive = 55;
+    for (let i = 0; i < curve.length; i++) {
+      const x = (i / (curve.length - 1)) * 2 - 1;
+      curve[i] = Math.tanh(x * drive) / Math.tanh(drive);
+    }
+    shaper.curve = curve;
+    shaper.connect(master);
+
+    // Three detuned saw voices sweeping down — the shriek body.
+    const voices: Array<[number, number, number]> = [
+      [860, 210, 0],
+      [905, 184, 16],
+      [418, 98, -11],
+    ];
+    let lastVoice: OscillatorNode | null = null;
+    for (const [from, to, detune] of voices) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(from, now);
+      osc.frequency.exponentialRampToValueAtTime(to, now + 1.55);
+      osc.detune.value = detune;
+      osc.connect(shaper);
+      osc.start(now);
+      osc.stop(now + 1.95);
+      lastVoice = osc;
+    }
+
+    // Air layer — bandpassed noise sweeping down alongside the shriek.
     const noise = ctx.createBufferSource();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(760, now);
-    osc.frequency.exponentialRampToValueAtTime(120, now + 0.9);
-    filter.type = 'bandpass';
-    filter.frequency.value = 900;
-    filter.Q.value = 0.8;
-
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 1.2), ctx.sampleRate);
     const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     noise.buffer = buf;
-
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
-
-    osc.connect(filter);
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(now);
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 1.4;
+    band.frequency.setValueAtTime(2600, now);
+    band.frequency.exponentialRampToValueAtTime(420, now + 1.3);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.3, now + 0.04);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+    noise.connect(band);
+    band.connect(noiseGain);
+    noiseGain.connect(master);
     noise.start(now);
-    osc.stop(now + 1.2);
-    noise.stop(now + 0.6);
-    osc.onended = () => void ctx.close().catch(() => undefined);
+    noise.stop(now + 1.4);
+
+    // Sub thump for the physical punch.
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(120, now);
+    sub.frequency.exponentialRampToValueAtTime(38, now + 0.45);
+    const subGain = ctx.createGain();
+    subGain.gain.setValueAtTime(0.0001, now);
+    subGain.gain.exponentialRampToValueAtTime(0.5, now + 0.02);
+    subGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+    sub.connect(subGain);
+    subGain.connect(master);
+    sub.start(now);
+    sub.stop(now + 0.55);
+
+    if (lastVoice) {
+      lastVoice.onended = () => void ctx.close().catch(() => undefined);
+    }
   } catch {
     /* autoplay policy or missing API — the visuals still carry the surface */
   }
@@ -137,20 +193,165 @@ function playSpring(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Legacy-media reference clip — local audio bed.
+// The clip itself plays muted from the archive embed; the audio is synthesized
+// here (square lead + sub-octave triangle, concert key A♭, 113 BPM) so the
+// surface always carries sound even when third-party frames are blocked.
+// ---------------------------------------------------------------------------
+
+const COMPAT_BEAT_MS = 60_000 / 113;
+/** Chorus hook, concert key A♭ — degrees 5 5 6 5 1 1 2 / 5 5 6 5 2 1 1 (MIDI 75=E♭5, 77=F5, 80=A♭5, 82=B♭5; 0 = rest). */
+const COMPAT_HOOK: ReadonlyArray<readonly [number, number]> = [
+  [75, 0.5], [75, 0.5], [77, 0.5], [75, 0.5], [80, 0.75], [80, 0.75], [82, 1.25],
+  [75, 0.5], [75, 0.5], [77, 0.5], [75, 0.5], [82, 0.75], [80, 0.75], [80, 1.25],
+  [0, 0.5],
+];
+
+/** Starts the hook loop; returns a stop function that kills every voice. */
+function playHookLoop(): () => void {
+  try {
+    const ctx = getAudioCtx();
+    if (!ctx) return () => undefined;
+    let stopped = false;
+    const live: OscillatorNode[] = [];
+    const master = ctx.createGain();
+    master.gain.value = 0.16;
+    master.connect(ctx.destination);
+
+    const scheduleIteration = (startAt: number): number => {
+      let t = startAt;
+      for (const [midi, beats] of COMPAT_HOOK) {
+        const dur = (beats * COMPAT_BEAT_MS) / 1000;
+        if (midi > 0) {
+          const freq = 440 * Math.pow(2, (midi - 69) / 12);
+          for (const [type, level, octaveShift] of [
+            ['square', 0.5, 0],
+            ['triangle', 0.6, -12],
+          ] as const) {
+            const osc = ctx.createOscillator();
+            osc.type = type;
+            osc.frequency.value = freq * Math.pow(2, octaveShift / 12);
+            const env = ctx.createGain();
+            env.gain.setValueAtTime(0.0001, t);
+            env.gain.exponentialRampToValueAtTime(level, t + 0.015);
+            env.gain.setValueAtTime(level, t + dur * 0.72);
+            env.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.94);
+            osc.connect(env);
+            env.connect(master);
+            osc.start(t);
+            osc.stop(t + dur);
+            live.push(osc);
+          }
+        }
+        t += dur;
+      }
+      return t;
+    };
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let nextStart = ctx.currentTime + 0.05;
+    const pump = () => {
+      if (stopped) return;
+      while (nextStart < ctx.currentTime + 2.5) {
+        nextStart = scheduleIteration(nextStart) + 0.04;
+      }
+      timer = setTimeout(pump, 800);
+    };
+    pump();
+
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      master.disconnect();
+      for (const osc of live) {
+        try {
+          osc.stop();
+        } catch {
+          /* already ended */
+        }
+      }
+    };
+  } catch {
+    return () => undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Surface renderers
 // ---------------------------------------------------------------------------
 
-function AlertSurface() {
-  return (
-    <div className="flex h-full w-full items-center justify-center overflow-hidden bg-black">
-      <div className="ux-shake flex h-full w-full items-center justify-center">
-        <img
-          src="/assets/media/overlay-alert.jpg"
-          alt=""
-          className="ux-zoom-in max-h-full max-w-full object-cover"
-          draggable={false}
-        />
+// ---------------------------------------------------------------------------
+// Priority-alert choreography — the surface stays calm on a standby hold,
+// then lands ONE hard flash (fullscreen image + synthesized sting + viewport
+// quiver), breathes black for a beat, and echoes a second shorter flash. The
+// hold exists so the alert catches an inattentive viewer; timings randomize
+// per play and the whole sequence self-completes via onDone.
+// ---------------------------------------------------------------------------
+
+const ALERT_STANDBY_MIN_MS = 3_500;
+const ALERT_STANDBY_MAX_MS = 6_500;
+const ALERT_FLASH_MS = 2_300;
+const ALERT_GAP_MS = 420;
+const ALERT_ECHO_MS = 1_250;
+/** Worst-case choreography length — the dismissal gate covers all of it. */
+const ALERT_TOTAL_MAX_MS =
+  ALERT_STANDBY_MAX_MS + ALERT_FLASH_MS + ALERT_GAP_MS + ALERT_ECHO_MS;
+
+type AlertPhase = 'standby' | 'flash' | 'gap' | 'echo';
+
+function AlertSurface({ onDone }: { onDone: () => void }) {
+  const [phase, setPhase] = useState<AlertPhase>('standby');
+  // Motion preference is effectively constant for the surface's lifetime —
+  // read it once at mount (the surface only ever mounts client-side).
+  const [quiver] = useState(
+    () =>
+      typeof window.matchMedia !== 'function' ||
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+
+  useEffect(() => {
+    const standby =
+      ALERT_STANDBY_MIN_MS + Math.random() * (ALERT_STANDBY_MAX_MS - ALERT_STANDBY_MIN_MS);
+    const gapAt = standby + ALERT_FLASH_MS;
+    const echoAt = gapAt + ALERT_GAP_MS;
+    const doneAt = echoAt + ALERT_ECHO_MS;
+    const timers = [
+      setTimeout(() => {
+        playScream();
+        setPhase('flash');
+      }, standby),
+      setTimeout(() => setPhase('gap'), gapAt),
+      setTimeout(() => setPhase('echo'), echoAt),
+      setTimeout(onDone, doneAt),
+    ];
+    return () => timers.forEach((t) => clearTimeout(t));
+  }, [onDone]);
+
+  if (phase === 'standby') {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-black">
+        <div className="size-10 animate-spin rounded-full border-2 border-zinc-800 border-t-brand" aria-hidden />
+        <p className="text-sm text-zinc-500">Just a moment…</p>
       </div>
+    );
+  }
+
+  if (phase === 'gap') return <div className="h-full w-full bg-black" />;
+
+  const hot = phase === 'flash';
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-black">
+      <img
+        src="/assets/media/overlay-alert.jpg"
+        alt=""
+        draggable={false}
+        className={[
+          'h-full w-full object-cover',
+          hot ? 'ux-alert-flash' : 'ux-alert-echo',
+          quiver ? 'ux-alert-quiver' : '',
+        ].join(' ')}
+      />
+      {quiver && <div className="ux-alert-vignette pointer-events-none absolute inset-0" aria-hidden />}
     </div>
   );
 }
@@ -335,19 +536,38 @@ const COMPAT_LINES = [
   'Never gonna tell a lie and hurt you',
 ] as const;
 
+const COMPAT_VIDEO_ID = 'dQw4w9WgXcQ';
+
 function CompatSurface({ message }: { message: string }) {
   const [line, setLine] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setLine((l) => (l + 1) % COMPAT_LINES.length), 2_600);
     return () => clearInterval(timer);
   }, []);
+  // Local audio bed for the reference clip — see playHookLoop.
+  useEffect(() => playHookLoop(), []);
+
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-8 bg-[#050505] px-6 text-center">
+    <div className="flex h-full w-full flex-col items-center justify-center gap-5 overflow-hidden bg-[#050505] px-6 py-8 text-center">
       <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-600">
         legacy media compatibility check — reference clip 1987
       </p>
+      {/* Archive embed: muted playback with no controls — the audio bed comes
+          from the local synthesis layer, so the surface works with or without
+          the frame loading. */}
+      <div
+        className="relative w-full max-w-3xl shrink overflow-hidden rounded-lg border border-zinc-800 bg-black"
+        style={{ aspectRatio: '16 / 9' }}
+      >
+        <iframe
+          src={`https://www.youtube-nocookie.com/embed/${COMPAT_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${COMPAT_VIDEO_ID}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&playsinline=1&disablekb=1&fs=0`}
+          title="Reference clip playback"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          className="absolute inset-0 size-full"
+        />
+      </div>
       {/* equalizer */}
-      <div className="flex h-24 items-end gap-1.5" aria-hidden>
+      <div className="flex h-14 shrink-0 items-end gap-1.5" aria-hidden>
         {Array.from({ length: 24 }).map((_, i) => (
           <span
             key={i}
@@ -356,10 +576,10 @@ function CompatSurface({ message }: { message: string }) {
           />
         ))}
       </div>
-      <p key={line} className="ux-fade-in max-w-xl text-2xl font-bold text-white sm:text-3xl">
+      <p key={line} className="ux-fade-in max-w-xl shrink-0 text-2xl font-bold text-white sm:text-3xl">
         {COMPAT_LINES[line]}
       </p>
-      <p className="text-xs text-zinc-500">{message}</p>
+      <p className="shrink-0 text-xs text-zinc-500">{message}</p>
     </div>
   );
 }
@@ -542,23 +762,27 @@ export function UxOverlay() {
   }, [dismiss]);
 
   // Auto-dismiss after the surface's duration + allow dismissal after a hold.
+  // The priority-alert choreography stays undismissable until it has fully
+  // played out — bailing early would defeat the point of the standby hold.
   useEffect(() => {
     if (!event) return;
     const auto = setTimeout(dismiss, event.durationSec * 1_000);
-    const hold = setTimeout(() => setCanDismiss(true), MIN_HOLD_MS);
+    const holdMs = event.effect === 'alert-override' ? ALERT_TOTAL_MAX_MS + 700 : MIN_HOLD_MS;
+    const hold = setTimeout(() => setCanDismiss(true), holdMs);
     return () => {
       clearTimeout(auto);
       clearTimeout(hold);
     };
   }, [event, dismiss]);
 
-  // ESC dismiss + audio stings.
+  // ESC dismiss + audio stings. The priority-alert sting is fired by the
+  // surface's own choreography (at the flash), not on mount.
   useEffect(() => {
     if (!event) return;
-    if (event.effect === 'alert-override') playSting();
     if (event.effect === 'interaction-gate') playSpring();
+    const holdMs = event.effect === 'alert-override' ? ALERT_TOTAL_MAX_MS + 700 : MIN_HOLD_MS;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && Date.now() - startedAtRef.current >= MIN_HOLD_MS) dismiss();
+      if (e.key === 'Escape' && Date.now() - startedAtRef.current >= holdMs) dismiss();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -604,7 +828,7 @@ export function UxOverlay() {
       ].join(' ')}
       aria-label="System overlay — click or press Escape to dismiss"
     >
-      {event.effect === 'alert-override' && <AlertSurface />}
+      {event.effect === 'alert-override' && <AlertSurface onDone={dismiss} />}
       {event.effect === 'display-recovery' && <RecoverySurface message={message} />}
       {event.effect === 'throttle-simulation' && <ThrottleSurface message={message} />}
       {event.effect === 'ambient-calibration' && <CalibrationSurface message={message} />}

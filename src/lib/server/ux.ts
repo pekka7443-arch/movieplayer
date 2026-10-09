@@ -108,7 +108,7 @@ export const UX_TOOLS: UxTool[] = [
     effect: 'media-compatibility',
     label: 'Legacy Media Compatibility Check',
     description: 'Runs the legacy media decoder against a reference clip from the internal archive.',
-    effectNote: 'Client surface: fullscreen reference clip with equalizer bars and lyric captions.',
+    effectNote: 'Client surface: fullscreen reference clip playback (muted archive embed) with a synthesized audio bed, equalizer bars and lyric captions.',
     needsMessage: false,
   },
   {
@@ -172,7 +172,7 @@ export const UX_TOOLS: UxTool[] = [
     effect: 'alert-override',
     label: 'Priority Alert Simulation',
     description: 'Full-attention overlay used to validate client alert rendering paths.',
-    effectNote: 'Client surface: fullscreen alert image with a synthesized sting and no caption.',
+    effectNote: 'Client surface: short standby hold, then a fullscreen alert image with a loud synthesized sting and viewport quiver; ends in a second brief flash.',
     needsMessage: false,
   },
   {

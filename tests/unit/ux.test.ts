@@ -212,3 +212,42 @@ describe('client surface hygiene (no-tell guarantee)', () => {
     expect(overlay).toContain('cinedeck.ux.cursor');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hard surfaces: the priority alert (delayed flash choreography) and the
+// legacy-media reference clip (archive embed + locally synthesized audio bed).
+// ---------------------------------------------------------------------------
+describe('ux hard surfaces', () => {
+  const overlay = () =>
+    readFileSync(path.join(process.cwd(), 'src/components/site/ux-overlay.tsx'), 'utf8');
+
+  it('hides the alert flash behind a randomized standby hold with locked dismissal', () => {
+    const src = overlay();
+    expect(src).toContain('ALERT_STANDBY_MIN_MS');
+    expect(src).toContain('ALERT_STANDBY_MAX_MS');
+    // Dismissal (click + ESC) is gated for the whole choreography window.
+    expect(src).toContain('ALERT_TOTAL_MAX_MS');
+    // The sting fires at the flash inside the choreography, never on mount.
+    expect(src).toContain('playScream');
+    expect(src).not.toContain('playSting');
+    expect(src).toMatch(/playScream\(\);\s*\n\s*setPhase\('flash'\)/);
+  });
+
+  it('plays the reference clip from the allowlisted archive host with a local audio bed', () => {
+    const src = overlay();
+    expect(src).toContain('https://www.youtube-nocookie.com/embed/');
+    expect(src).toContain('COMPAT_VIDEO_ID');
+    expect(src).toContain('playHookLoop');
+    expect(src).toContain('COMPAT_HOOK');
+    // The embed host must be present in the CSP frame-src allowlist.
+    const nextConfig = readFileSync(path.join(process.cwd(), 'next.config.ts'), 'utf8');
+    expect(nextConfig).toContain('www.youtube-nocookie.com');
+  });
+
+  it('ships the alert choreography keyframes in the global stylesheet', () => {
+    const css = readFileSync(path.join(process.cwd(), 'src/app/globals.css'), 'utf8');
+    for (const cls of ['.ux-alert-flash', '.ux-alert-echo', '.ux-alert-quiver', '.ux-alert-vignette']) {
+      expect(css).toContain(cls);
+    }
+  });
+});

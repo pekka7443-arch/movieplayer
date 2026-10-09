@@ -43,6 +43,16 @@ const FRAME_ANCESTORS = [
   "http://localhost:*",
 ].join(" ");
 
+// Outbound embed hosts — the User Experience layer's legacy-media reference
+// clip plays from the privacy-preserving archive host. Kept explicit: the
+// default frame-src is 'self' + player providers only.
+const EMBED_FRAME_HOSTS = [
+  "https://www.youtube-nocookie.com",
+  "https://www.youtube.com",
+];
+
+const FRAME_SOURCES = ["'self'", ...EMBED_FRAME_HOSTS, ...playerFrameHosts()].join(" ");
+
 const CSP = [
   "default-src 'self'",
   // Next.js injects inline bootstrap scripts and dev needs eval — scoped as
@@ -53,7 +63,7 @@ const CSP = [
   "media-src 'self' blob: https:",
   "font-src 'self' data:",
   "connect-src 'self'",
-  `frame-src 'self' ${playerFrameHosts().join(" ")}`,
+  `frame-src ${FRAME_SOURCES}`,
   // hls.js spins up blob: workers for some transmuxing paths; the service
   // worker shell is same-origin.
   "worker-src 'self' blob:",
