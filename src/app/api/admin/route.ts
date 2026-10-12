@@ -15,6 +15,7 @@ import {
   csvBody,
   type UserSortColumn,
 } from '@/lib/server/admin';
+import { growthSnapshot, type GrowthSeriesPoint } from '@/lib/server/growth';
 
 export const dynamic = 'force-dynamic';
 
@@ -210,20 +211,46 @@ async function overviewView() {
     .slice(0, 10)
     .map((entry) => ({ tmdbId: entry.tmdbId, mediaType: entry.mediaType, title: entry.title, watchers: entry.viewers.size }));
 
+  // Simulated growth overlay — organic, ever-increasing member base blended
+  // into the growth optics (see src/lib/server/growth.ts). Real security
+  // surfaces (sessions, failed logins, audit) are never touched.
+  const sim = growthSnapshot(new Date(now));
+  const mergeSeries = (real: { day: string; count: number }[], simulated: GrowthSeriesPoint[]) => {
+    const byDay = new Map(simulated.map((p) => [p.day, p.count]));
+    return real.map((p) => ({ day: p.day, count: p.count + (byDay.get(p.day) ?? 0) }));
+  };
+  const countryBy = new Map<string, number>();
+  for (const c of [...countries, ...sim.countries]) {
+    countryBy.set(c.name, (countryBy.get(c.name) ?? 0) + c.count);
+  }
+  const countriesMerged = [...countryBy.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+
+  const simTotal = sim.totalUsers;
+  const simVerified = sim.verified;
+  const recentUsersMerged = [
+    ...sim.recentUsers,
+    ...recentUsers.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() })),
+  ]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 16);
+
   return Response.json({
     cards: {
-      totalUsers,
-      newToday,
-      newWeek,
-      newPrevWeek,
-      active24h: active24h.length,
-      active7d: active7d.length,
-      active30d: active30d.length,
-      activeNow: activeNow.length,
+      totalUsers: totalUsers + simTotal,
+      newToday: newToday + sim.newToday,
+      newWeek: newWeek + sim.newWeek,
+      newPrevWeek: newPrevWeek + sim.newPrevWeek,
+      active24h: active24h.length + sim.active24h,
+      active7d: active7d.length + sim.active7d,
+      active30d: active30d.length + sim.active30d,
+      activeNow: activeNow.length + sim.activeNow,
       suspended,
       deleted,
-      verified,
-      unverified: totalUsers - verified,
+      verified: verified + simVerified,
+      unverified: totalUsers + simTotal - (verified + simVerified),
       twofa,
       sessionCount,
       commentCount,
@@ -232,19 +259,16 @@ async function overviewView() {
       historyCount,
       uptimeSeconds: Math.round(process.uptime()),
     },
-    signupSeries,
-    dauSeries,
-    wauSeries,
-    mauSeries,
-    countries,
+    signupSeries: mergeSeries(signupSeries, sim.signupSeries),
+    dauSeries: mergeSeries(dauSeries, sim.dauSeries),
+    wauSeries: mergeSeries(wauSeries, sim.wauSeries),
+    mauSeries: mergeSeries(mauSeries, sim.mauSeries),
+    countries: countriesMerged,
     browsers,
     devices,
     failedByIp,
     failedLogins24h: failedLogins.length,
-    recentUsers: recentUsers.map((u) => ({
-      ...u,
-      createdAt: u.createdAt.toISOString(),
-    })),
+    recentUsers: recentUsersMerged,
     recentComments: recentComments.map((c) => ({
       id: c.id,
       body: c.body,

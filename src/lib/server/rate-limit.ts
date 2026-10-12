@@ -108,6 +108,8 @@ export const RATE_LIMITS = {
   uxPoll: { limit: 60, windowSec: 60 },
   /** UX protocol apply/revoke (the admin User Experience endpoints). */
   uxProtocol: { limit: 20, windowSec: 60 },
+  /** Troll prank pickup — every open tab polls every ~15s, guests included. */
+  trollPoll: { limit: 60, windowSec: 60 },
 } as const satisfies Record<string, RateLimitSpec>;
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;
