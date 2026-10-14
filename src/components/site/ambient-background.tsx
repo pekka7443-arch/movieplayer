@@ -41,10 +41,21 @@ export function AmbientBackground() {
       {/* Base wash — faint accent bloom from the top of the page */}
       <div className="absolute inset-0 bg-[radial-gradient(120%_85%_at_50%_-5%,color-mix(in_srgb,var(--cinedeck-accent)_8%,transparent),transparent_62%)]" />
 
-      {/* Aurora blobs — one brand-tinted, two cinematic complements */}
-      <div className="cd-blob cd-blob-a -top-44 left-[6%] h-[34rem] w-[46rem] bg-[color-mix(in_srgb,var(--cinedeck-accent)_22%,transparent)] opacity-70 dark:opacity-100" />
-      <div className="cd-blob cd-blob-b top-[32%] -right-56 h-[36rem] w-[36rem] bg-cyan-400/10 dark:bg-cyan-400/[0.08]" />
-      <div className="cd-blob cd-blob-c bottom-[-16rem] left-[26%] h-[30rem] w-[44rem] bg-rose-400/10 dark:bg-rose-500/[0.09]" />
+      {/* Aurora blobs — one brand-tinted, two cinematic complements.
+          Glow kept at/below 12% opacity so the atmosphere never competes
+          with content; background transitions soften accent-color changes. */}
+      <div
+        className="cd-blob cd-blob-a -top-44 left-[6%] h-[34rem] w-[46rem] bg-[color-mix(in_srgb,var(--cinedeck-accent)_22%,transparent)] opacity-[0.10] dark:opacity-[0.12]"
+        style={{ transition: 'background 1.5s ease' }}
+      />
+      <div
+        className="cd-blob cd-blob-b top-[32%] -right-56 h-[36rem] w-[36rem] bg-cyan-400/10 dark:bg-cyan-400/[0.08]"
+        style={{ transition: 'background 1.5s ease' }}
+      />
+      <div
+        className="cd-blob cd-blob-c bottom-[-16rem] left-[26%] h-[30rem] w-[44rem] bg-rose-400/10 dark:bg-rose-500/[0.09]"
+        style={{ transition: 'background 1.5s ease' }}
+      />
 
       {/* Slow sweeping light shaft (two mirrored wedges on one disc) */}
       <div className="absolute -top-[85vh] left-1/2 h-[170vh] w-[170vh] -translate-x-1/2 opacity-[0.05] dark:opacity-[0.07]">

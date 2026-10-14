@@ -96,9 +96,9 @@ function SectionHeading({
   // Section heading: small accent vertical bar + bold tracking-tight title,
   // optional "See all" affordance on the right edge.
   return (
-    <div className="mb-3 flex flex-wrap items-baseline gap-2.5">
-      <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900 md:text-2xl dark:text-zinc-100">
-        <span className="h-4 w-1 rounded-full bg-brand md:h-5" aria-hidden />
+    <div className="mb-2 flex flex-wrap items-baseline gap-2.5">
+      <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-zinc-900 md:text-xl dark:text-zinc-100">
+        <span className="h-3.5 w-1 rounded-full bg-brand md:h-4" aria-hidden />
         <Icon className="size-5 text-brand" aria-hidden />
         {title}
       </h2>
@@ -124,7 +124,7 @@ function RowSkeletonStripe() {
     <div className="flex gap-3 overflow-hidden sm:gap-4">
       {Array.from({ length: 10 }).map((_, i) => (
         <div key={i} className="w-[130px] shrink-0 sm:w-[160px] md:w-[180px]">
-          <Skeleton className="cd-shimmer aspect-[2/3] w-full rounded-lg bg-zinc-200 dark:bg-zinc-900" />
+          <Skeleton className="animate-shimmer aspect-[2/3] w-full rounded-lg bg-zinc-200 dark:bg-zinc-900" />
         </div>
       ))}
     </div>
@@ -184,6 +184,7 @@ function LazySection({
   label: string;
   children: ReactNode;
 }) {
+  const reduceMotion = useReducedMotion();
   const ref = useRef<HTMLElement | null>(null);
   const [visible, setVisible] = useState(false);
 
@@ -208,7 +209,17 @@ function LazySection({
 
   return (
     <section ref={ref} id={id} aria-label={label} aria-busy={!visible}>
-      {visible ? children : <RowSkeletonStripe />}
+      {visible ? (
+        <motion.div
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.4, ease: 'easeOut' }}
+        >
+          {children}
+        </motion.div>
+      ) : (
+        <RowSkeletonStripe />
+      )}
     </section>
   );
 }
@@ -979,7 +990,7 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
   };
 
   return (
-    <div className="space-y-8 sm:space-y-10">
+    <div className="space-y-7 md:space-y-10">
       <HeroSection
         trending={filteredTrending}
         trendingLoading={trendingQuery.isPending}
@@ -1047,7 +1058,7 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
           type="button"
           id="sports-teaser"
           onClick={() => router.push('/?view=sports', { scroll: false })}
-          className="group relative flex w-full items-center gap-3.5 overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 px-4 py-3 text-left transition-all duration-300 hover:border-brand/40 hover:shadow-[0_16px_44px_-14px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-zinc-800 dark:bg-zinc-900/60"
+          className="group relative flex w-full items-center gap-3.5 overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 px-4 py-3 text-left transition-all duration-300 hover:border-brand/40 hover:shadow-[0_16px_44px_-14px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 md:py-4 dark:border-zinc-800 dark:bg-zinc-900/60"
         >
           <span
             aria-hidden
@@ -1058,14 +1069,14 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
             <Trophy className="size-4.5 text-brand" aria-hidden />
           </span>
           <span className="min-w-0">
-            <span className="flex items-center gap-2 text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+            <span className="flex items-center gap-2 text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
               <span className="relative flex size-2" aria-hidden>
                 <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-70" />
                 <span className="relative inline-flex size-2 rounded-full bg-red-500" />
               </span>
               Live Sports
             </span>
-            <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">
               Live scores, schedules, replays &amp; 280+ free sports TV channels — keyless.
             </span>
           </span>
@@ -1091,7 +1102,7 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
           <div className="flex gap-3 overflow-hidden sm:gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="w-32 shrink-0 sm:w-36">
-                <Skeleton className="cd-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+                <Skeleton className="animate-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
               </div>
             ))}
           </div>
@@ -1127,7 +1138,7 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
           <div className="flex gap-3 overflow-hidden sm:gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="w-32 shrink-0 sm:w-36">
-                <Skeleton className="cd-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+                <Skeleton className="animate-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
               </div>
             ))}
           </div>

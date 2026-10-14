@@ -7,6 +7,7 @@ import { CalendarDays, Pencil, Star, UserCheck, UserPlus, Users } from 'lucide-r
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { MotionButton } from '@/components/ui/motion-button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -238,7 +239,7 @@ export function PublicProfileView({ username }: { username: string }) {
                 Edit profile
               </Button>
             ) : (
-              <Button
+              <MotionButton
                 type="button"
                 onClick={toggleFollow}
                 disabled={busy}
@@ -256,7 +257,7 @@ export function PublicProfileView({ username }: { username: string }) {
                     Follow
                   </>
                 )}
-              </Button>
+              </MotionButton>
             )}
           </div>
         </div>

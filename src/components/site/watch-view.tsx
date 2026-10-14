@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { BookmarkCheck, BookmarkPlus, ChevronLeft, ExternalLink, Globe, Play, Search, Share2, Star, Tv } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { MotionButton } from '@/components/ui/motion-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import Image from 'next/image';
 import { PlayerSection } from '@/components/site/player-section';
@@ -276,22 +277,22 @@ export function WatchView({
                 </div>
               )}
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <Button
+                <MotionButton
                   type="button"
                   onClick={scrollToPlayer}
-                  className="h-11 rounded-lg bg-brand px-6 text-sm font-semibold text-white shadow-[0_8px_30px_-6px_rgba(229,9,20,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-brand/90 active:scale-[0.97]"
+                  className="h-11 rounded-lg bg-brand px-6 text-sm font-semibold text-white shadow-[0_8px_30px_-6px_rgba(229,9,20,0.55)] transition-colors duration-200 hover:bg-brand/90"
                 >
                   <Play className="size-4 fill-white" aria-hidden />
                   Play
-                </Button>
+                </MotionButton>
                 {tmdbId !== undefined && (
-                  <Button
+                  <MotionButton
                     type="button"
                     variant="outline"
                     onClick={onToggleSave}
                     disabled={toggleWatchlist.isPending}
                     aria-pressed={savedToList}
-                    className="h-11 gap-1.5 rounded-lg border-white/25 bg-white/10 px-5 text-sm font-medium text-white backdrop-blur-md transition-all duration-200 hover:border-white/40 hover:bg-white/20"
+                    className="h-11 gap-1.5 rounded-lg border-white/25 bg-white/10 px-5 text-sm font-medium text-white backdrop-blur-md transition-colors duration-200 hover:border-white/40 hover:bg-white/20"
                   >
                     {savedToList ? (
                       <BookmarkCheck className="size-4" aria-hidden />
@@ -299,7 +300,7 @@ export function WatchView({
                       <BookmarkPlus className="size-4" aria-hidden />
                     )}
                     {savedToList ? 'In My List' : 'My List'}
-                  </Button>
+                  </MotionButton>
                 )}
                 <Button
                   type="button"

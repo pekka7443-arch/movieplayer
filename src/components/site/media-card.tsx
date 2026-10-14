@@ -1,6 +1,7 @@
 'use client';
 
-import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
+import { useState } from 'react';
+import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Check, Film, Lock, Play, Plus, Star, Tv } from 'lucide-react';
@@ -115,6 +116,12 @@ export function MediaCard({
   );
   const inList = Boolean(existingRow);
 
+  // Desktop hover drives the gradient overlay through AnimatePresence (mount
+  // on hover → fade in, unmount → fade out). Framer hover gestures fire for
+  // touch taps too, but the animated layer is md-only so touch never sees it.
+  const [hovered, setHovered] = useState(false);
+  const overlayTransition = { duration: reduceMotion ? 0 : 0.18 };
+
   const quickAdd = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -153,6 +160,8 @@ export function MediaCard({
       style={{ rotateX: tiltX, rotateY: tiltY, transformPerspective: 750 }}
       onPointerMove={onPointerMove}
       onPointerLeave={resetTilt}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
       disabled={!watchTarget}
       onClick={() => watchTarget && router.push(watchTarget, { scroll: false })}
       // No aria-label on purpose: the visible text (title + year + rating in
@@ -161,6 +170,13 @@ export function MediaCard({
       className="group relative block w-[130px] shrink-0 snap-start rounded-lg text-left focus-visible:outline-none disabled:cursor-not-allowed sm:w-[160px] md:w-[180px]"
     >
       <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-all duration-300 group-hover:border-brand/50 group-hover:shadow-[0_16px_40px_-10px_rgba(0,0,0,0.55)] group-focus-visible:border-brand/60">
+        {/* Poster rides in a zoom-on-hover frame — the parent card's hover
+            gesture propagates down as the "hover" variant. */}
+        <motion.span
+          variants={{ hover: { scale: 1.06 } }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.3, ease: 'easeOut' }}
+          className="block size-full overflow-hidden rounded-lg"
+        >
         {poster ? (
           // TMDB posters (posterPath) run through next/image optimization;
           // third-party URLs (Cinemeta's Amazon CDN etc.) use a plain <img>
@@ -198,6 +214,28 @@ export function MediaCard({
             </span>
           </span>
         )}
+        </motion.span>
+
+        {/* Touch: static gradient — no hover to rely on. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-t from-black/95 via-black/45 to-transparent md:hidden"
+        />
+
+        {/* Desktop: the hover overlay fades in/out through AnimatePresence. */}
+        <AnimatePresence initial={false}>
+          {hovered && (
+            <motion.span
+              key="hover-overlay"
+              aria-hidden
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={overlayTransition}
+              className="pointer-events-none absolute inset-0 z-[5] hidden rounded-lg bg-gradient-to-t from-black/95 via-black/45 to-transparent md:block"
+            />
+          )}
+        </AnimatePresence>
 
         {/* Quick-add-to-list — top right, fades in with the overlay
             (always visible on touch where there is no hover). */}
@@ -245,25 +283,39 @@ export function MediaCard({
           </span>
         </span>
 
-        {/* Watched / rated badges — bottom-left, tiny, only when present. */}
+        {/* Watched / rated badges — bottom-left, spring in when they appear. */}
         {(ratingRow?.watched || ratingRow?.score != null) && (
           <span className="absolute bottom-1.5 right-1.5 z-10 flex items-center gap-1">
             {ratingRow?.watched && (
-              <span
+              <motion.span
                 aria-label="Watched"
                 title="Watched"
+                initial={reduceMotion ? { opacity: 0 } : { scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={
+                  reduceMotion
+                    ? { duration: 0 }
+                    : { type: 'spring', stiffness: 400, damping: 20 }
+                }
                 className="flex size-4.5 items-center justify-center rounded-full bg-emerald-500 text-white shadow"
               >
                 <Check className="size-2.5" aria-hidden />
-              </span>
+              </motion.span>
             )}
             {ratingRow?.score != null && (
-              <span
+              <motion.span
                 title={`You rated this ${ratingRow.score}/10`}
+                initial={reduceMotion ? { opacity: 0 } : { scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={
+                  reduceMotion
+                    ? { duration: 0 }
+                    : { type: 'spring', stiffness: 400, damping: 20 }
+                }
                 className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-brand px-1 text-[9px] font-bold text-white shadow"
               >
                 {ratingRow.score}
-              </span>
+              </motion.span>
             )}
           </span>
         )}
@@ -272,8 +324,7 @@ export function MediaCard({
         <span aria-hidden className="cd-shine rounded-lg" />
 
         {/* Bottom gradient + title overlay — everything lives here, no text
-            below the card. Always visible on touch, fades in on desktop. */}
-        <span className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-t from-black/95 via-black/45 to-transparent transition-opacity duration-300 opacity-100 md:opacity-0 md:group-hover:opacity-100" />
+            below the card. */}
         <span className="absolute inset-x-0 bottom-0 p-2.5 md:p-3">
           <span className="block line-clamp-2 text-sm font-semibold leading-snug text-white drop-shadow md:text-lg">
             {item.title}
@@ -304,7 +355,7 @@ export function MediaCard({
 export function MediaCardSkeleton() {
   return (
     <div aria-hidden className="w-[130px] shrink-0 sm:w-[160px] md:w-[180px]">
-      <div className="cd-shimmer aspect-[2/3] w-full animate-pulse rounded-lg border border-border bg-muted" />
+      <div className="animate-shimmer aspect-[2/3] w-full rounded-lg border border-border bg-muted" />
     </div>
   );
 }

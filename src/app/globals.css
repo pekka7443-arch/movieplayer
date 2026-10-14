@@ -269,37 +269,34 @@ html {
   animation: cd-gradient-pan 7s linear infinite;
 }
 
-/* ---- Shimmer sweep for skeletons ----------------------------------------- */
-@keyframes cd-shimmer-slide {
-  to {
-    transform: translateX(100%);
+/* ---- Shimmer sweep for skeletons (background-position drift) ------------- */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
   }
 }
-.cd-shimmer {
-  position: relative;
-  overflow: hidden;
-}
-.cd-shimmer::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
+.animate-shimmer {
+  background-image: linear-gradient(
     90deg,
     transparent,
     rgba(255, 255, 255, 0.07) 45%,
-    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.14) 50%,
     rgba(255, 255, 255, 0.07) 55%,
     transparent
   );
-  animation: cd-shimmer-slide 1.7s ease-in-out infinite;
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.8s linear infinite;
 }
-:not(.dark) .cd-shimmer::after {
-  background: linear-gradient(
+:not(.dark) .animate-shimmer {
+  background-image: linear-gradient(
     90deg,
     transparent,
     rgba(0, 0, 0, 0.03) 45%,
-    rgba(0, 0, 0, 0.06) 50%,
+    rgba(0, 0, 0, 0.07) 50%,
     rgba(0, 0, 0, 0.03) 55%,
     transparent
   );
@@ -372,7 +369,7 @@ html {
   .cd-gradient-text,
   .cd-pulse,
   .cd-shine,
-  .cd-shimmer::after {
+  .animate-shimmer {
     animation: none !important;
     transition: none !important;
   }

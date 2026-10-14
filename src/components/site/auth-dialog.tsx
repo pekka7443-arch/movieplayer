@@ -301,6 +301,12 @@ export function AuthDialog() {
       <DialogContent
         className="max-w-md gap-0 overflow-hidden rounded-2xl border-zinc-200 bg-zinc-50 p-0 dark:border-zinc-800/80 dark:bg-zinc-950"
       >
+        {/* Dialog entrance — subtle scale-settle; opacity-only under reduced motion. */}
+        <motion.div
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+          transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
+        >
         {/* Brand band */}
         <div className="relative border-b border-zinc-200 bg-white/70 px-6 pb-5 pt-6 dark:border-zinc-800/80 dark:bg-zinc-900/40">
           <div
@@ -637,6 +643,7 @@ export function AuthDialog() {
             </Button>
           </div>
         )}
+        </motion.div>
       </DialogContent>
     </Dialog>
   );

@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Home, Search, ListVideo, UserRound } from 'lucide-react';
 
 import { useUiStrings } from '@/lib/ui-strings';
@@ -12,10 +13,13 @@ import { useCinedeckStore } from '@/lib/store';
  * thumb reach: Home, Search, My List, Profile. Fixed, blurred, safe-area
  * aware; hidden on ≥md where the header navigation takes over. Items map
  * onto the single-route view system. Tap targets ≥44px (56px tall rows).
+ * Icons tap-scale for tactility and a shared-layout indicator pill slides
+ * under whichever destination is active.
  */
 export function BottomNav() {
   const t = useUiStrings();
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const params = useSearchParams();
   const openSettings = useCinedeckStore((s) => s.openSettings);
   const setContentType = useCinedeckStore((s) => s.setContentType);
@@ -69,12 +73,13 @@ export function BottomNav() {
     >
       <div className="mx-auto grid max-w-lg grid-cols-4">
         {items.map(({ key, label, icon: Icon, active, action }) => (
-          <button
+          <motion.button
             key={key}
             type="button"
             onClick={action}
             aria-current={active ? 'page' : undefined}
-            className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 px-1 text-[10.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/60 ${
+            whileTap={reduceMotion ? undefined : { scale: 0.88 }}
+            className={`relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 px-1 text-[10.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/60 ${
               active
                 ? 'text-brand'
                 : 'text-muted-foreground hover:text-foreground'
@@ -82,7 +87,15 @@ export function BottomNav() {
           >
             <Icon className="size-5" aria-hidden />
             <span className="max-w-full truncate">{label}</span>
-          </button>
+            {active && (
+              <motion.span
+                layoutId="bottom-nav-indicator"
+                aria-hidden
+                transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 34 }}
+                className="absolute inset-x-0 bottom-1 mx-auto h-1 w-1 rounded-full bg-brand"
+              />
+            )}
+          </motion.button>
         ))}
       </div>
     </nav>

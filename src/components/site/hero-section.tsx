@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
 import { Clapperboard, Dices, Info, Play, Server, Star, Users, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MotionButton } from '@/components/ui/motion-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConnectCard } from '@/components/site/connect-card';
 import { tmdbImg } from '@/lib/languages';
@@ -130,7 +131,7 @@ export function HeroSection({
       onFocus={() => setRotatePaused(true)}
       onBlur={() => setRotatePaused(false)}
     >
-      <div className="relative flex min-h-[62svh] flex-col justify-end md:min-h-[70svh]">
+      <div className="relative flex min-h-[46svh] flex-col justify-end md:min-h-[52svh]">
         {trendingLoading ? (
           <Skeleton className="absolute inset-0 size-full rounded-none bg-zinc-900" />
         ) : !featured || !featuredUrl ? (
@@ -146,10 +147,14 @@ export function HeroSection({
             <AnimatePresence initial={false}>
               <motion.div
                 key={featuredUrl + featuredTitle}
-                initial={reduceMotion ? false : { opacity: 0, scale: 1.05 }}
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 1.02 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={reduceMotion ? undefined : { opacity: 0 }}
-                transition={{ duration: reduceMotion ? 0 : 1.1, ease: 'easeOut' }}
+                exit={reduceMotion ? { opacity: 0 } : undefined}
+                transition={
+                  reduceMotion
+                    ? { duration: 0 }
+                    : { duration: 1.2, ease: [0.25, 0.1, 0.25, 1] }
+                }
                 className="absolute inset-0"
                 aria-hidden
               >
@@ -184,7 +189,7 @@ export function HeroSection({
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduceMotion ? undefined : { opacity: 0, y: -14 }}
                 transition={{ duration: reduceMotion ? 0 : 0.45, ease: [0.22, 1, 0.36, 1] }}
-                className="relative z-10 w-full px-4 pb-10 sm:px-6 sm:pb-12 lg:px-10"
+                className="relative z-10 w-full px-4 pb-6 sm:px-6 md:pb-10 lg:px-10"
               >
                 <div className="max-w-3xl">
                   <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-300">
@@ -192,7 +197,7 @@ export function HeroSection({
                     Trending {hasKey ? 'this week' : 'now'}
                   </p>
 
-                  <h1 className="mt-2 text-3xl font-bold leading-[1.06] tracking-tight text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.55)] sm:text-5xl lg:text-[52px]">
+                  <h1 className="mt-2 text-2xl font-bold leading-[1.06] tracking-tight text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.55)] md:text-4xl lg:text-5xl">
                     {featuredTitle}
                   </h1>
 
@@ -207,7 +212,7 @@ export function HeroSection({
                     {featuredPills.map((pill) => (
                       <span
                         key={pill}
-                        className="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm"
+                        className="hidden rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm sm:inline-flex"
                       >
                         {pill}
                       </span>
@@ -215,29 +220,39 @@ export function HeroSection({
                   </div>
 
                   {featuredOverview && (
-                    <p className="mt-3 line-clamp-2 max-w-2xl text-sm leading-relaxed text-zinc-200/90 drop-shadow-[0_1px_8px_rgba(0,0,0,0.6)]">
+                    <p className="mt-3 hidden line-clamp-2 max-w-2xl text-sm leading-relaxed text-zinc-200/90 drop-shadow-[0_1px_8px_rgba(0,0,0,0.6)] sm:block">
                       {featuredOverview}
                     </p>
                   )}
 
                   <div className="mt-5 flex flex-wrap items-center gap-2.5">
-                    <Button
+                    <MotionButton
                       type="button"
+                      size="sm"
                       onClick={() => router.push(featuredUrl, { scroll: false })}
-                      className="h-10 rounded-lg bg-brand px-5 text-sm font-semibold text-white shadow-[0_8px_30px_-8px_rgba(229,9,20,0.55)] transition-all duration-200 hover:bg-brand/90 active:scale-[0.97]"
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.97 }}
+                      className="h-10 gap-1.5 rounded-lg bg-brand px-5 text-sm font-semibold text-white shadow-[0_8px_30px_-8px_rgba(229,9,20,0.55)] transition-colors duration-200 hover:bg-brand/90 sm:h-9 sm:px-4 sm:text-[13px]"
                     >
                       <Play className="size-4 fill-white" aria-hidden />
                       Play
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => router.push(featuredUrl, { scroll: false })}
-                      className="h-10 rounded-lg border-white/25 bg-white/10 px-4 text-sm font-medium text-white backdrop-blur-md transition-all duration-200 hover:border-white/40 hover:bg-white/20 active:scale-[0.97]"
+                    </MotionButton>
+                    <motion.div
+                      className="inline-flex"
+                      whileHover={reduceMotion ? undefined : { scale: 1.04 }}
+                      whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+                      transition={{ duration: reduceMotion ? 0 : 0.15, ease: 'easeOut' }}
                     >
-                      <Info className="size-4" aria-hidden />
-                      More Info
-                    </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => router.push(featuredUrl, { scroll: false })}
+                        className="h-10 rounded-lg border-white/25 bg-white/10 px-4 text-sm font-medium text-white backdrop-blur-md transition-colors duration-200 hover:border-white/40 hover:bg-white/20 sm:h-9 sm:text-[13px]"
+                      >
+                        <Info className="size-4" aria-hidden />
+                        More Info
+                      </Button>
+                    </motion.div>
                     <Button
                       type="button"
                       variant="ghost"
@@ -265,7 +280,7 @@ export function HeroSection({
                   const active = i === safeIndex;
                   const dotTitle = ('title' in item ? item.title : '') || `Featured ${i + 1}`;
                   return (
-                    <button
+                    <motion.button
                       key={i}
                       type="button"
                       role="tab"
@@ -275,9 +290,15 @@ export function HeroSection({
                         setRotateIndex(i);
                         setRotatePaused(true);
                       }}
-                      className={`h-1.5 rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                      animate={{ scaleY: active ? 1.45 : 1 }}
+                      transition={
+                        reduceMotion
+                          ? { duration: 0 }
+                          : { type: 'spring', stiffness: 500, damping: 28 }
+                      }
+                      className={`h-1.5 rounded-full transition-[width,background-color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
                         active
-                          ? 'w-6 bg-brand'
+                          ? 'w-4 bg-brand'
                           : 'w-1.5 bg-white/30 hover:bg-white/60'
                       }`}
                     />

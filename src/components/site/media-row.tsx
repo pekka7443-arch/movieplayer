@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode, type ComponentType } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -26,9 +27,9 @@ export function SectionHeadingBar({
   seeAll?: { label?: string; onClick: () => void };
 }) {
   return (
-    <div className="mb-3 flex items-baseline gap-2.5">
+    <div className="mb-2 flex items-baseline gap-2.5">
       <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-zinc-900 md:text-xl dark:text-zinc-100">
-        <span className="h-4 w-1 rounded-full bg-brand" aria-hidden />
+        <span className="h-3.5 w-1 rounded-full bg-brand md:h-4" aria-hidden />
         {Icon && <Icon className="size-4 text-brand md:size-5" aria-hidden />}
         {title}
       </h2>
@@ -56,6 +57,7 @@ export function SectionHeadingBar({
  * container hover for fine pointers. Edge fades mark the scrollable side.
  */
 export function MediaRow({ children, label }: { children: ReactNode; label: string }) {
+  const reduceMotion = useReducedMotion();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
@@ -84,7 +86,15 @@ export function MediaRow({ children, label }: { children: ReactNode; label: stri
   };
 
   const arrowClasses =
-    'pointer-events-auto size-8 rounded-full border border-border bg-card/95 text-zinc-700 shadow-lg shadow-black/10 backdrop-blur transition-all duration-200 hover:bg-muted hover:text-zinc-900 disabled:pointer-events-none disabled:opacity-0 md:size-9 dark:bg-card/95 dark:text-zinc-300 dark:shadow-black/40 dark:hover:bg-muted dark:hover:text-zinc-100';
+    'pointer-events-auto size-7 rounded-full border border-border bg-card/95 text-zinc-700 shadow-lg shadow-black/10 backdrop-blur transition-all duration-200 hover:bg-muted hover:text-zinc-900 disabled:pointer-events-none disabled:opacity-0 dark:bg-card/95 dark:text-zinc-300 dark:shadow-black/40 dark:hover:bg-muted dark:hover:text-zinc-100';
+
+  // Hover micro-interaction for the scroll arrows: nudge toward the direction
+  // they scroll, spring back on tap. Collapses under reduced motion.
+  const arrowMotion = (direction: 1 | -1) => ({
+    whileHover: reduceMotion ? undefined : { scale: 1.1, x: direction * 2 },
+    whileTap: reduceMotion ? undefined : { scale: 0.95 },
+    transition: { duration: reduceMotion ? 0 : 0.15, ease: 'easeOut' as const },
+  });
 
   return (
     <div className="group/row relative" role="region" aria-label={label}>
@@ -115,31 +125,35 @@ export function MediaRow({ children, label }: { children: ReactNode; label: stri
 
       {/* Left arrow — always visible on mobile, hover-revealed on desktop. */}
       <div className="pointer-events-none absolute -left-1.5 top-1/2 z-10 -translate-y-1/2 sm:-left-2 md:-left-4 md:opacity-0 md:transition-opacity md:duration-200 md:group-hover/row:opacity-100">
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon"
-          aria-label={`Scroll ${label} left`}
-          disabled={atStart}
-          onClick={() => scrollBy(-1)}
-          className={arrowClasses}
-        >
-          <ChevronLeft className="size-4 md:size-5" aria-hidden />
-        </Button>
+        <motion.div className="inline-flex" {...arrowMotion(-1)}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            aria-label={`Scroll ${label} left`}
+            disabled={atStart}
+            onClick={() => scrollBy(-1)}
+            className={arrowClasses}
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+          </Button>
+        </motion.div>
       </div>
       {/* Right arrow — same reveal behavior. */}
       <div className="pointer-events-none absolute -right-1.5 top-1/2 z-10 -translate-y-1/2 sm:-right-2 md:-right-4 md:opacity-0 md:transition-opacity md:duration-200 md:group-hover/row:opacity-100">
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon"
-          aria-label={`Scroll ${label} right`}
-          disabled={atEnd}
-          onClick={() => scrollBy(1)}
-          className={arrowClasses}
-        >
-          <ChevronRight className="size-4 md:size-5" aria-hidden />
-        </Button>
+        <motion.div className="inline-flex" {...arrowMotion(1)}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            aria-label={`Scroll ${label} right`}
+            disabled={atEnd}
+            onClick={() => scrollBy(1)}
+            className={arrowClasses}
+          >
+            <ChevronRight className="size-4" aria-hidden />
+          </Button>
+        </motion.div>
       </div>
     </div>
   );

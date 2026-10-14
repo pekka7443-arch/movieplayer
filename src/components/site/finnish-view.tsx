@@ -103,7 +103,7 @@ export function TvSchedule() {
       {query.isPending ? (
         <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="cd-shimmer h-24 rounded-lg bg-muted" />
+            <Skeleton key={i} className="animate-shimmer h-24 rounded-lg bg-muted" />
           ))}
         </div>
       ) : query.isError ? (

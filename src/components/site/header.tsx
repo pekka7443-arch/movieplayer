@@ -95,7 +95,7 @@ export function Header() {
   const { scrollY } = useScroll();
   const [scrolled, setScrolled] = useState(false);
   useMotionValueEvent(scrollY, 'change', (latest) => {
-    setScrolled(latest > 12);
+    setScrolled(latest > 10);
   });
 
   const signOut = async () => {
@@ -126,10 +126,10 @@ export function Header() {
 
   return (
     <header
-      className={`sticky top-0 z-50 border-b backdrop-blur-xl transition-all duration-300 ${
+      className={`sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md transition-all duration-300 ${
         scrolled
-          ? 'border-zinc-200/90 bg-white/85 shadow-[0_10px_38px_-12px_rgba(0,0,0,0.28)] dark:border-zinc-800 dark:bg-zinc-950/85 dark:shadow-black/50'
-          : 'border-transparent bg-white/60 dark:bg-zinc-950/55'
+          ? 'border-zinc-200/60 shadow-[0_10px_38px_-12px_rgba(0,0,0,0.28)] dark:border-zinc-800/60 dark:shadow-black/50'
+          : 'border-transparent'
       }`}
     >
       <div

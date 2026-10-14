@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Command } from 'cmdk';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   Clapperboard,
   Dice5,
@@ -71,6 +72,7 @@ function toPaletteItem(item: MetaSearchItem | SearchItem): PaletteTitle {
  */
 export function CommandPalette() {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const open = useCinedeckStore((s) => s.paletteOpen);
   const setOpen = useCinedeckStore((s) => s.setPaletteOpen);
   const openArcade = useCinedeckStore((s) => s.openArcade);
@@ -182,6 +184,12 @@ export function CommandPalette() {
         className="top-[12%] max-w-xl translate-y-0 gap-0 overflow-hidden rounded-2xl border-zinc-200 bg-white/95 p-0 shadow-2xl backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-950/95"
       >
         <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <motion.div
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+          transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
+        >
         <Command shouldFilter={false} className="w-full">
           <div className="flex items-center gap-2 border-b border-zinc-200 px-4 dark:border-zinc-800">
             <Search className="size-4 shrink-0 text-zinc-400" aria-hidden />
@@ -290,6 +298,7 @@ export function CommandPalette() {
             </Command.Group>
           </Command.List>
         </Command>
+        </motion.div>
       </DialogContent>
     </Dialog>
   );
