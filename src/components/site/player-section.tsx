@@ -196,6 +196,20 @@ export function PlayerSection({
     for (const r of scanQuery.data ?? []) map.set(r.providerId, r.ok ? true : r.status === 403 ? 'unknown' : false);
     return map;
   }, [scanQuery.data]);
+  // Finnish-audio CONFIRMATION map — true only for sources whose scan row says
+  // finnishAudioConfirmed (real manifest/content-language validation or the
+  // admin allowlist). Metadata claims ("supports dubbing") never count, so
+  // every FI indicator below is gated on this instead.
+  const confirmedMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const r of scanQuery.data ?? []) map.set(r.providerId, r.finnishAudioConfirmed === true);
+    return map;
+  }, [scanQuery.data]);
+  const finnishActive = dubLang === 'fi';
+  // FI unavailable = the user asked for Finnish AND the finished scan found no
+  // source with confirmed Finnish audio (pending scan keeps options open).
+  const finnishUnavailable =
+    finnishActive && scanQuery.isSuccess && !(scanQuery.data ?? []).some((r) => r.finnishAudioConfirmed);
   const onlineCount = useMemo(
     () => (scanQuery.data ?? []).filter((r) => r.ok).length,
     [scanQuery.data],
@@ -468,14 +482,20 @@ export function PlayerSection({
    * Dub-capable mirror that responded (ok preferred, then bot-blocked).
    * Sources the user already skipped away from for this title are excluded,
    * so a dead dub mirror isn't re-offered after it proved useless.
+   * Finnish audio additionally REQUIRES a scan-confirmed source — when the
+   * user selects FI on an unconfirmed source, the handoff moves them to the
+   * best confirmed one first (switch source, then switch audio track).
    */
   const dubSource = useMemo(() => {
     if (!dubLang) return null;
     const rows = (scanQuery.data ?? []).filter(
-      (r) => supportsDub(r.providerId) && !failedDubs.has(`${watchId}:${r.providerId}`),
+      (r) =>
+        supportsDub(r.providerId) &&
+        !failedDubs.has(`${watchId}:${r.providerId}`) &&
+        (!finnishActive || r.finnishAudioConfirmed === true),
     );
     return rows.find((r) => r.ok) ?? rows.find((r) => r.status === 403) ?? null;
-  }, [scanQuery.data, dubLang, failedDubs, watchId]);
+  }, [scanQuery.data, dubLang, failedDubs, watchId, finnishActive]);
 
   const switchToDubSource = useCallback(() => {
     if (!dubSource) return;
@@ -486,9 +506,11 @@ export function PlayerSection({
     setLoaded(null);
     setFailover(null);
     toast(`${getProvider(dubSource.providerId).name} · ${dubLang?.toUpperCase()} dub`, {
-      description: 'Unproven source — use Skip / “Not playing?” if it stays blank.',
+      description: finnishActive
+        ? 'Switched to a source with Finnish audio'
+        : 'Unproven source — use Skip / “Not playing?” if it stays blank.',
     });
-  }, [dubSource, dubLang, setServerTransient, setLoaded, setFailover, rememberManualPick]);
+  }, [dubSource, dubLang, finnishActive, setServerTransient, setLoaded, setFailover, rememberManualPick]);
 
   // ---------------------------------------------------------------------------
   // Keyboard shortcuts — R reload · S skip source · T theater · N/P episodes.
@@ -828,10 +850,14 @@ export function PlayerSection({
                         }
                       />
                       {p.short}
-                      {dubLang && supportsDub(p.id) && (
+                      {dubLang && supportsDub(p.id) && (!finnishActive || confirmedMap.get(p.id)) && (
                         <span
                           aria-hidden
-                          title={`Dubbed audio requested: ${dubLang.toUpperCase()}`}
+                          title={
+                            finnishActive
+                              ? 'Finnish audio confirmed on this source'
+                              : `Dubbed audio requested: ${dubLang.toUpperCase()}`
+                          }
                           className="rounded bg-brand/15 px-1 font-mono text-[9px] font-bold uppercase leading-4 text-brand"
                         >
                           {dubLang}
@@ -846,7 +872,9 @@ export function PlayerSection({
         </div>
 
         {/* Dub requested but the active server can't carry it → one-tap handoff
-            to the dub-capable mirror (manual intent, auto-pick won't undo it). */}
+            to the dub-capable mirror (manual intent, auto-pick won't undo it).
+            FI is strict: the handoff only offers scan-CONFIRMED Finnish sources,
+            and when none exists the FI option shows disabled with the reason. */}
         {dubLang && dubSource && dubSource.providerId !== server && (
           <button
             type="button"
@@ -857,6 +885,16 @@ export function PlayerSection({
             <Languages className="size-3.5" aria-hidden />
             {dubLang.toUpperCase()} dub on {getProvider(dubSource.providerId).short}
           </button>
+        )}
+        {finnishUnavailable && (
+          <span
+            aria-disabled
+            title="Finnish audio not available for this title"
+            className="flex h-9 cursor-not-allowed items-center gap-1.5 rounded-lg border border-zinc-300/70 bg-zinc-500/5 px-3 text-xs font-medium text-zinc-500 dark:border-zinc-700/70 dark:text-zinc-500"
+          >
+            <Languages className="size-3.5" aria-hidden />
+            FI not available
+          </span>
         )}
 
         <div className="ml-auto flex items-center gap-1.5">
@@ -876,7 +914,11 @@ export function PlayerSection({
                 ? onlineCount > 0
                   ? `${onlineCount}/${scanQuery.data.length} online — ${
                       manualPick ? 'picked' : 'auto'
-                    } ${provider.name}${dubLang && supportsDub(server) ? ' · dub' : ''}`
+                    } ${provider.name}${
+                      dubLang && supportsDub(server) && (!finnishActive || confirmedMap.get(server))
+                        ? ' · dub'
+                        : ''
+                    }`
                   : 'No mirror responded yet'
                 : 'Source scan'}
           </span>
@@ -941,7 +983,7 @@ export function PlayerSection({
             {isFullscreen ? <Minimize className="size-3.5" aria-hidden /> : <Fullscreen className="size-3.5" aria-hidden />}
             <span className="hidden sm:inline">Fullscreen</span>
           </Button>
-          <PlayerSettingsMenu />
+          <PlayerSettingsMenu finnishAudioUnavailable={finnishUnavailable} />
           <Button
             type="button"
             variant="ghost"

@@ -7,19 +7,28 @@ import { toast } from 'sonner';
 import {
   AlertCircle,
   ArrowRight,
+  Award,
   Bookmark,
+  CalendarDays,
   Clapperboard,
   Compass,
   Film,
   Flag,
+  Flame,
+  Gem,
   History,
+  Landmark,
+  Laugh,
   LayoutGrid,
   Play,
   RefreshCw,
+  Rocket,
   Sparkles,
+  Timer,
   TrendingUp,
   Trophy,
   Tv,
+  Video,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -39,6 +48,9 @@ import { useHasTmdbKey } from '@/lib/settings';
 import { useSession } from '@/hooks/use-session';
 import {
   useCatalog,
+  useGenreRow,
+  useAnimeSeries,
+  useAnimeMovies,
   useRemoveHistory,
   useRemoveWatchlist,
   useTrending,
@@ -47,6 +59,7 @@ import {
   useHistory,
   useWatchlist,
   type CatalogParams,
+  type GenreRowState,
 } from '@/hooks/use-media';
 import { type HistoryItem, type SearchItem, type WatchlistItem, addToWatchlist } from '@/lib/tmdb';
 import { tmdbImg } from '@/lib/languages';
@@ -573,6 +586,210 @@ function FinnishSection() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Genre catalog rows (Part 1) + Anime section (Part 2)
+// ---------------------------------------------------------------------------
+
+/** Fixed discover filters for the parameterized genre rows. */
+const GENRE_ROW_PARAMS = {
+  newThisWeek: (() => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    return {
+      sort_by: 'release_date.desc',
+      'release_date.gte': twoWeeksAgo,
+      'release_date.lte': today,
+    };
+  })(),
+  awardWinners: {
+    sort_by: 'vote_average.desc',
+    'vote_count.gte': '1000',
+    'vote_average.gte': '7.5',
+  },
+  hiddenGems: {
+    sort_by: 'vote_average.desc',
+    'vote_count.gte': '100',
+    'vote_count.lte': '500',
+    'vote_average.gte': '7.0',
+  },
+  classicCinema: {
+    sort_by: 'vote_average.desc',
+    'primary_release_date.lte': '1990-12-31',
+    'vote_average.gte': '7.5',
+  },
+  quickWatch: { with_episode_run_time: '10-25' },
+} as const;
+
+/** Heading + skeleton/error/cards shell shared by every useGenreRow row. */
+function GenreMediaRow({
+  icon,
+  title,
+  hint,
+  state,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  hint?: string;
+  state: GenreRowState;
+}) {
+  return (
+    <div>
+      <SectionHeading icon={icon} title={title} hint={hint} />
+      {state.isPending ? (
+        <RowSkeletonStripe />
+      ) : state.isError ? (
+        <RowEmptyState text="This row is unavailable right now." />
+      ) : state.data.length > 0 ? (
+        <MediaRow label={title}>
+          {state.data.map((item, index) => (
+            <MediaCard
+              key={rowKeyOf(item)}
+              item={toCardItem(item)}
+              priority={index < 4}
+              index={index}
+            />
+          ))}
+        </MediaRow>
+      ) : (
+        <RowEmptyState text="Nothing here right now." />
+      )}
+    </div>
+  );
+}
+
+/** "Binge-Worthy Series" — reuses the shared popular-TV query (cache-deduped). */
+function BingeWorthyRow({ enabled }: { enabled: boolean }) {
+  const language = useCinedeckStore((s) => s.language);
+  const query = usePopularTV(language, enabled);
+  const state = useMemo<GenreRowState>(
+    () => ({ data: query.data ?? [], isPending: query.isPending, isError: query.isError }),
+    [query.data, query.isPending, query.isError],
+  );
+  return <GenreMediaRow icon={Tv} title="Binge-Worthy Series" hint="Top-Rated TV" state={state} />;
+}
+
+function AnimeSeriesRow() {
+  const state = useAnimeSeries();
+  return <GenreMediaRow icon={Tv} title="Popular Series" state={state} />;
+}
+
+function AnimeFilmsRow() {
+  const state = useAnimeMovies();
+  return <GenreMediaRow icon={Film} title="Anime Films" state={state} />;
+}
+
+// --- Part 1 rows 1 & 3–10 (row 2 = BingeWorthyRow above) --------------------
+
+function NewThisWeekRow() {
+  const state = useGenreRow([], 'movie', { ...GENRE_ROW_PARAMS.newThisWeek });
+  return (
+    <GenreMediaRow
+      icon={CalendarDays}
+      title="New This Week"
+      hint="Fresh releases, last 14 days"
+      state={state}
+    />
+  );
+}
+
+function ActionThrillerRow() {
+  const state = useGenreRow([28, 53], 'movie');
+  return <GenreMediaRow icon={Flame} title="Action & Thriller" state={state} />;
+}
+
+function ComedyPicksRow() {
+  const state = useGenreRow([35], 'movie');
+  return <GenreMediaRow icon={Laugh} title="Comedy Picks" state={state} />;
+}
+
+function AwardWinnersRow() {
+  const state = useGenreRow([], 'movie', { ...GENRE_ROW_PARAMS.awardWinners });
+  return (
+    <GenreMediaRow
+      icon={Award}
+      title="Award Winners"
+      hint="Crowd-verified greats"
+      state={state}
+    />
+  );
+}
+
+function HiddenGemsRow() {
+  const state = useGenreRow([], 'movie', { ...GENRE_ROW_PARAMS.hiddenGems });
+  return (
+    <GenreMediaRow
+      icon={Gem}
+      title="Hidden Gems"
+      hint="Loved by few, loved hard"
+      state={state}
+    />
+  );
+}
+
+function DocumentariesRow() {
+  const state = useGenreRow([99], 'movie');
+  return <GenreMediaRow icon={Video} title="Documentaries" state={state} />;
+}
+
+function ClassicCinemaRow() {
+  const state = useGenreRow([], 'movie', { ...GENRE_ROW_PARAMS.classicCinema });
+  return (
+    <GenreMediaRow
+      icon={Landmark}
+      title="Classic Cinema"
+      hint="Pre-1990 all-time greats"
+      state={state}
+    />
+  );
+}
+
+function SciFiFantasyRow() {
+  const state = useGenreRow([878, 14], 'movie');
+  return <GenreMediaRow icon={Rocket} title="Sci-Fi & Fantasy" state={state} />;
+}
+
+function QuickWatchRow() {
+  const state = useGenreRow([], 'tv', { ...GENRE_ROW_PARAMS.quickWatch });
+  return (
+    <GenreMediaRow
+      icon={Timer}
+      title="Quick Watch"
+      hint="Episodes under ~25 min"
+      state={state}
+    />
+  );
+}
+
+/**
+ * Anime block — SectionHeading + two lazy sub-rows. The outer wrapper carries
+ * id="anime-section" + animeRef so the header / bottom-nav "Anime" entries can
+ * scroll it into view (the section-nav helpers resolve the element by id and
+ * fall back to cross-view navigation + retry).
+ */
+function AnimeSection({ animeRef }: { animeRef: React.RefObject<HTMLElement | null> }) {
+  return (
+    <section
+      id="anime-section"
+      ref={animeRef}
+      aria-labelledby="anime-heading"
+      className="scroll-mt-24 space-y-7 md:space-y-10"
+    >
+      <div id="anime-heading" className="scroll-mt-24">
+        <SectionHeading icon={Sparkles} title="Anime" hint="Series & films from Japan — keyless too" />
+      </div>
+      <LazySection id="anime-series" label="Popular anime series">
+        <AnimeSeriesRow />
+      </LazySection>
+      <LazySection id="anime-films" label="Anime films">
+        <AnimeFilmsRow />
+      </LazySection>
+    </section>
+  );
+}
+
 // Curated Cinemeta genre labels for the Explore section (all verified live).
 export const EXPLORE_GENRES = [
   'Action',
@@ -888,6 +1105,9 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
   const hasKey = useHasTmdbKey();
   const reduceMotion = useReducedMotion();
   const { user } = useSession();
+  // Anime section anchor — the header/bottom-nav "Anime" entries scroll here
+  // via the section-id helpers (same element the ref is attached to).
+  const animeRef = useRef<HTMLElement | null>(null);
 
   const [exploreGenre, setExploreGenre] = useState<string>('Action');
   // Advanced Explore filters — rating/decade/runtime/language/country.
@@ -1216,6 +1436,51 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
         )}
       </motion.section>
 
+      {/* ------------------------------------------------------------------
+          Genre catalog rows 1–9 (Part 1) + Anime (Part 2) + the Finnish
+          home-turf row + row 10 — every row lazy inside LazySection, unique
+          ids, SectionHeading with its own Lucide icon.
+          ------------------------------------------------------------------ */}
+      <LazySection id="new-this-week" label="New this week">
+        <NewThisWeekRow />
+      </LazySection>
+      <LazySection id="binge-worthy-series" label="Binge-worthy series">
+        <BingeWorthyRow enabled />
+      </LazySection>
+      <LazySection id="action-thriller" label="Action & thriller">
+        <ActionThrillerRow />
+      </LazySection>
+      <LazySection id="comedy-picks" label="Comedy picks">
+        <ComedyPicksRow />
+      </LazySection>
+      <LazySection id="award-winners" label="Award winners">
+        <AwardWinnersRow />
+      </LazySection>
+      <LazySection id="hidden-gems" label="Hidden gems">
+        <HiddenGemsRow />
+      </LazySection>
+      <LazySection id="documentaries" label="Documentaries">
+        <DocumentariesRow />
+      </LazySection>
+      <LazySection id="classic-cinema" label="Classic cinema">
+        <ClassicCinemaRow />
+      </LazySection>
+      <LazySection id="sci-fi-fantasy" label="Sci-Fi & fantasy">
+        <SciFiFantasyRow />
+      </LazySection>
+
+      {/* Anime — id + ref anchor for the header / bottom-nav Anime entries. */}
+      <AnimeSection animeRef={animeRef} />
+
+      {/* Suomalainen sisältö — the home-turf row. Embed servers rarely index
+          Finnish titles, so every item carries both IMDB + TMDB ids and the
+          scan tries both; title pages surface Yle Areena as fallback. */}
+      <FinnishSection />
+
+      <LazySection id="quick-watch" label="Quick watch">
+        <QuickWatchRow />
+      </LazySection>
+
       {/* Popular Movies — hidden while the filter shows series only */}
       {contentType !== 'tv' && (
       <motion.section {...fadeIn} aria-labelledby="popular-movies">
@@ -1275,11 +1540,6 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
         )}
       </motion.section>
       )}
-
-      {/* Suomalainen sisältö — the home-turf row. Embed servers rarely index
-          Finnish titles, so every item carries both IMDB + TMDB ids and the
-          scan tries both; title pages surface Yle Areena as fallback. */}
-      <FinnishSection />
 
       {/* Top Rated — keyless imdbRating catalog, type follows the browse filter */}
       <LazySection id="top-rated" label="Top rated">

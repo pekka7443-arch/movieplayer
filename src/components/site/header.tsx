@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMotionValueEvent, useScroll } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import {
   ChevronsUpDown,
   Command as CommandIcon,
   Film,
+  Flag,
   Gamepad2,
   History,
   Home as HomeIcon,
@@ -78,6 +79,13 @@ export function Header() {
   const activeProfileId = useCinedeckStore((s) => s.activeProfileId);
   const setActiveProfile = useCinedeckStore((s) => s.setActiveProfile);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Anime is a home-page section anchor (id="anime-section") — the section-nav
+  // helper resolves the same element the home-view animeRef is attached to and
+  // handles cross-view navigation + retry-while-mounting for free.
+  const goAnime = useCallback(() => {
+    setMobileMenuOpen(false);
+    goSection('anime-section');
+  }, [goSection]);
 
   const onSportsView = params.get('view') === 'sports';
 
@@ -183,6 +191,14 @@ export function Header() {
             className={navLinkClasses(contentType === 'tv')}
           >
             TV Shows
+          </button>
+          <button
+            type="button"
+            onClick={goAnime}
+            className={navLinkClasses(false) + ' inline-flex items-center gap-1.5'}
+          >
+            <Sparkles className="size-3.5 text-brand" aria-hidden />
+            Anime
           </button>
           <button
             type="button"
@@ -433,7 +449,8 @@ export function Header() {
                 { label: 'Home', icon: HomeIcon, action: goHome, active: !onSportsView && contentType === 'all' },
                 { label: 'Movies', icon: Film, action: () => browseByType('movie'), active: contentType === 'movie' },
                 { label: 'TV Shows', icon: TvIcon, action: () => browseByType('tv'), active: contentType === 'tv' },
-                { label: 'Finnish', icon: Sparkles, action: () => { setMobileMenuOpen(false); router.push('/?view=finnish', { scroll: false }); }, active: params.get('view') === 'finnish' },
+                { label: 'Anime', icon: Sparkles, action: goAnime, active: false },
+                { label: 'Finnish', icon: Flag, action: () => { setMobileMenuOpen(false); router.push('/?view=finnish', { scroll: false }); }, active: params.get('view') === 'finnish' },
                 { label: 'Sports', icon: Trophy, action: () => { setMobileMenuOpen(false); router.push('/?view=sports', { scroll: false }); }, active: onSportsView },
                 { label: 'Arcade', icon: Gamepad2, action: () => { setMobileMenuOpen(false); openArcade(); }, active: false },
               ]).map(({ label, icon: Icon, action, active }) => (

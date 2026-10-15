@@ -3,18 +3,18 @@
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Home, Search, ListVideo, UserRound } from 'lucide-react';
+import { Home, Search, ListVideo, Sparkles, UserRound } from 'lucide-react';
 
 import { useUiStrings } from '@/lib/ui-strings';
 import { useCinedeckStore } from '@/lib/store';
 
 /**
- * Mobile bottom navigation — the app's four primary destinations within
- * thumb reach: Home, Search, My List, Profile. Fixed, blurred, safe-area
- * aware; hidden on ≥md where the header navigation takes over. Items map
- * onto the single-route view system. Tap targets ≥44px (56px tall rows).
- * Icons tap-scale for tactility and a shared-layout indicator pill slides
- * under whichever destination is active.
+ * Mobile bottom navigation — the app's five primary destinations within
+ * thumb reach: Home, Search, Anime, My List, Profile. Fixed, blurred,
+ * safe-area aware; hidden on ≥md where the header navigation takes over.
+ * Items map onto the single-route view system. Tap targets ≥44px (56px tall
+ * rows). Icons tap-scale for tactility and a shared-layout indicator pill
+ * slides under whichever destination is active.
  */
 export function BottomNav() {
   const t = useUiStrings();
@@ -61,6 +61,7 @@ export function BottomNav() {
   const items = [
     { key: 'home', label: t.home, icon: Home, active: activeView === 'home', action: () => go('/') },
     { key: 'search', label: t.search, icon: Search, active: false, action: focusSearch },
+    { key: 'anime', label: 'Anime', icon: Sparkles, active: false, action: () => scrollToSection('anime-section') },
     { key: 'lists', label: t.myList, icon: ListVideo, active: false, action: () => scrollToSection('my-list') },
     { key: 'profile', label: t.profile, icon: UserRound, active: false, action: () => { setContentType('all'); openSettings(); } },
   ] as const;
@@ -71,7 +72,7 @@ export function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/85 backdrop-blur-xl md:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="mx-auto grid max-w-lg grid-cols-4">
+      <div className="mx-auto grid max-w-lg grid-cols-5">
         {items.map(({ key, label, icon: Icon, active, action }) => (
           <motion.button
             key={key}

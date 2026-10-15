@@ -35,8 +35,16 @@ export const PLAYER_SHORTCUTS: { keys: string; action: string }[] = [
  * Playback settings popover — lives in the player toolbar so the user can
  * tune source-scan / failover behavior without opening global settings.
  * Everything persists to localStorage via CinedeckSettings.
+ *
+ * `finnishAudioUnavailable` — the current title's scan finished with ZERO
+ * sources carrying CONFIRMED Finnish audio; the Finnish option is disabled
+ * with an inline tooltip explaining why (metadata claims never enable it).
  */
-export function PlayerSettingsMenu() {
+export function PlayerSettingsMenu({
+  finnishAudioUnavailable = false,
+}: {
+  finnishAudioUnavailable?: boolean;
+}) {
   const settings = useSettings();
   const [open, setOpen] = useState(false);
 
@@ -158,24 +166,41 @@ export function PlayerSettingsMenu() {
               </SelectItem>
               {LANGUAGES.map((lang) => {
                 const code = lang.code.split('-')[0];
+                // FI is only selectable when at least one source for THIS title
+                // has scan-confirmed Finnish audio — otherwise disabled + reason.
+                const fiBlocked = code === 'fi' && finnishAudioUnavailable;
                 return (
                   <SelectItem
                     key={code}
                     value={code}
+                    disabled={fiBlocked}
+                    title={
+                      fiBlocked ? 'Finnish audio not available for this title' : undefined
+                    }
                     className="focus:bg-zinc-200/80 focus:text-zinc-900 dark:focus:bg-zinc-800/80 dark:focus:text-zinc-100"
                   >
-                    {lang.label} dub
+                    {lang.label} dub{fiBlocked ? ' — unavailable' : ''}
                   </SelectItem>
                 );
               })}
             </SelectContent>
           </Select>
+          {finnishAudioUnavailable && settings.dubLanguage === 'fi' && (
+            <p
+              role="note"
+              className="rounded-md bg-amber-500/10 px-2 py-1.5 text-[11px] leading-snug text-amber-700 dark:text-amber-400"
+            >
+              Finnish audio not available for this title.
+            </p>
+          )}
           <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
-            Requests a dubbed track on Videasy (marked FI etc. above) — the watch page then
-            shows a one-tap “FI dub on VDS” chip. Auto-pick still starts on the proven
-            servers; only the dub source carries the audio request. Best-effort:
-            availability depends on the title. Other mirrors: switch
-            audio/subtitles in the player's own ⚙ / CC menu.
+            Requests a dubbed track on dub-capable mirrors (marked with the
+            language code above). Finnish is strict: the watch page only shows
+            FI indicators on sources whose stream REALLY carries Finnish audio
+            (manifest validation or admin-verified providers) — and if none
+            does, the FI option is disabled here. Best-effort: availability
+            depends on the title. Other mirrors: switch audio/subtitles in the
+            player's own ⚙ / CC menu.
           </p>
         </div>
 

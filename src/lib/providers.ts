@@ -246,6 +246,23 @@ export const PROVIDERS: Provider[] = [
 ];
 
 /**
+ * Finnish-dub allowlist — providers the ADMIN vouches to actually carry
+ * Finnish audio tracks. Ships empty: real confirmations come from the
+ * stream-manifest/content-language validation in the scan, and this list is
+ * populated at runtime by the admin dashboard via
+ * POST /api/admin/finnish-providers (persisted in the SystemState key
+ * "finnish_dub_providers", hot-reloaded into the scan without a restart).
+ * Provider ids use the ProviderId spelling ("twoembed_cc", "vidfast", …).
+ */
+export const FINNISH_DUB_PROVIDERS: string[] = [];
+
+/** Client-safe check against the STATIC allowlist half only. The server-side
+ * scan uses the merged static + runtime list (see lib/server/finnish-providers). */
+export function isStaticFinnishDubProvider(providerId: string): boolean {
+  return FINNISH_DUB_PROVIDERS.includes(providerId);
+}
+
+/**
  * Default provider — 2Embed.cc. The user confirmed 2embed is the most reliable
  * source across their tested titles, so we lead with it. The auto-scan +
  * auto-failover watchdog will silently move on if this specific mirror stalls.

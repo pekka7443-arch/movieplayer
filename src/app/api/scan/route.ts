@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { PROVIDERS, getEmbedUrl, supportsDub } from "@/lib/providers";
 import type { ScanResult } from "@/lib/meta";
+import { getFinnishDubProviders } from "@/lib/server/finnish-providers";
 import { withApi, apiError } from "@/lib/server/api";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { requireAuthedUser } from "@/lib/server/auth";
@@ -28,6 +30,12 @@ export const dynamic = "force-dynamic";
 const PROBE_TIMEOUT_MS = 7_000;
 const CACHE_TTL_MS = 60_000;
 
+// Finnish-audio confirmation probe — short on purpose: it runs inside the
+// scan for every source that CLAIMS Finnish audio, and a slow/absent answer
+// just means "not confirmed", never a scan failure.
+const FI_PROBE_TIMEOUT_MS = 500;
+const FI_CACHE_TTL_MS = 60 * 60 * 1000;
+
 interface ProbeOutcome {
   ok: boolean;
   status: number | null;
@@ -44,6 +52,90 @@ const globalForScan = globalThis as unknown as {
 const scanCache: Map<string, CacheEntry> =
   globalForScan.__cinedeckScanCache ?? new Map<string, CacheEntry>();
 globalForScan.__cinedeckScanCache = scanCache;
+
+// fi-confirmed:<sha1(sourceUrl)> → did this stream REALLY carry Finnish audio.
+// Separate from scanCache (different value type + 1h TTL) but the same
+// globalThis pattern so dev hot-reloads and route instances share it.
+interface FiCacheEntry {
+  value: boolean;
+  expiresAt: number;
+}
+const globalForFi = globalThis as unknown as {
+  __cinedeckFiConfirmCache?: Map<string, FiCacheEntry>;
+};
+const fiCache: Map<string, FiCacheEntry> =
+  globalForFi.__cinedeckFiConfirmCache ?? new Map<string, FiCacheEntry>();
+globalForFi.__cinedeckFiConfirmCache = fiCache;
+
+function fiCacheKey(sourceUrl: string): string {
+  return `fi-confirmed:${createHash("sha1").update(sourceUrl).digest("hex")}`;
+}
+
+/**
+ * HLS audio-rendition tag with a Finnish language attribute — attribute order
+ * varies between packagers, so both attributes are lookahead-matched.
+ */
+const FI_HLS_AUDIO_RE =
+  /#EXT-X-MEDIA:(?=[^\n\r]*TYPE=AUDIO)(?=[^\n\r]*LANG(?:UAGE)?="(?:fi|fin)(?:[-_"]|$))/i;
+
+/**
+ * REAL Finnish-audio validation for one source URL (spec 3a–3e):
+ *  - fetch the first 2 KB of the manifest/page with a 500 ms abort deadline;
+ *  - HLS: #EXT-X-MEDIA TYPE=AUDIO with LANGUAGE="fi|fin" in the manifest text;
+ *  - direct streams: content-language response header includes "fi";
+ *  - timeout / failure / no match → NOT confirmed (honest absence).
+ * Result cached under "fi-confirmed:<sha1(url)>" for 1 hour.
+ */
+async function validateFinnishAudio(sourceUrl: string): Promise<boolean> {
+  const key = fiCacheKey(sourceUrl);
+  const cached = fiCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  let confirmed = false;
+  try {
+    const res = await fetch(sourceUrl, {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        accept: "*/*",
+      },
+      signal: AbortSignal.timeout(FI_PROBE_TIMEOUT_MS),
+      cache: "no-store",
+    });
+
+    // (c) direct streams advertise the audio language on the response itself.
+    const contentLanguage = (res.headers.get("content-language") ?? "").toLowerCase();
+    const headerHit = contentLanguage
+      .split(",")
+      .some((tag) => tag.trim() === "fi" || tag.trim().startsWith("fi-"));
+
+    // (a/b) read at most the first 2 KB and look for a Finnish AUDIO rendition.
+    let manifestHit = false;
+    if (res.ok && res.body) {
+      try {
+        const reader = res.body.getReader();
+        const { value } = await reader.read();
+        reader.cancel().catch(() => undefined);
+        const head = new TextDecoder()
+          .decode(value ?? new Uint8Array())
+          .slice(0, 2048);
+        manifestHit = FI_HLS_AUDIO_RE.test(head);
+      } catch {
+        // body peek failed — the header check above still stands
+      }
+    }
+
+    confirmed = headerHit || manifestHit;
+  } catch {
+    confirmed = false; // timeout / network error → not confirmed
+  }
+
+  if (fiCache.size > 500) fiCache.clear();
+  fiCache.set(key, { value: confirmed, expiresAt: Date.now() + FI_CACHE_TTL_MS });
+  return confirmed;
+}
 
 // Heuristics for "this is an error page, not a player".
 const ERROR_BODY_PATTERNS = [
@@ -174,6 +266,7 @@ export const GET = withApi('scan', async (request) => {
           ...primary,
           url: primaryUrl,
           lang: dub && supportsDub(provider.id) ? dub : null,
+          finnishAudioConfirmed: false,
         };
       }
 
@@ -186,6 +279,7 @@ export const GET = withApi('scan', async (request) => {
           ...alt,
           url: altUrl,
           lang: dub && supportsDub(provider.id) ? dub : null,
+          finnishAudioConfirmed: false,
         };
       }
 
@@ -196,16 +290,38 @@ export const GET = withApi('scan', async (request) => {
         ...primary,
         url: primaryUrl,
         lang: dub && supportsDub(provider.id) ? dub : null,
+        finnishAudioConfirmed: false,
       };
     }),
   );
 
+  // Finnish-audio confirmation (spec 3d/3e): a source is confirmed when the
+  // admin allowlist vouches for its provider, OR it claims Finnish audio
+  // (lang tag fi/fin) and the manifest/content-language probe really finds
+  // one. Everything else stays honestly unconfirmed.
+  const fiAllowlist = await getFinnishDubProviders();
+  const results: ScanResult[] = await Promise.all(
+    probes.map(async (row) => {
+      const allowlisted = fiAllowlist.includes(row.providerId);
+      const claimsFinnish = row.lang === "fi" || row.lang === "fin";
+      if (!allowlisted && !(claimsFinnish && row.url)) {
+        return row; // already finnishAudioConfirmed: false
+      }
+      const confirmed = allowlisted
+        ? true
+        : row.ok
+          ? await validateFinnishAudio(row.url as string)
+          : false;
+      return confirmed ? { ...row, finnishAudioConfirmed: true } : row;
+    }),
+  );
+
   if (scanCache.size > 200) scanCache.clear();
-  scanCache.set(cacheKey, { value: probes, expiresAt: Date.now() + CACHE_TTL_MS });
+  scanCache.set(cacheKey, { value: results, expiresAt: Date.now() + CACHE_TTL_MS });
 
   // Rolling provider health for the admin dashboard — best-effort writes.
   void Promise.all(
-    probes.map((row) =>
+    results.map((row) =>
       db.providerStat
         .upsert({
           where: { id: row.providerId },
@@ -227,5 +343,5 @@ export const GET = withApi('scan', async (request) => {
     ),
   );
 
-  return Response.json({ results: probes });
+  return Response.json({ results });
 });

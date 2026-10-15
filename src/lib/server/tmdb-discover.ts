@@ -67,9 +67,43 @@ interface TmdbDiscoverItem {
   genre_ids?: number[];
 }
 
-const GENRE_ID_TO_NAME: Record<number, string> = Object.fromEntries(
-  Object.entries(TMDB_GENRES_MOVIE).map(([name, id]) => [id, name]),
-);
+/** Merged movie+TV genre-id map (movie names win on shared ids). Used to
+ * label discover rows with a human genre for the card meta line. */
+export const DISCOVER_GENRE_ID_TO_NAME: Record<number, string> = {
+  ...Object.fromEntries(Object.entries(TMDB_GENRES_TV).map(([name, id]) => [id, name])),
+  ...Object.fromEntries(Object.entries(TMDB_GENRES_MOVIE).map(([name, id]) => [id, name])),
+};
+
+const GENRE_ID_TO_NAME = DISCOVER_GENRE_ID_TO_NAME;
+
+interface TmdbDiscoverItem {
+  id: number;
+  title?: string;
+  name?: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  vote_average: number;
+  release_date?: string;
+  first_air_date?: string;
+  genre_ids?: number[];
+}
+
+/** Discover row → the normalized MetaSearchItem shape every client row renders. */
+function normalizeDiscoverItem(item: TmdbDiscoverItem, type: 'movie' | 'tv') {
+  const date = item.release_date ?? item.first_air_date ?? '';
+  const genreId = item.genre_ids?.[0];
+  return {
+    imdbId: `tmdb-${item.id}`, // discover has no imdb id; the id-form fallback keeps watch links working
+    tmdbId: item.id,
+    title: item.title ?? item.name ?? '',
+    year: date.slice(0, 4),
+    poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
+    backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : null,
+    mediaType: type,
+    voteAverage: item.vote_average ?? 0,
+    genre: genreId ? GENRE_ID_TO_NAME[genreId] : undefined,
+  };
+}
 
 /** Year range for a decade label (2010 → [2010, 2019]). */
 function decadeRange(decade: number): { gte: string; lte: string } {
@@ -133,19 +167,63 @@ export async function tmdbDiscover(
   if (!res.ok) throw new Error(`tmdb_discover_${res.status}`);
   const data = (await res.json()) as { results?: TmdbDiscoverItem[] };
 
-  return (data.results ?? []).slice(0, limit).map((item) => {
-    const date = item.release_date ?? item.first_air_date ?? '';
-    const genreId = item.genre_ids?.[0];
-    return {
-      imdbId: `tmdb-${item.id}`, // discover has no imdb id; the id-form fallback keeps watch links working
-      tmdbId: item.id,
-      title: item.title ?? item.name ?? '',
-      year: date.slice(0, 4),
-      poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-      backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : null,
-      mediaType: type,
-      voteAverage: item.vote_average ?? 0,
-      genre: genreId ? GENRE_ID_TO_NAME[genreId] : undefined,
-    };
+  return (data.results ?? []).slice(0, limit).map((item) => normalizeDiscoverItem(item, type));
+}
+
+// ---------------------------------------------------------------------------
+// Raw discover — passthrough for the /api/catalog genre rows. Only known TMDB
+// discover filter params are allowed (strict allowlist, strict value shape) —
+// the route hands these straight to /discover/{movie,tv}.
+// ---------------------------------------------------------------------------
+
+const RAW_PARAM_ALLOWLIST = new Set([
+  'with_genres',
+  'with_origin_country',
+  'with_original_language',
+  'with_runtime',
+  'with_episode_run_time',
+  'sort_by',
+  'vote_average.gte',
+  'vote_average.lte',
+  'vote_count.gte',
+  'vote_count.lte',
+  'release_date.gte',
+  'release_date.lte',
+  'primary_release_date.gte',
+  'primary_release_date.lte',
+  'first_air_date.gte',
+  'first_air_date.lte',
+]);
+
+/** Dates (1990-12-31), ranges (10-25), lists (28,53) and sort tokens only. */
+const RAW_VALUE_RE = /^[A-Za-z0-9.,|_-]{1,80}$/;
+
+export async function tmdbDiscoverRaw(
+  apiKey: string,
+  type: 'movie' | 'tv',
+  extraParams: Record<string, string>,
+  limit: number,
+): Promise<ReturnType<typeof normalizeDiscoverItem>[]> {
+  const path = type === 'tv' ? '/discover/tv' : '/discover/movie';
+  const search = new URLSearchParams({
+    api_key: apiKey,
+    include_adult: 'false',
+    page: '1',
   });
+  for (const [key, value] of Object.entries(extraParams)) {
+    if (!RAW_PARAM_ALLOWLIST.has(key)) continue;
+    const trimmed = value.trim();
+    if (!trimmed || !RAW_VALUE_RE.test(trimmed)) continue;
+    search.set(key, trimmed);
+  }
+
+  const res = await fetch(`https://api.themoviedb.org/3${path}?${search.toString()}`, {
+    headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(8000),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`tmdb_discover_${res.status}`);
+  const data = (await res.json()) as { results?: TmdbDiscoverItem[] };
+
+  return (data.results ?? []).slice(0, limit).map((item) => normalizeDiscoverItem(item, type));
 }

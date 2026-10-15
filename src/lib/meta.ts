@@ -94,4 +94,12 @@ export interface ScanResult {
    * of rebuilding a URL from the primary watch id.
    */
   url?: string;
+  /**
+   * TRUE only when Finnish audio is CONFIRMED for this source: the stream
+   * manifest/content-language probe found a real Finnish audio track, or the
+   * provider is on the admin-curated FINNISH_DUB_PROVIDERS allowlist.
+   * Metadata claims (a dub param requested, "supports dubbing") never set
+   * this — the player's FI badge is gated on it.
+   */
+  finnishAudioConfirmed: boolean;
 }
