@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { projectRoot } from '@/lib/server/project-root';
 
 const TMP_DIR = mkdtempSync(join(tmpdir(), 'cinedeck-adminsec-test-'));
 const DB_URL = `file:${join(TMP_DIR, 'test.db')}`;
@@ -34,7 +35,7 @@ const UA_B = 'Mozilla/5.0 (iPhone) CineDeckTest/2.0';
 beforeAll(() => {
   process.env.DATABASE_URL = DB_URL;
   execSync(`bunx prisma migrate deploy`, {
-    cwd: '/home/z/my-project',
+    cwd: projectRoot(),
     env: { ...process.env, DATABASE_URL: DB_URL },
     stdio: 'ignore',
   });
