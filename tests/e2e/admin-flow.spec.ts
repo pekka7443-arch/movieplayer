@@ -96,7 +96,9 @@ test.describe('admin dashboard', () => {
     // 4. Suspend with a reason via the row actions menu.
     page.once('dialog', (dialog) => dialog.accept('E2E suspension reason'));
     await page.getByRole('button', { name: `Row actions for ${victimEmail}` }).click();
-    await page.getByRole('menuitem', { name: `Suspend ${victimEmail}` }).click();
+    const suspendItem = page.getByRole('menuitem', { name: `Suspend ${victimEmail}` });
+    await suspendItem.waitFor({ state: 'visible' });
+    await suspendItem.click();
 
     // 5. The suspended user cannot log in — the reason is shown.
     const blocked = await request.post('/api/auth/login', {
@@ -109,7 +111,9 @@ test.describe('admin dashboard', () => {
     // 6. Unsuspend from the same row menu, and the account works again.
     page.once('dialog', (dialog) => dialog.accept('E2E suspension reason'));
     await page.getByRole('button', { name: `Row actions for ${victimEmail}` }).click();
-    await page.getByRole('menuitem', { name: `Unsuspend ${victimEmail}` }).click();
+    const unsuspendItem = page.getByRole('menuitem', { name: `Unsuspend ${victimEmail}` });
+    await unsuspendItem.waitFor({ state: 'visible' });
+    await unsuspendItem.click();
     await expect
       .poll(
         async () =>
