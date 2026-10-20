@@ -45,7 +45,7 @@ describe('password strength', () => {
     expect(checkPassword('salasanakissa').acceptable).toBe(false); // Finnish common word
     expect(checkPassword('aaaaaaaaaa').acceptable).toBe(false);
     expect(checkPassword('abcdefghijkl').acceptable).toBe(false); // letters only, <16
-    expect(checkPassword('***REMOVED***').acceptable).toBe(false); // no special char
+    expect(checkPassword('longenough123').acceptable).toBe(false); // no special char
   });
 
   it('accepts solid passphrases and scores them', () => {

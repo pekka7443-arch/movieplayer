@@ -27,7 +27,11 @@ function envFromDotEnv(key: string): string | undefined {
 }
 
 const ADMIN_EMAIL = envFromDotEnv('ADMIN_EMAIL') ?? 'admin@example.com';
-const ADMIN_PASSWORD = envFromDotEnv('ADMIN_PASSWORD') ?? '***REMOVED***';
+const ADMIN_PASSWORD = envFromDotEnv('ADMIN_PASSWORD');
+if (!ADMIN_PASSWORD) {
+  console.error('ADMIN_PASSWORD missing — add it to .env');
+  process.exit(1);
+}
 const E2E_BYPASS = envFromDotEnv('E2E_RATELIMIT_BYPASS');
 
 let failures = 0;

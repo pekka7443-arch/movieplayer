@@ -76,3 +76,9 @@ worklog*.bak
 /.next-build/
 /.next-dev/
 config/bootstrap-admin.json
+
+# internal notes & CI artifacts (never publish)
+/worklog.md
+/test-results/
+
+.newpass.tmp

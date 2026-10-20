@@ -10,7 +10,7 @@ PORT=3100
 BASE="http://127.0.0.1:${PORT}"
 DB_ABS="file:/home/z/my-project/db/custom.db"
 EMAIL="admin@example.com"
-PASS="***REMOVED***"
+PASS="${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}"
 LOG="$PROJECT/scripts/.eviction-server.log"
 
 cd "$PROJECT"

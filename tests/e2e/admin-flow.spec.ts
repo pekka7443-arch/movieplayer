@@ -10,8 +10,11 @@ import { expect, test, type Page } from '@playwright/test';
  *  (suspension message shown) → unsuspend restores access.
  */
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@example.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '***REMOVED***';
+const ADMIN_EMAIL = envFromDotEnv('ADMIN_EMAIL') ?? 'admin@example.com';
+const ADMIN_PASSWORD = envFromDotEnv('ADMIN_PASSWORD');
+if (!ADMIN_PASSWORD) {
+  throw new Error('ADMIN_PASSWORD missing — add it to .env so admin e2e can log in');
+}
 
 function envFromDotEnv(key: string): string | undefined {
   try {

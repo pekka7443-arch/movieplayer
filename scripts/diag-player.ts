@@ -5,11 +5,17 @@
 const BASE = 'http://localhost:3000';
 
 async function main() {
-  // 1. Login as admin (config/bootstrap-admin.json credentials)
+  // 1. Login as admin (credentials from ADMIN_EMAIL/ADMIN_PASSWORD env)
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPass = process.env.ADMIN_PASSWORD;
+  if (!adminEmail || !adminPass) {
+    console.error('set ADMIN_EMAIL and ADMIN_PASSWORD (in .env) before running');
+    process.exit(1);
+  }
   const login = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@example.com', password: '***REMOVED***' }),
+    body: JSON.stringify({ email: adminEmail, password: adminPass }),
   });
   console.log('login:', login.status);
   const setCookie = login.headers.getSetCookie?.() ?? [];
