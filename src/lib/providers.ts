@@ -21,7 +21,11 @@ export type ProviderId =
   // VidLink — modern player, probed live 2026-10. HONEST about misses: the
   // embed path returns a real 500 for titles it doesn't carry, so the scan
   // can actually rule it out (2Embed/VidSrc shells answer 200 for anything).
-  | 'vidlink';
+  | 'vidlink'
+  // VidZee — modern Next.js player on player.vidzee.wtf, probed live 2026-10
+  // (late): real player shell on movie+tv paths and explicitly embeddable
+  // (`frame-ancestors *`). No user track record yet → 'maybe' trust tier.
+  | 'vidzee';
 
 /**
  * How much we trust a source to actually PLAY (a 200 health probe is not
@@ -107,6 +111,12 @@ export interface Provider {
 // vidsrc.to/.xyz/.vip/.in/.nl, vidjoy.pro (landing shell, no per-title player),
 // 111movies.com, autoembed.cc, moviesapi.club, vidora.su (unreachable),
 // multiembed.mov (hard CF wall), embed.su, vidlink.org, spencerdevs.xyz.
+// Re-measured 2026-10 (late): vidsrc.me = 301 redirect → vidsrc.sh (redundant),
+// uembed.site = domain-for-sale parking page, vidcore.org = 456-byte wrapper
+// shell that just iframes vidcoree.edgeone.dev (double-nest = mid-play death
+// magnet), vixsrc.to = hard 403, xprime.gg = 404 + frame-ancestors 'none',
+// rgshows.me = broken TLS chain. VidZee promoted INTO the pool (alive, real
+// player shell, frame-ancestors '*' = embeddable).
 // ---------------------------------------------------------------------------
 
 const twoEmbedMovie = (base: string) => (id: number | string) => `${base}/embed/${id}`;
@@ -210,6 +220,22 @@ export const PROVIDERS: Provider[] = [
     tv: (id, s, e) => `https://vidlink.pro/tv/${id}/${s}/${e}`,
     movieImdb: (imdb) => `https://vidlink.pro/movie/${imdb}`,
     tvImdb: (imdb, s, e) => `https://vidlink.pro/tv/${imdb}/${s}/${e}`,
+  },
+  {
+    id: 'vidzee',
+    name: 'VidZee',
+    short: 'Zee',
+    group: 'modern',
+    // Probed live 2026-10 (late): real Next.js player shell on both movie+tv
+    // paths, ships `frame-ancestors *` (explicitly embeddable) and answers
+    // fast (~260-790ms). No track record with us yet → 'maybe'.
+    reliability: 'maybe',
+    movie: (id) => `https://player.vidzee.wtf/embed/movie/${id}`,
+    tv: (id, s, e) => `https://player.vidzee.wtf/embed/tv/${id}/${s}/${e}`,
+    // IMDB-path support unverified — the scan probes both forms per title and
+    // uses whichever answers, so a 404 on the imdb form simply ranks it out.
+    movieImdb: (imdb) => `https://player.vidzee.wtf/embed/movie/${imdb}`,
+    tvImdb: (imdb, s, e) => `https://player.vidzee.wtf/embed/tv/${imdb}/${s}/${e}`,
   },
 
   // ----- Extra (modern alternative player) -----

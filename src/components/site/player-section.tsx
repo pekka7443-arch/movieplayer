@@ -183,10 +183,16 @@ export function PlayerSection({
   );
   /** Provider ids the watchdog has already tried for the current title/episode. */
   const triedRef = useRef<string[]>([]);
+  /** Anti-flap throttle for the mid-playback death watch (ms of last auto-switch). */
+  const lastDeathSwitchAtRef = useRef(0);
+  /** How many fresh-lap recoveries ran for the current title/episode (capped). */
+  const recoveryLapsRef = useRef(0);
 
   useEffect(() => {
     manualPickRef.current = false;
     triedRef.current = [];
+    lastDeathSwitchAtRef.current = 0;
+    recoveryLapsRef.current = 0;
   }, [imdbId, tmdbId, season, episode]);
 
   const healthMap = useMemo(() => {
@@ -394,12 +400,103 @@ export function PlayerSection({
       } else {
         setFailover({ forUrl: embedUrl, fromName: provider.name, toId: null, tried: triedRef.current.length, total });
         toast.error('No source responded', {
-          description: 'Every stream source timed out. Hit Reload to retry or pick a server manually.',
+          description: 'Every stream source timed out. We retry the pool automatically — or pick a server manually.',
         });
       }
     }, failoverTimeoutMs);
     return () => clearTimeout(timer);
   }, [embedUrl, nonce, loaded, scanQuery.data, candidates, server, provider.name, watchId, setServerTransient, settings.autoFailover, failoverTimeoutMs, dubLang, markDubFailed]);
+
+  // ---------------------------------------------------------------------------
+  // Mid-playback DEATH WATCH — the fix for "streams randomly stop midway".
+  // The load watchdog above only covers "the iframe never reported onLoad";
+  // once a source is playing, a cross-origin iframe gives NO signal when its
+  // stream dies (the user just sees a frozen player forever). The scan now
+  // refetches every 45s, so when the ACTIVE source flips to health=false
+  // (verifiably dead upstream) while it was playing, switch to the best
+  // still-alive candidate. Manual picks are deliberately covered too —
+  // recovering a dead stream is not an auto-pick re-run, it's the whole point.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (watchId === 0 || !settings.autoFailover) return;
+    if (!scanQuery.data) return;
+    // Non-manual sources are owned by the auto-pick effect — unless auto-pick
+    // is disabled, in which case this death watch is the only recovery left.
+    if (!manualPickRef.current && settings.autoPickSource) return;
+    if (!iframeReady) return; // only recover streams that WERE playing
+    if (healthMap.get(server) !== false) return; // alive or unknown (403) — can't judge
+    if (Date.now() - lastDeathSwitchAtRef.current < 20_000) return; // anti-flap
+    // Switch deferred to a timer (same shape as the load watchdog): keeps the
+    // effect itself free of synchronous setStates.
+    const timer = setTimeout(() => {
+      lastDeathSwitchAtRef.current = Date.now();
+      if (!triedRef.current.includes(server)) {
+        triedRef.current = [...triedRef.current, server];
+      }
+      if (dubLang && supportsDub(server)) markDubFailed(server);
+      // Best candidate that isn't the dead source or an already-failed try.
+      const nextId = candidates.find((id) => id !== server && !triedRef.current.includes(id));
+      const total = Math.max(candidates.length, PROVIDERS.length);
+      setFailover({
+        forUrl: embedUrl,
+        fromName: provider.name,
+        toId: nextId ?? null,
+        tried: triedRef.current.length,
+        total,
+      });
+      if (nextId) {
+        setServerTransient(nextId);
+        toast(`${getProvider(nextId).name} takes over`, {
+          description: `${provider.name} went down mid-playback — auto-switched sources.`,
+        });
+      } else {
+        toast.error('Source went down', {
+          description: `${provider.name} died mid-playback and every other try failed too. Hit Reload to start over.`,
+        });
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [
+    watchId,
+    settings.autoFailover,
+    settings.autoPickSource,
+    scanQuery.data,
+    iframeReady,
+    healthMap,
+    candidates,
+    server,
+    provider.name,
+    embedUrl,
+    setServerTransient,
+    dubLang,
+    markDubFailed,
+  ]);
+
+  // ---------------------------------------------------------------------------
+  // Fresh-lap recovery — when the watchdog exhausts every candidate (failover
+  // reports toId: null), don't leave a permanent dead end: after a cooldown,
+  // forget the tried list and refetch the scan. A CDN blip that killed the
+  // whole pool usually heals within a minute, so the player gets a second
+  // lap (capped at two laps, then it stays quiet for the title).
+  // ---------------------------------------------------------------------------
+  const exhausted = failover !== null && failover.forUrl === embedUrl && failover.toId === null;
+  useEffect(() => {
+    if (!exhausted || watchId === 0) return;
+    if (recoveryLapsRef.current >= 2) return;
+    const lap = recoveryLapsRef.current;
+    const timer = setTimeout(() => {
+      recoveryLapsRef.current = lap + 1;
+      triedRef.current = [];
+      setFailover(null);
+      void scanQuery.refetch();
+      toast('Retrying sources', {
+        description: 'Starting a fresh pass — earlier timeouts may have recovered.',
+      });
+    }, 60_000);
+    return () => clearTimeout(timer);
+    // scanQuery.refetch is stable in React Query v5 — excluded so in-flight
+    // refetches don't reset the cooldown timer.
+  }, [exhausted, watchId, embedUrl]);
 
   const navigateTo = (nextSeason: number, nextEpisode: number) => {
     const params = new URLSearchParams({

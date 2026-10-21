@@ -91,7 +91,18 @@ export function useServerScan(params: ScanParams, enabled: boolean) {
     enabled,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
-    retry: 0,
+    // Retry once — a transient blip should not render an all-dead scan that
+    // (a) opens the Where-to-watch panel and (b) feeds the failover logic
+    // garbage for a full minute.
+    retry: 1,
+    // Keep health data FRESH DURING PLAYBACK. This is what powers mid-play
+    // death detection: cross-origin embed iframes give no signal when their
+    // stream dies mid-movie, so the frozen-health scan is the only way to
+    // notice the active provider went down and auto-switch sources. 45s hits
+    // the server's 60s probe cache ~every other tick, so the upstream cost
+    // stays low. Pauses automatically when the tab is hidden.
+    refetchInterval: 45 * 1000,
+    refetchIntervalInBackground: false,
   });
 }
 
