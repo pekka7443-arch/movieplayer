@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>PM probe</title></head>
+<body style="background:#111;color:#0f0;font-family:monospace">
+<pre id="log">listening...</pre>
+<iframe id="p" src="https://www.2embed.cc/embed/tt0489270" style="width:960px;height:540px;border:1px solid #333" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe>
+<script>
+  window.__events = [];
+  const log = (m) => {
+    window.__events.push(m);
+    const pre = document.getElementById('log');
+    pre.textContent = window.__events.slice(-12).join('\n') + '\n[total: ' + window.__events.length + ']';
+  };
+  window.addEventListener('message', (e) => {
+    let d = e.data;
+    try { d = typeof d === 'string' ? JSON.parse(d) : d; } catch {}
+    const kind = d && typeof d === 'object' ? JSON.stringify(d).slice(0, 300) : String(d).slice(0, 200);
+    log(`origin=${e.origin} :: ${kind}`);
+  });
+  setInterval(() => {
+    const f = document.getElementById('p');
+    log('tick iframe alive=' + (!!f && !!f.contentWindow));
+  }, 10000);
+</script>
+</body>
+</html>

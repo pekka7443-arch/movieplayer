@@ -18,6 +18,13 @@ export interface CinedeckSettings {
   accentColor: string;
   /** After the source scan, auto-jump to the healthiest mirror (off = stay on your preferred server). */
   autoPickSource: boolean;
+  /**
+   * Rank sources whose OWN subtitle track works (VidFast/VidLink/VidZee)
+   * ahead of the superembed family (2Embed/VidSrc) whose captions are often
+   * missing or laggy. Only reorders ONLINE candidates — dead sources never
+   * benefit. Default on: captions are the #1 complaint with the embed pool.
+   */
+  preferCaptionSources: boolean;
   /** Watchdog that auto-switches sources when the player stalls. */
   autoFailover: boolean;
   /** How long to wait for a source to load before failing over (6–30s). */
@@ -52,6 +59,7 @@ export const DEFAULT_SETTINGS: CinedeckSettings = {
   preferredServer: null,
   accentColor: '#e50914',
   autoPickSource: true,
+  preferCaptionSources: true,
   autoFailover: true,
   failoverSeconds: FAILOVER_SECONDS_DEFAULT,
   dubLanguage: 'original',
@@ -193,6 +201,8 @@ export function getSettings(): CinedeckSettings {
               ? parsed.accentColor
               : '#e50914',
           autoPickSource: typeof parsed.autoPickSource === 'boolean' ? parsed.autoPickSource : true,
+          preferCaptionSources:
+            typeof parsed.preferCaptionSources === 'boolean' ? parsed.preferCaptionSources : true,
           autoFailover: typeof parsed.autoFailover === 'boolean' ? parsed.autoFailover : true,
           failoverSeconds: clampFailoverSeconds(parsed.failoverSeconds),
           dubLanguage: normalizeDubLanguage(parsed.dubLanguage),

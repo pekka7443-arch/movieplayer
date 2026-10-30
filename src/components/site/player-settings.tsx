@@ -112,6 +112,26 @@ export function PlayerSettingsMenu({
           />
         </div>
 
+        {/* Caption-friendly source ranking */}
+        <div className="flex items-center justify-between gap-4 py-1.5">
+          <div className="space-y-0.5">
+            <Label htmlFor="pset-captions" className="text-[13px] leading-tight">
+              Prefer caption-friendly sources
+            </Label>
+            <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+              VidFast / VidLink / VidZee (CC badge) carry working subtitles —
+              2Embed / VidSrc subs are often missing or laggy. Only affects
+              sources that are online.
+            </p>
+          </div>
+          <Switch
+            id="pset-captions"
+            checked={settings.preferCaptionSources}
+            onCheckedChange={(checked) => updateSettings({ preferCaptionSources: checked })}
+            className="data-[state=checked]:bg-brand"
+          />
+        </div>
+
         {/* Failover timeout */}
         <div className={'space-y-2.5 py-1.5' + (settings.autoFailover ? '' : ' pointer-events-none opacity-40')}>
           <div className="flex items-center justify-between">

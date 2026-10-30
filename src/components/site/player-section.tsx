@@ -38,7 +38,7 @@ import {
 import { Fragment } from 'react';
 import { useSeason, useHistory } from '@/hooks/use-media';
 import { useServerScan, useTvmazeShow } from '@/hooks/use-meta';
-import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl, supportsDub, dubCodeOf, isProven, reliabilityRank } from '@/lib/providers';
+import { PROVIDERS, PROVIDER_GROUPS, getProvider, getEmbedUrl, supportsDub, dubCodeOf, isProven, reliabilityRank, captionQualityOf } from '@/lib/providers';
 import type { ScanResult } from '@/lib/meta';
 import { saveHistoryProgress } from '@/lib/tmdb';
 import { tmdbImg } from '@/lib/languages';
@@ -183,6 +183,14 @@ export function PlayerSection({
   );
   /** Provider ids the watchdog has already tried for the current title/episode. */
   const triedRef = useRef<string[]>([]);
+  /**
+   * Auto-pick preference latch — the proven↔caption and unproven↔proven
+   * handoffs must run AT MOST ONCE per title/episode, or the effect would
+   * ping-pong forever (A hands to B, B's rule hands back to A, …) and React
+   * kills the component with "Maximum update depth exceeded". Dead-source
+   * recovery intentionally ignores this latch.
+   */
+  const autoPickLatchRef = useRef<string | null>(null);
   /** Anti-flap throttle for the mid-playback death watch (ms of last auto-switch). */
   const lastDeathSwitchAtRef = useRef(0);
   /** How many fresh-lap recoveries ran for the current title/episode (capped). */
@@ -193,6 +201,7 @@ export function PlayerSection({
     triedRef.current = [];
     lastDeathSwitchAtRef.current = 0;
     recoveryLapsRef.current = 0;
+    autoPickLatchRef.current = null;
   }, [imdbId, tmdbId, season, episode]);
 
   const healthMap = useMemo(() => {
@@ -252,8 +261,15 @@ export function PlayerSection({
    *   4. dead rows
    * A 200 probe is NOT proof of playback, so an online last-resort source
    * ranks BELOW a bot-blocked mirror.
+   *
+   * With settings.preferCaptionSources, ONLINE rows additionally sort
+   * caption-friendly modern players (VidFast/VidLink/VidZee — real CC menus)
+   * ahead of the superembed family (2Embed/VidSrc — subs missing/laggy)
+   * within the same health tier. Dead rows never benefit.
    */
   const candidates = useMemo(() => {
+    const captionBoost = (id: string) =>
+      settings.preferCaptionSources && captionQualityOf(id) === 'good' ? 0 : 1;
     const weight = (r: ScanResult) =>
       r.ok
         ? reliabilityRank(r.providerId) < 2
@@ -266,41 +282,76 @@ export function PlayerSection({
       .sort(
         (a, b) =>
           weight(a) - weight(b) ||
+          captionBoost(a.providerId) - captionBoost(b.providerId) ||
           reliabilityRank(a.providerId) - reliabilityRank(b.providerId) ||
           a.ms - b.ms,
       )
       .map((r) => r.providerId);
-  }, [scanQuery.data]);
+  }, [scanQuery.data, settings.preferCaptionSources]);
 
   /**
    * The scan outranked the current server → move on (unless the user picked
    * manually or disabled auto-pick in playback settings).
    *
-   * Two triggers:
+   * Three triggers:
    *  1. the current source is DEAD (health=false) → best candidate takes over;
    *  2. the current source is alive but UNPROVEN (e.g. persisted Videasy that
    *     probes ok yet shows a black screen) → hand autoplay back to the best
-   *     PROVEN mirror that responded.
+   *     PROVEN mirror that responded;
+   *  3. caption preference is ON and the current source is proven but has
+   *     flaky subs (superembed family) while an online caption-friendly
+   *     candidate exists → subtitles beat legacy trust (the #1 complaint).
    */
   useEffect(() => {
     if (!settings.autoPickSource) return;
     if (!scanQuery.data || manualPickRef.current) return;
     const currentHealth = healthMap.get(server);
-    if (currentHealth !== false && isProven(server)) return;
-    const best =
-      currentHealth === false
-        ? candidates[0]
-        : candidates.find((id) => isProven(id) && healthMap.get(id) !== false);
-    if (best && best !== server) {
-      const demoted = currentHealth !== false;
-      setServerTransient(best);
-      toast(`${getProvider(best).name} takes over`, {
-        description: demoted
-          ? `${getProvider(server).name} loads but isn't a proven player — the tested pool plays first.`
-          : `${getProvider(server).name} didn't respond — auto-switched sources.`,
+    if (currentHealth === false) {
+      // DEAD source — always recovers, latch never blocks this trigger.
+      const best = candidates[0];
+      if (best && best !== server) {
+        autoPickLatchRef.current = watchKey;
+        setServerTransient(best);
+        toast(`${getProvider(best).name} takes over`, {
+          description: `${getProvider(server).name} didn't respond — auto-switched sources.`,
+        });
+      }
+      return;
+    }
+    // Preference handoffs (caption / unproven→proven) run once per watch —
+    // without the latch the two rules would fight in an infinite setState loop.
+    if (autoPickLatchRef.current === watchKey) return;
+    const captionMode = settings.preferCaptionSources;
+    const captionBetter =
+      captionMode &&
+      captionQualityOf(server) !== 'good' &&
+      candidates.some((id) => captionQualityOf(id) === 'good' && healthMap.get(id) !== false);
+    if (isProven(server) && !captionBetter) return;
+    if (!isProven(server) && !captionBetter) {
+      // Alive but unproven (Videasy persisted before trust tiers) — the proven
+      // pool still wins UNLESS the caption preference outranks it.
+      const bestProven = candidates.find((id) => isProven(id) && healthMap.get(id) !== false);
+      if (bestProven && bestProven !== server) {
+        autoPickLatchRef.current = watchKey;
+        setServerTransient(bestProven);
+        toast(`${getProvider(bestProven).name} takes over`, {
+          description: `${getProvider(server).name} loads but isn't a proven player — the tested pool plays first.`,
+        });
+      }
+      return;
+    }
+    // Caption-driven handoff: best ONLINE caption-friendly candidate.
+    const bestCaption = candidates.find(
+      (id) => captionQualityOf(id) === 'good' && healthMap.get(id) !== false,
+    );
+    if (bestCaption && bestCaption !== server) {
+      autoPickLatchRef.current = watchKey;
+      setServerTransient(bestCaption);
+      toast(`${getProvider(bestCaption).name} takes over`, {
+        description: `Playing a source with working subtitles — ${getProvider(server).name}'s captions are often broken. Toggle in Settings.`,
       });
     }
-  }, [settings.autoPickSource, scanQuery.data, healthMap, candidates, server, setServerTransient]);
+  }, [settings.autoPickSource, settings.preferCaptionSources, scanQuery.data, healthMap, candidates, server, setServerTransient, watchKey]);
 
   const provider = getProvider(server);
   const builtUrl = getEmbedUrl(server, mediaType, watchId, isTv ? season : undefined, isTv ? episode : undefined, dubLang);
@@ -346,8 +397,20 @@ export function PlayerSection({
   // since it's just a tiny wrapper), so it can't be trusted as the real
   // "player is playing" signal. The postMessage arrives when the inner
   // provider iframe actually finishes loading.
+  //
+  // SECOND-LOAD DEATH SIGNAL: the same ready message arriving AGAIN while
+  // this URL+nonce was already marked loaded means the provider page
+  // re-navigated itself mid-play (error page retry, Cloudflare re-challenge,
+  // crash reload — the classic "stream just stops" inside 2Embed/VidSrc).
+  // The scan still reports such sources as online, so the death-watch below
+  // can't see them — this is the only reliable signal we get across the
+  // cross-origin boundary. Bumped into `midPlayReloads` state and handled by
+  // its own effect (same failover shape as the watchdogs).
+  const loadedAtRef = useRef(0);
+  const [midPlayReloads, setMidPlayReloads] = useState(0);
   useEffect(() => {
     if (watchId === 0) return;
+    loadedAtRef.current = 0;
     const handler = (event: MessageEvent) => {
       // Only accept messages from CineDeck's own origin — the proxy page
       // is served from /api/player-proxy (same origin) and inherits our
@@ -358,6 +421,14 @@ export function PlayerSection({
       if (data.url && decodeURIComponent(data.url) !== embedUrl) return;
       setLoaded({ url: embedUrl, nonce });
       setFailover(null);
+      if (loadedAtRef.current === 0) {
+        loadedAtRef.current = Date.now();
+      } else if (Date.now() - loadedAtRef.current > 10_000) {
+        // Already playing this exact source for 10s+ and it JUST reloaded —
+        // playback died. (Fires <10s apart are init double-taps, ignored.)
+        loadedAtRef.current = Date.now();
+        setMidPlayReloads((n) => n + 1);
+      }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
@@ -473,6 +544,59 @@ export function PlayerSection({
   ]);
 
   // ---------------------------------------------------------------------------
+  // MID-PLAY RELOAD failover — acts on the second-load death signal above.
+  // A provider page that re-navigates itself after 10s+ of "playing" is a
+  // stream that died for THIS user while the upstream still looks healthy —
+  // exactly the "randomly stops midway" case none of the other watchdogs can
+  // see. Same recovery shape as the death watch: mark tried, switch to the
+  // best untried candidate, anti-flap throttled. Manual picks included.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (watchId === 0 || midPlayReloads === 0 || !settings.autoFailover) return;
+    if (!iframeReady) return; // a fresh source is still connecting — let it
+    if (Date.now() - lastDeathSwitchAtRef.current < 20_000) return; // anti-flap
+    const timer = setTimeout(() => {
+      lastDeathSwitchAtRef.current = Date.now();
+      if (!triedRef.current.includes(server)) {
+        triedRef.current = [...triedRef.current, server];
+      }
+      if (dubLang && supportsDub(server)) markDubFailed(server);
+      const nextId = candidates.find((id) => id !== server && !triedRef.current.includes(id));
+      const total = Math.max(candidates.length, PROVIDERS.length);
+      setFailover({
+        forUrl: embedUrl,
+        fromName: provider.name,
+        toId: nextId ?? null,
+        tried: triedRef.current.length,
+        total,
+      });
+      if (nextId) {
+        setServerTransient(nextId);
+        toast(`${getProvider(nextId).name} takes over`, {
+          description: `${provider.name} reloaded mid-playback (stream died) — auto-switched sources.`,
+        });
+      } else {
+        toast.error('Stream dropped', {
+          description: `${provider.name} died mid-playback and every other try failed too. Hit Reload to start over.`,
+        });
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [
+    watchId,
+    midPlayReloads,
+    settings.autoFailover,
+    iframeReady,
+    candidates,
+    server,
+    provider.name,
+    embedUrl,
+    setServerTransient,
+    dubLang,
+    markDubFailed,
+  ]);
+
+  // ---------------------------------------------------------------------------
   // Fresh-lap recovery — when the watchdog exhausts every candidate (failover
   // reports toId: null), don't leave a permanent dead end: after a cooldown,
   // forget the tried list and refetch the scan. A CDN blip that killed the
@@ -549,9 +673,11 @@ export function PlayerSection({
   // ---------------------------------------------------------------------------
   // "Stuck?" escape hatch — a black-screen or provider error page still fires
   // onLoad, so the watchdog sees it as fine. After 15s on a loaded source,
-  // float a small "Not playing? → next server" pill over the player (auto-hides
-  // at 45s; stays dismissed for that source). Visibility is DERIVED from the
-  // URL the pill was shown for, so a source switch clears it without renders.
+  // float a small "Not playing? → next server" pill over the player. It stays
+  // visible until dismissed or the source changes — a stream that dies 20
+  // minutes in needs the one-tap escape THEN, not only during the first 45s.
+  // Visibility is DERIVED from the URL the pill was shown for, so a source
+  // switch clears it without renders.
   // ---------------------------------------------------------------------------
   const [stuckShownFor, setStuckShownFor] = useState<string | null>(null);
   const stuckDismissedRef = useRef<string | null>(null);
@@ -560,13 +686,7 @@ export function PlayerSection({
     const showT = setTimeout(() => {
       if (stuckDismissedRef.current !== embedUrl) setStuckShownFor(embedUrl);
     }, 15_000);
-    const hideT = setTimeout(() => {
-      setStuckShownFor((cur) => (cur === embedUrl ? null : cur));
-    }, 45_000);
-    return () => {
-      clearTimeout(showT);
-      clearTimeout(hideT);
-    };
+    return () => clearTimeout(showT);
   }, [iframeReady, embedUrl]);
   const stuckHint = iframeReady && stuckShownFor === embedUrl;
 
@@ -896,6 +1016,7 @@ export function PlayerSection({
                 {providers.map((p) => {
                   const active = p.id === server;
                   const health = healthMap.get(p.id);
+                  const captionsGood = captionQualityOf(p.id) === 'good';
                   return (
                     <button
                       key={p.id}
@@ -910,8 +1031,16 @@ export function PlayerSection({
                             : health === 'unknown'
                               ? 'blocked scan, may still work'
                               : 'did not respond'
-                      }`}
-                      title={p.name}
+                      } — subtitles ${captionsGood ? 'usually work' : 'often broken/laggy'}`}
+                      title={`${p.name} · ${
+                        health === undefined
+                          ? 'not scanned yet'
+                          : health === true
+                            ? 'online'
+                            : health === 'unknown'
+                              ? 'blocked the scan (may still play)'
+                              : 'offline'
+                      } · subtitles: ${captionsGood ? 'built-in CC menu, usually works' : 'often missing or laggy (superembed family)'}`}
                       onClick={() => {
                         manualPickRef.current = true;
                         rememberManualPick();
@@ -947,6 +1076,15 @@ export function PlayerSection({
                         }
                       />
                       {p.short}
+                      {captionsGood && (
+                        <span
+                          aria-hidden
+                          title="Subtitles usually work on this source"
+                          className="rounded bg-emerald-500/15 px-1 font-mono text-[9px] font-bold leading-4 text-emerald-600 dark:text-emerald-400"
+                        >
+                          CC
+                        </span>
+                      )}
                       {dubLang && supportsDub(p.id) && (!finnishActive || confirmedMap.get(p.id)) && (
                         <span
                           aria-hidden
@@ -1564,9 +1702,13 @@ export function PlayerSection({
         <span>
           CineDeck scans all {PROVIDERS.length} mirrors ({PROVIDERS.filter((p) => p.group === 'twoembed').length}× 2Embed +{' '}
           {PROVIDERS.filter((p) => p.group === 'vidsrc').length}× VidSrc +{' '}
-          {PROVIDERS.filter((p) => p.group === 'other').length} other) and auto-plays a
-          proven server first — the rest stay one tap away if the proven pool stalls. Tune it
-          all under <strong className="font-semibold text-brand">Settings</strong> above. Shortcuts:{' '}
+          {PROVIDERS.filter((p) => p.group === 'modern').length}× Modern +{' '}
+          {PROVIDERS.filter((p) => p.group === 'other').length} other) and auto-plays the
+          healthiest source — sources with the green{' '}
+          <span className="rounded bg-emerald-500/15 px-1 font-mono text-[10px] font-bold text-emerald-600 dark:text-emerald-400">CC</span>{' '}
+          badge have working subtitles, the rest often ship broken or laggy ones
+          (toggle under <strong className="font-semibold text-brand">Settings</strong>). If a stream dies mid-play, the
+          watchdog switches sources automatically. Shortcuts:{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">R</kbd> reload ·{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">S</kbd> skip ·{' '}
           <kbd className="font-mono font-semibold text-zinc-600 dark:text-zinc-400">T</kbd> theater ·{' '}

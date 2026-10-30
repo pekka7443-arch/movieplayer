@@ -81,6 +81,19 @@ export interface Provider {
   /** Playback trust tier — drives auto-pick + failover order (see above). */
   reliability: Reliability;
   /**
+   * How reliable THIS provider's own subtitles are (they render inside the
+   * provider's cross-origin iframe — CineDeck cannot fix or inject them):
+   *
+   *  - 'good'     — modern players (VidFast/VidLink/VidZee/Videasy) with a
+   *                 real CC menu; captions generally appear when offered.
+   *  - 'flaky'    — superembed-family shells (2Embed/VidSrc): captions are
+   *                 frequently missing entirely or drift seconds behind.
+   *
+   * Drives the "Prefer caption-friendly sources" setting (source ranking)
+   * and the CC chip in the server picker.
+   */
+  captions: 'good' | 'flaky';
+  /**
    * Query parameter name this provider uses to request a DUBBED audio track
    * (e.g. "language" → &language=fi). Null/undefined = no dub support — the
    * player's own audio menu is the only way to switch languages there.
@@ -136,6 +149,7 @@ export const PROVIDERS: Provider[] = [
     short: '.cc',
     group: 'twoembed',
     reliability: 'proven',
+    captions: 'flaky',
     movie: twoEmbedMovie('https://www.2embed.cc'),
     tv: twoEmbedTv('https://www.2embed.cc'),
     movieImdb: twoEmbedMovieImdb('https://www.2embed.cc'),
@@ -147,6 +161,7 @@ export const PROVIDERS: Provider[] = [
     short: '.skin',
     group: 'twoembed',
     reliability: 'proven',
+    captions: 'flaky',
     movie: twoEmbedMovie('https://2embed.skin'),
     tv: twoEmbedTv('https://2embed.skin'),
     movieImdb: twoEmbedMovieImdb('https://2embed.skin'),
@@ -160,6 +175,7 @@ export const PROVIDERS: Provider[] = [
     short: '.sh',
     group: 'vidsrc',
     reliability: 'proven',
+    captions: 'flaky',
     movie: vidsrcMovie('https://vidsrc.sh'),
     tv: vidsrcTv('https://vidsrc.sh'),
     movieImdb: vidsrcMovie('https://vidsrc.sh'),
@@ -174,6 +190,7 @@ export const PROVIDERS: Provider[] = [
     // real browsers load it fine, so the scan reports "unknown" and the player
     // still tries it after the proven pool.
     reliability: 'maybe',
+    captions: 'flaky',
     movie: vidsrcMovie('https://vidsrc.cc'),
     tv: vidsrcTv('https://vidsrc.cc'),
     movieImdb: vidsrcMovie('https://vidsrc.cc'),
@@ -187,6 +204,7 @@ export const PROVIDERS: Provider[] = [
     // Same embed family as VidSrc.sh — live player shell confirmed by probe,
     // actual playback unverified → tried after the proven trio.
     reliability: 'maybe',
+    captions: 'flaky',
     movie: vidsrcMovie('https://vidsrc.su'),
     tv: vidsrcTv('https://vidsrc.su'),
     movieImdb: vidsrcMovie('https://vidsrc.su'),
@@ -202,6 +220,7 @@ export const PROVIDERS: Provider[] = [
     // Live player shell for both TMDB + IMDB paths; widest international
     // catalog of the pool. Not user-proven → manual pick or post-proven try.
     reliability: 'maybe',
+    captions: 'good',
     movie: (id) => `https://vidfast.pro/movie/${id}`,
     tv: (id, s, e) => `https://vidfast.pro/tv/${id}/${s}/${e}`,
     movieImdb: (imdb) => `https://vidfast.pro/movie/${imdb}`,
@@ -216,6 +235,7 @@ export const PROVIDERS: Provider[] = [
     // rules it out instead of shipping a dead shell like the 200-for-anything
     // families. Playback itself unproven → 'maybe'.
     reliability: 'maybe',
+    captions: 'good',
     movie: (id) => `https://vidlink.pro/movie/${id}`,
     tv: (id, s, e) => `https://vidlink.pro/tv/${id}/${s}/${e}`,
     movieImdb: (imdb) => `https://vidlink.pro/movie/${imdb}`,
@@ -230,6 +250,7 @@ export const PROVIDERS: Provider[] = [
     // paths, ships `frame-ancestors *` (explicitly embeddable) and answers
     // fast (~260-790ms). No track record with us yet → 'maybe'.
     reliability: 'maybe',
+    captions: 'good',
     movie: (id) => `https://player.vidzee.wtf/embed/movie/${id}`,
     tv: (id, s, e) => `https://player.vidzee.wtf/embed/tv/${id}/${s}/${e}`,
     // IMDB-path support unverified — the scan probes both forms per title and
@@ -247,6 +268,7 @@ export const PROVIDERS: Provider[] = [
     // Probes healthy but the user got a black screen on it — never auto-picked
     // while a proven/maybe source is online; reachable via the dub hint chip.
     reliability: 'lastresort',
+    captions: 'good',
     // Videasy's player accepts a language locale and has a built-in
     // subtitle/audio language selector — best-effort dub support.
     dubParam: 'language',
@@ -263,6 +285,7 @@ export const PROVIDERS: Provider[] = [
     // Mirror of the Videasy player on the .net domain (probed live 2026-10).
     // Same family as Videasy → same last-resort trust.
     reliability: 'lastresort',
+    captions: 'good',
     dubParam: 'language',
     movie: (id) => `https://player.videasy.net/movie/${id}`,
     tv: (id, s, e) => `https://player.videasy.net/tv/${id}/${s}/${e}`,
@@ -367,6 +390,11 @@ export function getEmbedUrl(
 /** True when this provider can request a dubbed audio track via URL. */
 export function supportsDub(providerId: string): boolean {
   return Boolean(getProvider(providerId).dubParam);
+}
+
+/** Caption reliability tier for a provider ('good' | 'flaky'). */
+export function captionQualityOf(providerId: string): 'good' | 'flaky' {
+  return getProvider(providerId).captions;
 }
 
 /**
