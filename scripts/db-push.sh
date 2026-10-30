@@ -35,7 +35,30 @@ cd "$PROJECT_ROOT"
 if [ "$TARGET_DB" = "$LIVE_DB" ]; then
   echo "[db-push-guard] target is the LIVE database ($TARGET_DB)"
   echo "[db-push-guard] 'prisma db push' can drop data — running safe 'prisma migrate deploy' instead."
-  exec bunx prisma migrate deploy
+  if bunx prisma migrate deploy; then
+    exit 0
+  fi
+  # Drift fallback (2026-10-30 incident): the platform snapshot restore can
+  # bring back a PRE-migrations DB — tables exist but there is no
+  # `_prisma_migrations` journal — so `migrate deploy` can never apply the
+  # baseline and every DB-backed feature 500s (login showed "Wrong email or
+  # password."). Detect that exact shape, back the stale file up, and replay
+  # migrations on a fresh DB. Never silently destroys: the old file is kept.
+  echo "[db-push-guard] 'migrate deploy' failed — checking for a pre-migrations DB (no journal)."
+  if [ -f "$TARGET_DB" ] &&
+     ! echo "SELECT 1 FROM _prisma_migrations LIMIT 1;" |
+        bunx prisma db execute --stdin --schema prisma/schema.prisma >/dev/null 2>&1; then
+    STALE_BAK="${TARGET_DB}.stale-$(date +%Y%m%d-%H%M%S).bak"
+    echo "[db-push-guard] schema-stale DB without migrations journal detected."
+    echo "[db-push-guard] backing it up to ${STALE_BAK} and replaying migrations on a fresh DB."
+    mv "$TARGET_DB" "$STALE_BAK"
+    if bunx prisma migrate deploy; then
+      echo "[db-push-guard] migrations replayed OK — stale DB preserved at ${STALE_BAK}."
+      exit 0
+    fi
+  fi
+  echo "[db-push-guard] could not heal the database automatically — failing loudly."
+  exit 1
 fi
 
 echo "[db-push-guard] target is a build/packaging copy ($TARGET_DB) — running real 'prisma db push'."
