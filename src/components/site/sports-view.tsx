@@ -37,6 +37,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useSettings } from '@/lib/settings';
 import { useFavoriteTeams, teamKey } from '@/lib/sports-favorites';
+import { broadcastsForEvent, serviceById, STREAMING_SERVICES, type StreamingService } from '@/lib/sports-broadcasts';
+import { useUiStrings } from '@/lib/ui-strings';
 import { GuestPlayLock, usePlaybackLocked } from '@/components/site/sign-in-gate';
 
 // ---------------------------------------------------------------------------
@@ -70,7 +72,7 @@ interface SportsChannel {
   group: string;
 }
 
-type SportsTab = 'today' | 'upcoming' | 'channels' | 'standings' | 'multiview';
+type SportsTab = 'today' | 'upcoming' | 'services' | 'channels' | 'standings' | 'multiview';
 
 const SPORT_CHIPS = [
   'All',
@@ -500,6 +502,157 @@ function LinksRow({ event, dense }: { event: SportsEvent; dense?: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
+// Streaming services — curated Finland rights map (2025–26 season).
+// Sources: mtv.fi/urheilu, mtv.fi/ohjelmat/liiga, hbomax.com/fi/fi/sports,
+// viaplay.fi, ruutu.fi, areena.yle.fi, veikkaus.fi (VeikkausTV).
+// ---------------------------------------------------------------------------
+
+/** Compact "shown on" pills for a schedule group header (max 3, brand chip). */
+function LeagueServicePills({ sport, league }: { sport: string; league: string }) {
+  const broadcasts = useMemo(() => broadcastsForEvent({ sport, league }), [sport, league]);
+  if (broadcasts.length === 0) return null;
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {broadcasts.slice(0, 3).map((b) => {
+        const svc = serviceById(b.serviceId);
+        if (!svc) return null;
+        return (
+          <a
+            key={b.serviceId}
+            href={b.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`${svc.name} — ${svc.kind === 'free' ? 'free' : 'subscription'}`}
+            className="flex h-5 shrink-0 items-center gap-1 rounded-full border border-zinc-200 bg-white px-1.5 text-[10px] font-bold text-zinc-600 transition-colors hover:border-brand/40 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:text-zinc-100"
+          >
+            <span aria-hidden className="size-1.5 rounded-full" style={{ backgroundColor: svc.color }} />
+            {svc.shortName}
+          </a>
+        );
+      })}
+    </span>
+  );
+}
+
+/** Watch-page card — the official streaming homes of this event's league. */
+function StreamingPanel({ event }: { event: SportsEvent }) {
+  const t = useUiStrings();
+  const broadcasts = useMemo(() => broadcastsForEvent(event), [event]);
+  if (broadcasts.length === 0) return null;
+  return (
+    <section
+      aria-label={t.watchOnServices}
+      className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80"
+    >
+      <header className="mb-3 flex items-center gap-2">
+        <MonitorPlay className="size-4 shrink-0 text-brand" aria-hidden />
+        <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t.watchOnServices}</h3>
+        <span className="ml-auto hidden max-w-44 truncate text-[10px] font-semibold uppercase tracking-wider text-zinc-400 sm:block">
+          {event.league}
+        </span>
+      </header>
+      <div className="flex flex-wrap gap-2">
+        {broadcasts.map((b) => {
+          const svc = serviceById(b.serviceId);
+          if (!svc) return null;
+          return (
+            <a
+              key={b.serviceId}
+              href={b.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex min-w-44 flex-1 items-center gap-3 rounded-xl border border-zinc-200 bg-white/70 px-3.5 py-2.5 transition-colors hover:border-brand/40 hover:bg-zinc-100/80 sm:flex-none dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/70"
+            >
+              <span
+                aria-hidden
+                className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[10px] font-black text-white"
+                style={{ backgroundColor: svc.color }}
+              >
+                {svc.monogram}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-bold text-zinc-800 dark:text-zinc-100">{svc.name}</span>
+                <span className="block text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {svc.kind === 'free' ? t.freeLabel : t.paidLabel}
+                </span>
+              </span>
+              <ExternalLink
+                className="ml-1 size-3.5 shrink-0 text-zinc-400 transition-colors group-hover:text-brand"
+                aria-hidden
+              />
+            </a>
+          );
+        })}
+      </div>
+      <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+        <Info className="size-3.5 shrink-0" aria-hidden />
+        {t.servicesDisclaimer}
+      </p>
+    </section>
+  );
+}
+
+/** Streaming tab — every curated service with its league coverage. */
+function ServicesTab() {
+  const t = useUiStrings();
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{t.streamingServices}</h2>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{t.servicesSubtitle}</p>
+      </div>
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {STREAMING_SERVICES.map((svc) => (
+          <li
+            key={svc.id}
+            className="flex flex-col rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm transition-colors hover:border-brand/40 dark:border-zinc-800 dark:bg-zinc-900/70"
+          >
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-[11px] font-black text-white"
+                style={{ backgroundColor: svc.color }}
+              >
+                {svc.monogram}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-zinc-900 dark:text-zinc-100">{svc.name}</p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {svc.kind === 'free' ? t.freeLabel : t.paidLabel} · Finland
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-1 flex-wrap content-start gap-1.5">
+              {svc.coverage.map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => window.open(svc.url, '_blank', 'noopener,noreferrer')}
+              className="mt-3 h-8 w-full gap-1.5 rounded-lg bg-brand text-xs font-semibold text-brand-foreground hover:bg-brand/90"
+            >
+              {t.openService}
+              <ExternalLink className="size-3.5" aria-hidden />
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <p className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+        <Info className="size-3.5 shrink-0" aria-hidden />
+        {t.servicesDisclaimer}
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Schedule — league-grouped, morningstreams-style dense list
 // ---------------------------------------------------------------------------
 
@@ -797,7 +950,7 @@ function ScheduleList({
     <div className="space-y-5" aria-label="Schedule by league">
       {groups.map(({ league, list, badge, sport }) => (
         <section key={league || 'other'} aria-label={league || 'Other events'}>
-          <header className="mb-1.5 flex items-center gap-2 px-1">
+          <header className="mb-1.5 flex flex-wrap items-center gap-2 px-1">
             {badge ? (
               <img
                 src={badge}
@@ -819,7 +972,8 @@ function ScheduleList({
             <span className="text-[11px] text-zinc-400 dark:text-zinc-400">
               {SPORT_LABELS[sport] ?? sport} · {list.length}
             </span>
-            <span aria-hidden className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800/70" />
+            <LeagueServicePills sport={sport} league={league} />
+            <span aria-hidden className="h-px min-w-6 flex-1 bg-zinc-200 dark:bg-zinc-800/70" />
           </header>
           <ul className="overflow-hidden rounded-xl border border-zinc-200 bg-white/80 shadow-sm dark:border-zinc-800/70 dark:bg-zinc-900/60">
             {list.map((e) => (
@@ -2301,6 +2455,8 @@ function WatchPage({
         />
       )}
 
+      <StreamingPanel event={event} />
+
       <LinksRow event={event} dense={event.state === 'finished' ? mode === 'replay' : false} />
 
       {upNext.length > 0 && (
@@ -2545,10 +2701,19 @@ export function SportsView() {
   const allDayQuery = useSportsEvents(date, 'All');
 
   const events = eventsQuery.data ?? [];
-  const allKnown = useMemo(
-    () => [...events, ...(upcomingQuery.data ?? [])],
-    [events, upcomingQuery.data],
-  );
+  // Dedupe by id: today's day list and the upcoming feed can both carry the
+  // same fixture — duplicate keys down the "Up next" rail crashed React's
+  // reconciliation ("Encountered two children with the same key").
+  const allKnown = useMemo(() => {
+    const seen = new Set<string>();
+    const out: SportsEvent[] = [];
+    for (const e of [...events, ...(upcomingQuery.data ?? [])]) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push(e);
+    }
+    return out;
+  }, [events, upcomingQuery.data]);
 
   const localWatch = useMemo(
     () => allKnown.find((e) => e.id === watchId) ?? null,
@@ -2720,6 +2885,7 @@ export function SportsView() {
           [
             { id: 'today', label: 'Live & today', icon: Radio },
             { id: 'upcoming', label: 'Upcoming', icon: CalendarDays },
+            { id: 'services', label: 'Streaming', icon: MonitorPlay },
             { id: 'standings', label: 'Standings', icon: Trophy },
             { id: 'multiview', label: 'Multi-view', icon: Columns2 },
             { id: 'channels', label: 'TV Channels', icon: Tv },
@@ -2868,6 +3034,8 @@ export function SportsView() {
           <ScheduleList events={upcomingQuery.data!} watchId={watchId} onWatch={openWatch} />
         )
       )}
+
+      {tab === 'services' && <ServicesTab />}
 
       {tab === 'standings' && <StandingsTab league={standingsLeague} onLeagueChange={setStandingsLeague} />}
 

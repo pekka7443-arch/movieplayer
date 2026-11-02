@@ -73,6 +73,13 @@ export interface UiStrings {
   emptyHistoryTitle: string;
   emptyHistoryBody: string;
   browseAll: string;
+  streamingServices: string;
+  servicesSubtitle: string;
+  watchOnServices: string;
+  openService: string;
+  freeLabel: string;
+  paidLabel: string;
+  servicesDisclaimer: string;
 }
 
 const en: UiStrings = {
@@ -130,6 +137,13 @@ const en: UiStrings = {
   emptyHistoryTitle: 'Nothing watched yet',
   emptyHistoryBody: 'Press play on anything — we remember where you left off.',
   browseAll: 'Browse all',
+  streamingServices: 'Streaming services',
+  servicesSubtitle: 'Where the big leagues stream in Finland — subscribe or sign in and watch in the service\u2019s own app.',
+  watchOnServices: 'Watch on streaming services',
+  openService: 'Open',
+  freeLabel: 'Free',
+  paidLabel: 'Subscription',
+  servicesDisclaimer: 'Curated for Finland · 2025\u201326 season. Rights move around — confirm the exact game in the service.',
 };
 
 const fi: UiStrings = {
@@ -187,6 +201,13 @@ const fi: UiStrings = {
   emptyHistoryTitle: 'Ei vielä katsottua',
   emptyHistoryBody: 'Paina play — muistamme mihin jäit.',
   browseAll: 'Selaa kaikkea',
+  streamingServices: 'Suoratoistopalvelut',
+  servicesSubtitle: 'Missä suuret sarjat näkyvät Suomessa — tilaa tai kirjaudu ja katso palvelun omassa sovelluksessa.',
+  watchOnServices: 'Katso suoratoistopalveluissa',
+  openService: 'Avaa',
+  freeLabel: 'Ilmainen',
+  paidLabel: 'Tilaus',
+  servicesDisclaimer: 'Koottu Suomen näkyvyyksistä · kausi 2025–26. Oikeudet vaihtuvat — varmista tarkka ottelu palvelusta.',
 };
 
 const sv: UiStrings = {
@@ -244,6 +265,13 @@ const sv: UiStrings = {
   emptyHistoryTitle: 'Inget sett ännu',
   emptyHistoryBody: 'Tryck play — vi minns var du slutade.',
   browseAll: 'Bläddra allt',
+  streamingServices: 'Streamingtjänster',
+  servicesSubtitle: 'Var de stora serierna syns i Finland — prenumerera eller logga in och titta i tjänstens app.',
+  watchOnServices: 'Se på streamingtjänster',
+  openService: 'Öppna',
+  freeLabel: 'Gratis',
+  paidLabel: 'Prenumeration',
+  servicesDisclaimer: 'Kurerat för Finland · säsong 2025–26. Rättigheter ändras — bekräfta matchen i tjänsten.',
 };
 
 const CATALOGS: Record<UiLanguage, UiStrings> = { en, fi, sv };
