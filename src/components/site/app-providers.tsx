@@ -1,11 +1,18 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
+import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
 import { useCinedeckStore } from '@/lib/store';
 import { applyAccentColor, getSettings, subscribeToSettings } from '@/lib/settings';
+import {
+  beginReconnectPolling,
+  isNetworkError,
+  onReconnected,
+  onReconnecting,
+} from '@/lib/reconnect';
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -17,8 +24,39 @@ export function AppProviders({ children }: { children: ReactNode }) {
             retry: 1,
           },
         },
+        // Origin-wake detection: when ANY query or mutation fails at the
+        // network level (suspended sandbox), start polling /api/health. When
+        // it answers again, invalidate everything — the UI heals itself.
+        queryCache: new QueryCache({
+          onError: (error) => {
+            if (isNetworkError(error)) beginReconnectPolling();
+          },
+        }),
+        mutationCache: new MutationCache({
+          onError: (error) => {
+            if (isNetworkError(error)) beginReconnectPolling();
+          },
+        }),
       })
   );
+
+  // Auto-heal: when the origin comes back after a suspension, refetch every
+  // query so rows/search/detail views repopulate without user action.
+  useEffect(() => {
+    const offReconnected = onReconnected(() => {
+      toast.success('Connection restored — refreshing…', { duration: 3000 });
+      void queryClient.invalidateQueries();
+    });
+    const offReconnecting = onReconnecting(() => {
+      toast.info('Server is waking up — will refresh automatically…', {
+        duration: 8000,
+      });
+    });
+    return () => {
+      offReconnected();
+      offReconnecting();
+    };
+  }, [queryClient]);
 
   // Pull language + preferred server from localStorage after mount so the
   // first client render matches the server-rendered HTML.

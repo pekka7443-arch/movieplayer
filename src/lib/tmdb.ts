@@ -1,6 +1,7 @@
 import { getTmdbKey } from '@/lib/settings';
 import type { MetaSearchItem } from '@/lib/meta';
 import { getActiveProfileId, MAIN_PROFILE_ID } from '@/lib/profile';
+import { beginReconnectPolling } from '@/lib/reconnect';
 
 // ---------------------------------------------------------------------------
 // Shared types (API contract v1)
@@ -161,6 +162,9 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(path, init);
   } catch {
+    // Origin unreachable (e.g. suspended sandbox) — start the wake-up poll so
+    // the UI auto-heals instead of leaving the user a dead "Try again" screen.
+    beginReconnectPolling();
     throw new ApiError('network', ERROR_MESSAGES.network);
   }
 

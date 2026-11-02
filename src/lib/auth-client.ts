@@ -4,6 +4,8 @@
 // All endpoints are same-origin /api/auth/* — cookies are httpOnly, so the
 // client only ever sees the sanitized user payload.
 
+import { beginReconnectPolling } from '@/lib/reconnect';
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -86,6 +88,8 @@ async function authFetch(path: string, body: unknown): Promise<AuthUser | AuthTo
       body: JSON.stringify(body),
     });
   } catch {
+    // Origin unreachable — start the wake-up poll (auto-heal on return).
+    beginReconnectPolling();
     throw new AuthError('network', AUTH_ERROR_TEXT.network);
   }
 
@@ -233,6 +237,7 @@ export async function fetchMe(): Promise<AuthUser | null> {
   } catch {
     // Network failure: throw so React Query retries — the cached user above
     // keeps the UI signed in. Never resolve to "logged out" on an error.
+    beginReconnectPolling();
     throw new AuthError('network', AUTH_ERROR_TEXT.network);
   }
   if (response.status >= 500) {

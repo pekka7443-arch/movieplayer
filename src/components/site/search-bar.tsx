@@ -164,7 +164,7 @@ export function SearchBar() {
   const tmdbEnabled = hasKey && trimmed.length >= 2;
   const metaEnabled = !hasKey && trimmed.length >= 2;
 
-  const { data, isFetching } = useSearch(trimmed, language, tmdbEnabled);
+  const { data, isFetching, isError: keyedIsError } = useSearch(trimmed, language, tmdbEnabled);
   const metaQuery = useMetaSearch(trimmed, metaEnabled);
 
   const results = useMemo(() => data ?? [], [data]);
@@ -328,6 +328,15 @@ export function SearchBar() {
           Keep typing — results appear after 2 characters.
         </div>
       );
+    } else if (metaQuery.isError) {
+      // Origin unreachable (suspended sandbox) — say so instead of the
+      // misleading "No results"; the reconnect poll auto-refreshes on wake.
+      body = (
+        <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
+          <SearchX className="size-4 text-amber-500 dark:text-amber-400" aria-hidden />
+          <span>Search is unreachable right now — reconnecting automatically…</span>
+        </div>
+      );
     } else if (metaResults.length === 0) {
       body = (
         <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
@@ -384,6 +393,15 @@ export function SearchBar() {
     body = (
       <div className="px-3 py-6 text-sm text-zinc-500">
         Keep typing — results appear after 2 characters.
+      </div>
+    );
+  } else if (keyedIsError) {
+    // Origin unreachable (suspended sandbox) — say so instead of the
+    // misleading "No results"; the reconnect poll auto-refreshes on wake.
+    body = (
+      <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
+        <SearchX className="size-4 text-amber-500 dark:text-amber-400" aria-hidden />
+        <span>Search is unreachable right now — reconnecting automatically…</span>
       </div>
     );
   } else if (results.length === 0) {
