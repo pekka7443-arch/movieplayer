@@ -126,7 +126,13 @@ function MaintenanceGate({ children }: { children: React.ReactNode }) {
   );
 }
 
-function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaSearchItem[] }) {
+function App({
+  initialTrending,
+  cspNonce,
+}: {
+  initialTrending?: import('@/lib/meta').MetaSearchItem[];
+  cspNonce?: string;
+}) {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const params = useSearchParams();
@@ -193,7 +199,7 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
   }, [viewKey]);
 
   return (
-    <AppProviders>
+    <AppProviders cspNonce={cspNonce}>
       <MaintenanceGate>
       <div className="flex min-h-svh flex-col text-zinc-900 dark:text-zinc-100">
         <a
@@ -261,10 +267,17 @@ function App({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaS
   );
 }
 
-export default function AppRoot({ initialTrending }: { initialTrending?: import('@/lib/meta').MetaSearchItem[] }) {
+export default function AppRoot({
+  initialTrending,
+  cspNonce,
+}: {
+  initialTrending?: import('@/lib/meta').MetaSearchItem[];
+  /** CSP nonce threaded from the server layout (next-themes bootstrap). */
+  cspNonce?: string;
+}) {
   return (
     <Suspense fallback={null}>
-      <App initialTrending={initialTrending} />
+      <App initialTrending={initialTrending} cspNonce={cspNonce} />
     </Suspense>
   );
 }

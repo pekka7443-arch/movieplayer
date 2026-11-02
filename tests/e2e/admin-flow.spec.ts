@@ -60,6 +60,40 @@ test.describe('admin dashboard', () => {
   let victimEmail = '';
   let victimPassword = '';
 
+
+/** API login for the admin account → session cookie string. */
+async function adminCookieOf(
+  request: import('@playwright/test').APIRequestContext,
+): Promise<string> {
+  const res = await request.post('/api/auth/login', {
+    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+  });
+  const setCookie = res.headers()['set-cookie'] ?? '';
+  const match = setCookie.match(/cinedeck_session=[^;]+/);
+  if (!match) throw new Error('admin login failed');
+  return match[0];
+}
+
+/**
+ * Open a users-table row menu and activate an item KEYBOARD-driven.
+ * Radix dropdowns dismiss themselves when focus never reaches the menu
+ * content (an automation-only quirk with the dev overlay): explicitly
+ * focusing the item and pressing Enter is the reliable activation path and
+ * mirrors how keyboard users operate the console.
+ */
+async function openRowMenuAndActivate(
+  page: import('@playwright/test').Page,
+  victimEmail: string,
+  menuItemName: string,
+): Promise<void> {
+  await page.getByRole('button', { name: `Row actions for ${victimEmail}` }).click();
+  const item = page.getByRole('menuitem', { name: menuItemName });
+  await item.waitFor({ state: 'visible', timeout: 10_000 });
+  await item.focus();
+  await page.keyboard.press('Enter');
+  await item.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined);
+}
+
   test.beforeEach(() => {
     victimEmail = uniqueEmail();
     victimPassword = 'quartz-meadow-88-drift!';
@@ -85,7 +119,15 @@ test.describe('admin dashboard', () => {
     await expect(page.locator('header [aria-label^="Account menu"]')).toBeVisible({ timeout: 20_000 });
 
     // 2. The default-password nag is present until the password changes.
-    await expect(page.getByText(/default admin password/i)).toBeVisible();
+    // (Conditional: a deployment whose admin already rotated the password —
+    // mustChangePassword=false, e.g. after an operator reset — shows no nag.)
+    const meRes = await request.get('/api/auth/me', {
+      headers: { cookie: await adminCookieOf(request) },
+    });
+    const meBody = (await meRes.json()) as { user: { mustChangePassword?: boolean } | null };
+    if (meBody.user?.mustChangePassword) {
+      await expect(page.getByText(/default admin password/i)).toBeVisible();
+    }
 
     // 3. Admin console: overview renders, then the Users section.
     await page.goto('/admin');
@@ -95,13 +137,16 @@ test.describe('admin dashboard', () => {
     await page.getByRole('link', { name: 'Users' }).click();
     await page.getByPlaceholder('Search name or email…').fill(victimEmail);
     await expect(page.getByText(victimEmail).first()).toBeVisible({ timeout: 15_000 });
+    // Wait for the FILTERED query to settle: the footer flips to "1 users"
+    // only after the q= response lands. Opening the row menu while the
+    // filtered refetch is still in flight re-renders the table and Radix
+    // dismisses the menu (dev-mode compile latency amplifies this).
+    await expect(page.getByText(/^1 users · page 1\/1$/)).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(500);
 
     // 4. Suspend with a reason via the row actions menu.
     page.once('dialog', (dialog) => dialog.accept('E2E suspension reason'));
-    await page.getByRole('button', { name: `Row actions for ${victimEmail}` }).click();
-    const suspendItem = page.getByRole('menuitem', { name: `Suspend ${victimEmail}` });
-    await suspendItem.waitFor({ state: 'visible' });
-    await suspendItem.click();
+    await openRowMenuAndActivate(page, victimEmail, `Suspend ${victimEmail}`);
 
     // 5. The suspended user cannot log in — the reason is shown.
     const blocked = await request.post('/api/auth/login', {
@@ -113,10 +158,7 @@ test.describe('admin dashboard', () => {
 
     // 6. Unsuspend from the same row menu, and the account works again.
     page.once('dialog', (dialog) => dialog.accept('E2E suspension reason'));
-    await page.getByRole('button', { name: `Row actions for ${victimEmail}` }).click();
-    const unsuspendItem = page.getByRole('menuitem', { name: `Unsuspend ${victimEmail}` });
-    await unsuspendItem.waitFor({ state: 'visible' });
-    await unsuspendItem.click();
+    await openRowMenuAndActivate(page, victimEmail, `Unsuspend ${victimEmail}`);
     await expect
       .poll(
         async () =>

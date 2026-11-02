@@ -374,7 +374,11 @@ describe('session validation hardening', () => {
 
     await prisma.user.update({ where: { id: user.id }, data: { suspendedAt: new Date() } });
     expect(await auth.validateSessionToken(token)).toBeNull();
-    expect(await prisma.session.count({ where: { userId: user.id } })).toBe(0);
+    // The revocation write is fire-and-forget — poll until the rows are gone
+    // instead of asserting synchronously (avoid a delete-race flake).
+    await expect
+      .poll(async () => prisma.session.count({ where: { userId: user.id } }), { timeout: 5000 })
+      .toBe(0);
   });
 
   it('a soft-deleted account loses its live session immediately', async () => {

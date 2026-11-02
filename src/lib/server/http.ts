@@ -122,6 +122,23 @@ export const CSRF_COOKIE = 'cinedeck_csrf';
 export const CSRF_HEADER = 'x-csrf-token';
 
 /**
+ * Dev-only e2e escape hatch (same trust envelope as the rate-limit bypass):
+ * non-production runtime + loopback client + shared secret header. Playwright's
+ * API request context manages cookies but cannot execute the client-side
+ * fetch interceptor, so API-context mutations would otherwise 403 on the
+ * double-submit check. Production never sees this path.
+ */
+function isE2eBypass(request: Request): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
+  if (!process.env.E2E_RATELIMIT_BYPASS) return false;
+  if (request.headers.get('x-cinedeck-e2e') !== process.env.E2E_RATELIMIT_BYPASS) return false;
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? request.headers.get('x-real-ip')
+    ?? 'local';
+  return ip === 'local' || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+/**
  * Double-submit CSRF check. When the request carries the `cinedeck_csrf`
  * cookie, the `x-csrf-token` header must match it byte-for-byte. Requests
  * without the cookie (non-browser clients, first-touch) pass — the origin
@@ -140,6 +157,7 @@ export function hasValidCsrfToken(request: Request): boolean {
 export function enforceSameOrigin(request: Request): Response | null {
   if (isSameOrigin(request)) {
     if (MUTATING.has(request.method.toUpperCase()) && !hasValidCsrfToken(request)) {
+      if (isE2eBypass(request)) return null;
       return apiError(403, 'csrf_failed', 'Request could not be verified. Reload the page and try again.');
     }
     return null;

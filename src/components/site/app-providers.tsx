@@ -14,7 +14,7 @@ import {
   onReconnecting,
 } from '@/lib/reconnect';
 
-export function AppProviders({ children }: { children: ReactNode }) {
+export function AppProviders({ children, cspNonce }: { children: ReactNode; cspNonce?: string }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -76,9 +76,12 @@ export function AppProviders({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // CSP nonce for next-themes' FOUC-prevention inline script — threaded from
+  // the server (proxy x-nonce header) so the SSR-rendered script carries it;
+  // the strict-dynamic production CSP would block a nonce-less variant.
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} nonce={cspNonce}>
         {children}
         <Toaster
           richColors

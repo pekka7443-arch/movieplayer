@@ -69,7 +69,7 @@ function buildCsp(nonce: string): string {
   ].join('; ');
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Per-request nonce (122 bits of randomness — unguessable).
@@ -122,7 +122,5 @@ function finalizeCookies(request: NextRequest, response: NextResponse): NextResp
 }
 
 export const config = {
-  matcher: {
-    source: '/((?!_next/static|_next/image|favicon.ico).*)',
-  },
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };

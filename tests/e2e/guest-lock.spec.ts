@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { expect, test, type Page } from '@playwright/test';
@@ -89,30 +88,37 @@ test.describe('password reset', () => {
     });
     expect(registered.status()).toBe(200);
 
-    // Issue a reset token the way the console mail adapter would print one:
-    // the same signed-token format the server validates (AUTH_SECRET + HMAC).
-    const secret = envFromDotEnv('AUTH_SECRET');
-    expect(secret).toBeTruthy();
-    const userId = await request
-      .get('/api/auth/me', { headers: { cookie: await cookieOf(request, email, original) } })
-      .then(async (r) => {
-        const body = (await r.json()) as { user: { id: string } | null };
-        return body.user?.id;
-      });
-    if (!userId) throw new Error('could not resolve user id');
+    // A live session that the reset must revoke.
+    const oldSession = await cookieOf(request, email, original);
+    expect(oldSession).toBeTruthy();
 
-    const exp = Math.floor(Date.now() / 1000) + 30 * 60;
-    const payload = Buffer.from(
-      JSON.stringify({ purpose: 'reset', sub: userId, exp, jti: 'e2e-reset' }),
-    ).toString('base64url');
-    const mac = createHmac('sha256', secret!).update(payload).digest('base64url');
-    const token = `${payload}.${mac}`;
+    // 2026-11-03 hardening: reset tokens are single-use, hash-stored DB rows —
+    // they can no longer be forged from AUTH_SECRET. The dev console mailer
+    // delivers the real link into dev.log; this test harvests it the same way
+    // a developer would.
+    const forgot = await request.post('/api/auth/forgot', { data: { email } });
+    expect(forgot.status()).toBe(200);
+    const token = await resetTokenFromDevLog(email);
+    expect(token, 'reset token logged by the console mailer').toBeTruthy();
 
     const newPassword = 'rivulet-ember-77-storm!';
     const reset = await request.post('/api/auth/reset', {
       data: { token, password: newPassword },
     });
     expect(reset.status()).toBe(200);
+
+    // Single-use: replaying the same token is rejected.
+    const replay = await request.post('/api/auth/reset', {
+      data: { token, password: 'another-pass-99-lagoon!' },
+    });
+    expect(replay.status()).toBe(400);
+
+    // Every prior session died with the reset (the me endpoint answers 200
+    // with a null user for signed-out callers by contract — check the body).
+    const meWithOld = await request.get('/api/auth/me', { headers: { cookie: oldSession } });
+    expect(meWithOld.status()).toBe(200);
+    const meBody = (await meWithOld.json()) as { user: { id: string } | null };
+    expect(meBody.user).toBeNull();
 
     // Old password is dead; new one works.
     const oldLogin = await request.post('/api/auth/login', { data: { email, password: original } });
@@ -121,6 +127,33 @@ test.describe('password reset', () => {
     expect(newLogin.status()).toBe(200);
   });
 });
+
+
+/**
+ * Harvest the newest reset token for `email` from the dev server's console
+ * mailer output (dev.log). The console adapter is the dev delivery channel —
+ * production redacts tokens from logs, so this helper is dev-only by design.
+ */
+async function resetTokenFromDevLog(email: string, timeoutMs = 15000): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+  const tokenRe = new RegExp(
+    `"to":"${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}".*?"actionUrl":"([^"]+)"`,
+  );
+  while (Date.now() < deadline) {
+    try {
+      const log = readFileSync('dev.log', 'utf8');
+      const matches = log.match(new RegExp(tokenRe.source, 'g')) ?? [];
+      const last = matches[matches.length - 1];
+      const url = last?.match(tokenRe)?.[1];
+      const token = url?.match(/token=([^"&\\]+)/)?.[1];
+      if (token) return decodeURIComponent(token);
+    } catch {
+      // log not readable yet — keep polling
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return null;
+}
 
 /** Log in via the API and return the session cookie string. */
 async function cookieOf(

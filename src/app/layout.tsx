@@ -1,12 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { UxOverlay } from "@/components/site/ux-overlay";
-import { installCsrfHeader } from "@/lib/csrf-client";
-
-// CSRF double-submit: stamp x-csrf-token on every same-origin mutating fetch
-// (transparent to all existing call sites — see src/lib/csrf-client.ts).
-installCsrfHeader();
+import { CsrfInstall } from "@/components/site/csrf-install";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -66,14 +63,19 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // CSP nonce from the proxy middleware (x-nonce request header). The meta
+  // tag is React's documented mechanism: streamed SSR boundary-reveal scripts
+  // pick the nonce up from here, so strict-dynamic CSP never blocks them.
+  const nonce = (await headers()).get("x-nonce") ?? "";
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {nonce ? <meta property="csp-nonce" content={nonce} /> : null}
         {/* Poster/backdrop CDNs — warm connections before the hero LCP image */}
         <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://assets.metahub.space" crossOrigin="anonymous" />
@@ -83,6 +85,7 @@ export default function RootLayout({
         className={`${inter.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         {children}
+        <CsrfInstall />
         <UxOverlay />
       </body>
     </html>

@@ -119,9 +119,12 @@ class SqliteTokenBucketStore implements RateLimitStore {
   private async ensurePragmas(): Promise<void> {
     if (this.pragmasReady) return;
     try {
-      await db.$executeRawUnsafe('PRAGMA journal_mode=WAL;');
-      await db.$executeRawUnsafe('PRAGMA busy_timeout=5000;');
-      await db.$executeRawUnsafe('PRAGMA synchronous=NORMAL;');
+      // Every PRAGMA here may return a row on SQLite (journal_mode and
+      // busy_timeout both report their new value) → queryRaw, never
+      // executeRaw. All are idempotent connection-level settings.
+      await db.$queryRawUnsafe('PRAGMA journal_mode=WAL;');
+      await db.$queryRawUnsafe('PRAGMA busy_timeout=5000;');
+      await db.$queryRawUnsafe('PRAGMA synchronous=NORMAL;');
       this.pragmasReady = true;
     } catch {
       // Non-fatal — defaults still work, just slower under contention.
