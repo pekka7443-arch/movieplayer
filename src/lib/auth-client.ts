@@ -32,6 +32,16 @@ export type AuthErrorCode =
   | 'network'
   | 'unknown';
 
+/** Human-readable 429 text using the server's Retry-After when present.
+ *  The login bucket refills slowly (5 per 15 min) — "wait a minute" was a
+ *  lie that sent users into a retry loop; show the real wait instead. */
+function rateLimitMessage(response: Response): string {
+  const retryAfter = Number(response.headers.get('retry-after'));
+  if (!Number.isFinite(retryAfter) || retryAfter <= 0) return AUTH_ERROR_TEXT.rate_limited;
+  if (retryAfter >= 90) return `Too many attempts — try again in about ${Math.ceil(retryAfter / 60)} minutes.`;
+  return `Too many attempts — try again in ${Math.ceil(retryAfter)} seconds.`;
+}
+
 export class AuthError extends Error {
   code: AuthErrorCode;
   problems?: string[];
@@ -101,7 +111,7 @@ async function authFetch(path: string, body: unknown): Promise<AuthUser | AuthTo
   }
 
   if (response.status === 429) {
-    throw new AuthError('rate_limited', AUTH_ERROR_TEXT.rate_limited);
+    throw new AuthError('rate_limited', rateLimitMessage(response));
   }
 
   if (payload.totpRequired && payload.pendingToken) {
@@ -244,7 +254,7 @@ export async function fetchMe(): Promise<AuthUser | null> {
     throw new AuthError('unknown', AUTH_ERROR_TEXT.unknown);
   }
   if (response.status === 429) {
-    throw new AuthError('rate_limited', AUTH_ERROR_TEXT.rate_limited);
+    throw new AuthError('rate_limited', rateLimitMessage(response));
   }
   if (!response.ok) {
     // Unexpected 4xx — treat as signed out rather than wedging the app.

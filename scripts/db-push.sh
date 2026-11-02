@@ -32,7 +32,59 @@ esac
 
 cd "$PROJECT_ROOT"
 
+# ---------------------------------------------------------------------------
+# Persistent-volume bootstrap restore (2026-11-03 incident).
+#
+# Platform recycles rebuild the live tree from repo.tar and REGENERATE .env
+# with only DATABASE_URL. gitignore excludes config/, db/ and .env from
+# repo.tar, so every boot started with: no admin credentials anywhere →
+# seed skipped → 0 users → login 401 → user retries → rate-limited 429.
+# /tmp/my-project is the PolarFS volume that SURVIVES recycles. Restore the
+# bootstrap state from it before touching the database. All steps are
+# best-effort (`|| true`) — a missing/absent volume must never break boot.
+# ---------------------------------------------------------------------------
+VOL_ROOT="/tmp/my-project"
+
+restore_volume_bootstrap() {
+  [ -d "$VOL_ROOT" ] || return 0
+
+  # 1) Bootstrap credentials file → live config/ (gitignored, so never in repo.tar).
+  if [ ! -f "$PROJECT_ROOT/config/bootstrap-admin.json" ] &&
+     [ -f "$VOL_ROOT/config/bootstrap-admin.json" ]; then
+    mkdir -p "$PROJECT_ROOT/config"
+    cp "$VOL_ROOT/config/bootstrap-admin.json" "$PROJECT_ROOT/config/bootstrap-admin.json" 2>/dev/null || true
+    echo "[db-push-guard] restored config/bootstrap-admin.json from persistent volume."
+  fi
+
+  # 2) ADMIN_* env keys (platform rewrites .env to DATABASE_URL-only each boot).
+  if [ -f "$PROJECT_ROOT/config/bootstrap-admin.json" ] &&
+     ! grep -q '^ADMIN_EMAIL=' "$PROJECT_ROOT/.env" 2>/dev/null; then
+    ADMIN_JSON="$(bun -e 'try{const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(c.email&&c.password)process.stdout.write(c.email+" "+c.password)}catch{}' "$PROJECT_ROOT/config/bootstrap-admin.json" 2>/dev/null || true)"
+    if [ -n "$ADMIN_JSON" ]; then
+      ADMIN_EMAIL_VAL="${ADMIN_JSON%% *}"
+      ADMIN_PASSWORD_VAL="${ADMIN_JSON#* }"
+      {
+        echo ""
+        echo "ADMIN_EMAIL=$ADMIN_EMAIL_VAL"
+        echo "ADMIN_PASSWORD=$ADMIN_PASSWORD_VAL"
+      } >> "$PROJECT_ROOT/.env"
+      echo "[db-push-guard] restored ADMIN_EMAIL/ADMIN_PASSWORD into .env from bootstrap config."
+    fi
+  fi
+
+  # 3) Whole database (live db/ is never in repo.tar): restore the last known
+  #    good DB so accounts/sessions/watch history survive recycles. Only when
+  #    the live DB file is ABSENT — never overwrite an existing one (drift is
+  #    handled by the migrate-deploy guard below).
+  if [ ! -f "$LIVE_DB" ] && [ -f "$VOL_ROOT/db/custom.db" ]; then
+    mkdir -p "$PROJECT_ROOT/db"
+    cp "$VOL_ROOT/db/custom.db" "$LIVE_DB" 2>/dev/null || true
+    echo "[db-push-guard] restored db/custom.db from persistent volume."
+  fi
+}
+
 if [ "$TARGET_DB" = "$LIVE_DB" ]; then
+  restore_volume_bootstrap
   echo "[db-push-guard] target is the LIVE database ($TARGET_DB)"
   echo "[db-push-guard] 'prisma db push' can drop data — running safe 'prisma migrate deploy' instead."
   if bunx prisma migrate deploy; then
