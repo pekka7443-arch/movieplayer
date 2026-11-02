@@ -37,7 +37,7 @@ export const GET = withApi('episode-watch', async (request) => {
 
 // POST /api/episode-watch → mark an episode watched (idempotent).
 export const POST = withApi('episode-watch-post', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const body = await readJsonBody(request);
@@ -59,7 +59,7 @@ export const POST = withApi('episode-watch-post', async (request) => {
 
 // DELETE /api/episode-watch → unmark (undo mis-mark).
 export const DELETE = withApi('episode-watch-delete', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const body = await readJsonBody(request);

@@ -59,7 +59,7 @@ const deleteSchema = z.object({ id: z.string().min(1).max(64).optional(), all: z
 export const DELETE = withApi('auth/sessions-delete', async (request) => {
   const originError = enforceSameOrigin(request);
   if (originError) return originError;
-  const limited = enforceRateLimit(request, 'account');
+  const limited = await enforceRateLimit(request, 'account');
   if (limited) return limited;
 
   const owner = await resolveOwner(request);
@@ -93,7 +93,7 @@ export const DELETE = withApi('auth/sessions-delete', async (request) => {
 export const POST = withApi('auth/sessions-others', async (request) => {
   const originError = enforceSameOrigin(request);
   if (originError) return originError;
-  const limited = enforceRateLimit(request, 'account');
+  const limited = await enforceRateLimit(request, 'account');
   if (limited) return limited;
 
   const owner = await resolveOwner(request);

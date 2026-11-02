@@ -81,7 +81,7 @@ export const GET = withApi('watchlist', async (request) => {
 
 // POST /api/watchlist → idempotent create on [owner, tmdbId, mediaType, profile].
 export const POST = withApi('watchlist-post', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const body = await readJsonBody(request);
@@ -127,7 +127,7 @@ export const POST = withApi('watchlist-post', async (request) => {
 
 // DELETE /api/watchlist?id=<rowId> | ?all=1 — scoped to the caller.
 export const DELETE = withApi('watchlist-delete', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);

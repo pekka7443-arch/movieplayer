@@ -37,7 +37,7 @@ const postSchema = z.discriminatedUnion('action', [
 
 // POST /api/flags → admin-only toggles + announcement publishing.
 export const POST = withApi('flags-post', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);

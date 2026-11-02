@@ -62,13 +62,25 @@ bunx prisma migrate deploy
 bunx prisma generate
 bun run build
 
-# --- 5. Ship the env with the standalone bundle -----------------------------
-# The platform starts .next/standalone/server.js with cwd INSIDE that dir;
-# bun/Next load .env from cwd. Without this copy the production process
-# would boot without DATABASE_URL/AUTH_SECRET. Copying it here makes the
-# runtime env deterministic and identical to the project .env.
-if [ -d .next/standalone ] && [ -f .env ]; then
-  cp .env .next/standalone/.env
+# --- 5. Runtime environment for the standalone bundle -----------------------
+# SECURITY (2026-11-03): the standalone bundle NO LONGER receives a copy of
+# the project .env — packaging secrets into a distributable artifact is a
+# leak vector. The platform start command (package.json "start") provides the
+# only non-secret the runtime needs (DATABASE_URL) and sets CINEDECK_ROOT,
+# under which the auth-secret-store / seed resolve AUTH_SECRET, ADMIN_* and
+# APP_BASE_URL from the PROJECT .env at boot. Nothing sensitive ships inside
+# .next/standalone.
+if [ -f .next/standalone/.env ]; then
+  rm -f .next/standalone/.env
+  echo "[deploy] removed stale .env copy from the standalone bundle"
+fi
+
+# --- 6. Database file permissions -------------------------------------------
+# The SQLite file holds password hashes, session hashes and sealed TOTP
+# secrets — restrict it to the owning user (2026-11-03 hardening).
+if [ -f "$DB_FILE" ]; then
+  chmod 600 "$DB_FILE"
+  echo "[deploy] db file permissions set to 0600"
 fi
 
 echo "[deploy] done — no data was touched."

@@ -29,7 +29,7 @@ export const GET = withApi('social-following', async (request) => {
 const followSchema = z.object({ userId: z.string().min(1).max(64) });
 
 export const POST = withApi('social-follow-toggle', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const auth = await requireAuthedUser(request);

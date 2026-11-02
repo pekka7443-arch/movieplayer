@@ -13,6 +13,7 @@ import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit, clientIpOf } from '@/lib/server/rate-limit';
 import { checkPassword } from '@/lib/password';
+import { openStoredSecret } from '@/lib/server/crypto-sealed';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ const schema = z.object({
 export const POST = withApi('account/password', async (request) => {
   const originError = enforceSameOrigin(request);
   if (originError) return originError;
-  const limited = enforceRateLimit(request, 'account');
+  const limited = await enforceRateLimit(request, 'account');
   if (limited) return limited;
 
   const owner = await resolveOwner(request);
@@ -49,7 +50,8 @@ export const POST = withApi('account/password', async (request) => {
 
   if (user.totpEnabled) {
     const { verifyTotp } = await import('@/lib/server/totp');
-    if (!user.totpSecret || !totpCode || !verifyTotp(user.totpSecret, totpCode)) {
+    const secret = openStoredSecret(user.totpSecret, user.id);
+    if (!secret || !totpCode || !verifyTotp(secret, totpCode)) {
       return apiError(401, 'invalid_code');
     }
   }

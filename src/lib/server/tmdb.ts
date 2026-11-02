@@ -357,7 +357,9 @@ function pickTrailerKey(videos: unknown[]): string | null {
   const official = candidates.find((entry) => asRecord(entry).official === true);
   const chosen = official ?? candidates[0];
   const key = chosen ? toStr(asRecord(chosen).key) : "";
-  return key.length > 0 ? key : null;
+  // YouTube video ids are [A-Za-z0-9_-]{11}; anything else (path/query
+  // injection into the embed URL) is dropped (2026-11-03 hardening).
+  return /^[\w-]{11}$/.test(key) ? key : null;
 }
 
 function extractProviders(watchProviders: unknown): TmdbProvider[] {

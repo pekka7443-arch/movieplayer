@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { apiError, withApi } from '@/lib/server/api';
 import { guardMutation, jsonError, readJsonBody } from '@/lib/server/http';
+import { enforceRateLimit } from '@/lib/server/rate-limit';
 import { recentLogs } from '@/lib/server/logger';
 import { writeAudit } from '@/lib/server/audit';
-import { signStatelessToken } from '@/lib/server/auth';
+import { createPasswordResetToken } from '@/lib/server/tokens';
 import { appBaseUrl, mailer } from '@/lib/server/mailer';
 import {
   lastSeenByUser,
@@ -27,6 +28,8 @@ const isResponse = (value: unknown): value is Response => value instanceof Respo
 // reports. ?logs=1 keeps the in-memory log ring for the Logs panel.
 // ---------------------------------------------------------------------------
 export const GET = withApi('admin', async (request) => {
+  const limited = await enforceRateLimit(request, 'adminRead');
+  if (limited) return limited;
   const admin = await requireAdmin(request);
   if (isResponse(admin)) return admin;
 
@@ -729,7 +732,7 @@ const postSchema = z.discriminatedUnion('action', [
 ]);
 
 export const POST = withApi('admin-post', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const admin = await requireAdmin(request);
@@ -833,7 +836,9 @@ export const POST = withApi('admin-post', async (request) => {
     case 'sendPasswordReset': {
       const target = await loadUser(input.id);
       if (!target) return jsonError('not_found', 404);
-      const { token } = signStatelessToken('reset', target.id, 30 * 60);
+      // Single-use DB-backed reset token (hash-stored, 30 min, atomic
+      // consumption — 2026-11-03 hardening).
+      const { token } = await createPasswordResetToken(target.id, 30 * 60);
       const resetUrl = `${appBaseUrl(request)}/reset-password?token=${encodeURIComponent(token)}`;
       await mailer().send({
         to: target.email,
@@ -860,8 +865,24 @@ export const POST = withApi('admin-post', async (request) => {
       return Response.json({ ok: true });
     }
     case 'hardDeleteUser': {
+      // Irreversible destruction requires RECENT authentication: the admin
+      // session must be ≤60 minutes old (i.e. the password was entered
+      // recently). Stale-but-valid sessions cannot purge accounts.
+      const sessionAgeMs = admin.sessionCreatedAt
+        ? Date.now() - admin.sessionCreatedAt.getTime()
+        : Number.POSITIVE_INFINITY;
+      if (sessionAgeMs > 60 * 60 * 1000) {
+        return apiError(
+          403,
+          'recent_auth_required',
+          'Hard deletion requires a recent sign-in (within the last hour). Sign out and back in, then retry.',
+        );
+      }
       const target = await loadUser(input.id);
       if (!target) return jsonError('not_found', 404);
+      if (input.id === admin.id) {
+        return apiError(400, 'bad_request', 'You cannot hard-delete your own account from the console.');
+      }
       await db.user.delete({ where: { id: input.id } });
       await auditAction('user.hard_deleted', { id: target.id, label: target.email });
       return Response.json({ ok: true });

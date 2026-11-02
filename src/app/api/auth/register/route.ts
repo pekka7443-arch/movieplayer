@@ -14,7 +14,7 @@ import { enforceRateLimit, clientIpOf } from '@/lib/server/rate-limit';
 import { checkPassword } from '@/lib/password';
 import { geoLookup, truncateIp } from '@/lib/server/geo';
 import { appBaseUrl, mailer } from '@/lib/server/mailer';
-import { signStatelessToken } from '@/lib/server/auth';
+import { createEmailVerificationToken } from '@/lib/server/tokens';
 import { isFlagEnabled } from '@/lib/server/flags';
 
 export const dynamic = 'force-dynamic';
@@ -44,8 +44,6 @@ const registerSchema = z.object({
 export const POST = withApi('auth/register', async (request) => {
   const originError = enforceSameOrigin(request);
   if (originError) return originError;
-  const limited = enforceRateLimit(request, 'register');
-  if (limited) return limited;
 
   const body = await readJsonBody(request);
   const parsed = registerSchema.safeParse(body);
@@ -53,6 +51,10 @@ export const POST = withApi('auth/register', async (request) => {
     return apiError(400, 'bad_request');
   }
   const { name, email, password } = parsed.data;
+
+  // Per-IP AND per-account buckets (email-keyed).
+  const limited = await enforceRateLimit(request, 'register', email);
+  if (limited) return limited;
 
   const verdict = checkPassword(password);
   if (!verdict.acceptable) {
@@ -98,9 +100,10 @@ export const POST = withApi('auth/register', async (request) => {
 
   // Verification email — always attempted; the console adapter prints it in
   // dev. The account works immediately regardless of verification state.
+  // Tokens are 256-bit random, hash-stored, single-use (2026-11-03).
   let verificationSent = false;
   try {
-    const { token } = signStatelessToken('verify', user.id, 24 * 60 * 60);
+    const { token } = await createEmailVerificationToken(user.id, 24 * 60 * 60);
     const url = `${appBaseUrl(request)}/verify-email?token=${encodeURIComponent(token)}`;
     await mailer().send({
       to: user.email,

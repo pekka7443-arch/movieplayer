@@ -1,13 +1,20 @@
 // Shared HTTP guardrails + outbound retry helper for CineDeck.
 //
-// REQUEST GUARDRAILS
-// - Origin/CSRF check: every mutating request (POST/PUT/PATCH/DELETE) must
-//   come from our own origin. Browsers always send Origin (or Referer) on
-//   cross-site requests; a mismatch → 403. This blocks CSRF from foreign
-//   pages because our auth is cookie-based (SameSite=Lax already covers the
-//   classic cross-site form POST; this closes same-site subdomain and
-//   scheme-downgrade gaps).
-// - Safe JSON body parsing, request id propagation.
+// REQUEST GUARDRAILS (mutating methods POST/PUT/PATCH/DELETE)
+// - ORIGIN check: Sec-Fetch-Site first (browser-asserted, proxy-proof), then
+//   the Origin/Referer hostname must match the request's OWN Host /
+//   X-Forwarded-Host (first hop) or the explicit ALLOWED_ORIGINS allowlist.
+//   Platform sibling subdomains (*.z.ai / *.space-z.ai at large) are NOT
+//   trusted as request origins — only the deployment's own host is. A page
+//   on another tenant's subdomain is same-site (SameSite=Lax does not stop
+//   it) so it must NOT pass this check (2026-11-03 hardening).
+// - CSRF double-submit: when the browser holds the `cinedeck_csrf` cookie
+//   (set by middleware on every page load), every mutating request must
+//   carry `x-csrf-token` equal to that cookie. Cross-site attackers cannot
+//   set custom headers (CORS preflight), so header+cookie+origin checks are
+//   three independent CSRF defenses. Non-browser clients without the cookie
+//   are governed by the origin check alone.
+// - Request bodies are capped (JSON 256KB default) in readJsonBody.
 //
 // OUTBOUND RESILIENCE
 // - withRetries: exponential backoff + jitter for upstream GETs (TMDB,
@@ -15,10 +22,15 @@
 //   (network, timeout, 5xx, 429), fails fast on deterministic 4xx.
 // Never import from client components.
 
+import { timingSafeEqual } from 'node:crypto';
+
 import { enforceRateLimit, type RateLimitBucket } from './rate-limit';
 import { apiError } from './api';
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/** Default maximum accepted JSON body size (bytes). */
+const MAX_JSON_BODY_BYTES = 256 * 1024;
 
 function normalizeHost(host: string | null): string {
   if (!host) return '';
@@ -26,38 +38,15 @@ function normalizeHost(host: string | null): string {
 }
 
 /**
- * Public platform domains that legitimately serve this deployment. The z.ai
- * preview/publish gateway proxies the app through preview-<id>.space-z.ai and
- * embeds it in *.z.ai pages (mirrors FRAME_ANCESTORS in next.config.ts) —
- * when that proxy rewrites the Host header, an Origin on one of these domains
- * is still genuinely ours.
+ * Extra origins explicitly trusted for mutating requests, on top of the
+ * request's own Host / first-hop X-Forwarded-Host. Comma-separated hostnames
+ * (no scheme/port) via the ALLOWED_ORIGINS env — the escape hatch for custom
+ * domains and exotic reverse proxies. Sibling platform subdomains are
+ * deliberately NOT trusted implicitly (2026-11-03 hardening): the platform
+ * preview gateway preserves the deployment's own Host, so same-origin
+ * matching already covers it.
  */
-function isTrustedPlatformHost(host: string): boolean {
-  return host === 'z.ai' || host.endsWith('.z.ai') || host.endsWith('.space-z.ai');
-}
-
-/**
- * True when the request plausibly originates from this site.
- *
- * Checked in layers, most-trusted first:
- * 1. `Sec-Fetch-Site` — asserted BY THE BROWSER from the actual page origin,
- *    so it is immune to reverse proxies rewriting Host. `same-origin`/`none`
- *    allow, `cross-site` rejects, `same-site` falls through to the header
- *    comparison. Chrome 76+, Firefox 90+, Safari 16.4+ all send it.
- * 2. Header comparison — the Origin/Referer hostname against Host,
- *    X-Forwarded-Host (first hop when chained) and the optional
- *    ALLOWED_ORIGINS env (comma-separated extra hostnames, port stripped).
- *    Platform preview domains (*.space-z.ai / *.z.ai) are always accepted.
- * 3. No Origin/Referer at all (curl, server-to-server) → allow; the session
- *    cookie is SameSite=Lax + HttpOnly, so browser CSRF is already blocked.
- */
-export function isSameOrigin(request: Request): boolean {
-  if (!MUTATING.has(request.method.toUpperCase())) return true;
-
-  const fetchSite = request.headers.get('sec-fetch-site')?.toLowerCase();
-  if (fetchSite === 'same-origin' || fetchSite === 'none') return true;
-  if (fetchSite === 'cross-site') return false;
-
+function allowedOriginHosts(request: Request): Set<string> {
   const allowed = new Set<string>();
   const push = (value: string | null | undefined) => {
     const host = normalizeHost(value ?? null);
@@ -70,10 +59,35 @@ export function isSameOrigin(request: Request): boolean {
   if (extraOrigins) {
     for (const entry of extraOrigins.split(',')) push(entry.trim());
   }
+  return allowed;
+}
+
+/**
+ * True when the request plausibly originates from this site.
+ *
+ * Checked in layers, most-trusted first:
+ * 1. `Sec-Fetch-Site` — asserted BY THE BROWSER from the actual page origin,
+ *    so it is immune to reverse proxies rewriting Host. `same-origin`/`none`
+ *    allow, `cross-site` rejects, `same-site` falls through to the header
+ *    comparison (a sibling subdomain must still prove it is THIS host).
+ * 2. Header comparison — the Origin (or legacy Referer) hostname against
+ *    Host, first-hop X-Forwarded-Host, and ALLOWED_ORIGINS.
+ * 3. No Origin/Referer at all (curl, server-to-server) → allow; the session
+ *    cookie is SameSite=Lax + HttpOnly, and the CSRF token check below still
+ *    applies when a csrf cookie rides along.
+ */
+export function isSameOrigin(request: Request): boolean {
+  if (!MUTATING.has(request.method.toUpperCase())) return true;
+
+  const fetchSite = request.headers.get('sec-fetch-site')?.toLowerCase();
+  if (fetchSite === 'same-origin' || fetchSite === 'none') return true;
+  if (fetchSite === 'cross-site') return false;
 
   const origin = request.headers.get('origin');
   const referer = request.headers.get('referer');
   if (!origin && !referer) return true;
+
+  const allowed = allowedOriginHosts(request);
 
   const claimHostOf = (value: string): string | null => {
     try {
@@ -85,7 +99,7 @@ export function isSameOrigin(request: Request): boolean {
 
   const claimAllowed = (claim: string | null): boolean => {
     if (!claim) return false;
-    return allowed.has(claim) || isTrustedPlatformHost(claim);
+    return allowed.has(claim);
   };
 
   // Origin decides when present (browsers always send it on cross-site
@@ -94,17 +108,54 @@ export function isSameOrigin(request: Request): boolean {
   return claimAllowed(claimHostOf(referer as string));
 }
 
-/** 403 Response when the origin check fails; null when the request is safe. */
+/** Constant-time string comparison (both must be non-empty and equal length). */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch {
+    return false;
+  }
+}
+
+export const CSRF_COOKIE = 'cinedeck_csrf';
+export const CSRF_HEADER = 'x-csrf-token';
+
+/**
+ * Double-submit CSRF check. When the request carries the `cinedeck_csrf`
+ * cookie, the `x-csrf-token` header must match it byte-for-byte. Requests
+ * without the cookie (non-browser clients, first-touch) pass — the origin
+ * check remains their gate.
+ */
+export function hasValidCsrfToken(request: Request): boolean {
+  const match = request.headers.get('cookie')?.match(/(?:^|;\s*)cinedeck_csrf=([^;]+)/);
+  if (!match) return true;
+  const cookieValue = decodeURIComponent(match[1]);
+  const headerValue = request.headers.get(CSRF_HEADER);
+  if (!headerValue) return false;
+  return constantTimeEqual(headerValue, cookieValue);
+}
+
+/** 403 Response when the origin/CSRF check fails; null when safe. */
 export function enforceSameOrigin(request: Request): Response | null {
-  if (isSameOrigin(request)) return null;
+  if (isSameOrigin(request)) {
+    if (MUTATING.has(request.method.toUpperCase()) && !hasValidCsrfToken(request)) {
+      return apiError(403, 'csrf_failed', 'Request could not be verified. Reload the page and try again.');
+    }
+    return null;
+  }
   return apiError(403, 'bad_origin', 'Request origin is not allowed.');
 }
 
-/** Combined guard for mutating routes: origin check first, then rate limit. */
-export function guardMutation(request: Request, bucket: RateLimitBucket): Response | null {
+/** Combined guard for mutating routes: origin + CSRF, then rate limit. */
+export async function guardMutation(
+  request: Request,
+  bucket: RateLimitBucket,
+  identity?: string,
+): Promise<Response | null> {
   const originError = enforceSameOrigin(request);
   if (originError) return originError;
-  return enforceRateLimit(request, bucket);
+  return enforceRateLimit(request, bucket, identity);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +165,7 @@ export function guardMutation(request: Request, bucket: RateLimitBucket): Respon
 export type ApiErrorCode =
   | 'bad_request'
   | 'bad_origin'
+  | 'csrf_failed'
   | 'unauthorized'
   | 'forbidden'
   | 'not_found'
@@ -134,10 +186,17 @@ export function jsonError(
   return apiError(status, code, message);
 }
 
-/** Safe JSON body parse → null on any failure (empty/invalid body). */
-export async function readJsonBody(request: Request): Promise<unknown | null> {
+/**
+ * Safe JSON body parse → null on any failure (empty/invalid/oversized body).
+ * Enforces a hard size cap so no route can be memory-DoS'd through an
+ * unbounded `request.text()` read (2026-11-03 hardening).
+ */
+export async function readJsonBody(request: Request, maxBytes = MAX_JSON_BODY_BYTES): Promise<unknown | null> {
   try {
+    const declared = Number(request.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > maxBytes) return null;
     const text = await request.text();
+    if (text.length > maxBytes) return null;
     if (!text) return null;
     return JSON.parse(text) as unknown;
   } catch {

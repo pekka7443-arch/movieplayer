@@ -97,7 +97,7 @@ export const GET = withApi('history', async (request) => {
 // POST /api/history → upsert on [owner, tmdbId, mediaType, profile].
 // positionSeconds/durationSeconds power the Continue Watching progress bars.
 export const POST = withApi('history-post', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const body = await readJsonBody(request);
@@ -156,7 +156,7 @@ export const POST = withApi('history-post', async (request) => {
 
 // DELETE /api/history?id=<rowId> | ?all=1 — scoped to the caller.
 export const DELETE = withApi('history-delete', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);

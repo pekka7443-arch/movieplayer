@@ -2,6 +2,11 @@ import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { UxOverlay } from "@/components/site/ux-overlay";
+import { installCsrfHeader } from "@/lib/csrf-client";
+
+// CSRF double-submit: stamp x-csrf-token on every same-origin mutating fetch
+// (transparent to all existing call sites — see src/lib/csrf-client.ts).
+installCsrfHeader();
 
 const inter = Inter({
   variable: "--font-inter",

@@ -66,7 +66,7 @@ const addSchema = z.object({
 
 // POST /api/lists/:id → add a title (idempotent on [list, tmdbId, mediaType]).
 export const POST = withApi('list-add', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const listId = new URL(request.url).pathname.split('/').pop() ?? '';
@@ -111,7 +111,7 @@ const patchSchema = z.object({
 
 // PATCH /api/lists/:id { order: [memberId, …] } → persist dnd reorder.
 export const PATCH = withApi('list-reorder', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const listId = new URL(request.url).pathname.split('/').pop() ?? '';
@@ -136,7 +136,7 @@ export const PATCH = withApi('list-reorder', async (request) => {
 
 // DELETE /api/lists/:id?tmdbId=&mediaType= → remove one title from the list.
 export const DELETE = withApi('list-remove', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const listId = new URL(request.url).pathname.split('/').pop() ?? '';

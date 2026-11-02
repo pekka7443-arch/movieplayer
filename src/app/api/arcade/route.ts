@@ -83,7 +83,7 @@ const postSchema = z.object({
  * Works signed-in or as a guest — the owner cookie carries the identity.
  */
 export const POST = withApi('arcade-post', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const body = await readJsonBody(request);

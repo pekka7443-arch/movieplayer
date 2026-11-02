@@ -10,23 +10,26 @@ export interface AdminUserContext {
   id: string;
   email: string;
   role: string;
+  /** Session creation time — the sign-in moment (recent-auth checks). */
+  sessionCreatedAt: Date | null;
 }
 
 /**
  * Role gate for every /api/admin/* surface: 401 for guests, 403 for
  * members without the admin role. Returns the admin's id + email so every
- * audit entry can say WHO did it.
+ * audit entry can say WHO did it. The role is ALWAYS re-read from the
+ * database — client-supplied role information is never trusted.
  */
 export async function requireAdmin(request: Request): Promise<AdminUserContext | Response> {
   const owner = await resolveOwner(request);
   if (!owner.userId) return jsonError('unauthorized', 401);
   const user = await db.user.findUnique({
     where: { id: owner.userId },
-    select: { id: true, email: true, role: true, deletedAt: true },
+    select: { id: true, email: true, role: true, deletedAt: true, suspendedAt: true },
   });
-  if (!user || user.deletedAt) return jsonError('unauthorized', 401);
+  if (!user || user.deletedAt || user.suspendedAt) return jsonError('unauthorized', 401);
   if (user.role !== 'admin') return jsonError('forbidden', 403);
-  return { id: user.id, email: user.email, role: user.role };
+  return { id: user.id, email: user.email, role: user.role, sessionCreatedAt: owner.session?.createdAt ?? null };
 }
 
 /** Bucket counts for the "top browsers / devices" admin charts. */

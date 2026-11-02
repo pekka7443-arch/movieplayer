@@ -84,7 +84,11 @@ export function parseM3U(text: string): SportsChannel[] {
       const logo = /tvg-logo="([^"]*)"/.exec(line)?.[1] ?? null;
       const group = /group-title="([^"]*)"/.exec(line)?.[1] ?? 'Sports';
       const id = /tvg-id="([^"]*)"/.exec(line)?.[1] ?? null;
-      pending = { name, logo: logo || null, group, id };
+      // Logos are third-party URLs rendered in <img src> — only http(s)
+      // passes (javascript: is inert in <img>, but tracking/data URLs have
+      // no business loading from the app; 2026-11-03 hardening).
+      const safeLogo = logo && /^https?:\/\//i.test(logo) ? logo : null;
+      pending = { name, logo: safeLogo, group, id };
     } else if (line && !line.startsWith('#') && pending) {
       // Any http(s) stream is accepted: playback goes through CineDeck's
       // /api/sports/stream proxy, which fixes CORS and mixed content, so

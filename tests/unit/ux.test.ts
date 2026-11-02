@@ -239,9 +239,11 @@ describe('ux hard surfaces', () => {
     expect(src).toContain('COMPAT_VIDEO_ID');
     expect(src).toContain('playHookLoop');
     expect(src).toContain('COMPAT_HOOK');
-    // The embed host must be present in the CSP frame-src allowlist.
-    const nextConfig = readFileSync(path.join(process.cwd(), 'next.config.ts'), 'utf8');
-    expect(nextConfig).toContain('www.youtube-nocookie.com');
+    // The embed host must be present in the CSP frame-src allowlist. CSP
+    // lives in src/middleware.ts since the 2026-11-03 hardening (per-request
+    // nonce policy; next.config only covers static assets).
+    const middleware = readFileSync(path.join(process.cwd(), 'src/middleware.ts'), 'utf8');
+    expect(middleware).toContain('www.youtube-nocookie.com');
   });
 
   it('ships the alert choreography keyframes in the global stylesheet', () => {

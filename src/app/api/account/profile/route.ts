@@ -16,7 +16,7 @@ const schema = z.object({
 
 /** PATCH /api/account/profile { name?, avatar? } → update display identity. */
 export const PATCH = withApi('account/profile', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);

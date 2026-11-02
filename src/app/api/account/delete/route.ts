@@ -26,7 +26,7 @@ const schema = z.object({
  * Every session is revoked immediately.
  */
 export const POST = withApi('account/delete', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);

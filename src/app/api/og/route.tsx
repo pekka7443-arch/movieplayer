@@ -1,14 +1,21 @@
 import { ImageResponse } from 'next/og';
 
 import { db } from '@/lib/db';
+import { withApi } from '@/lib/server/api';
+import { enforceRateLimit } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // GET /api/og?share=token → dynamic Open Graph card for a shared public list.
 // The token is the capability: private/unknown tokens render the neutral
-// branded card (never leak existence).
-export async function GET(request: Request) {
+// branded card (never leak existence). Rate-limited because every hit runs
+// a DB lookup + up to 3 upstream poster fetches (2026-11-03 hardening —
+// unauthenticated resource amplification).
+export const GET = withApi('og', async (request) => {
+  const limited = await enforceRateLimit(request, 'og');
+  if (limited) return limited;
+
   const token = new URL(request.url).searchParams.get('share') ?? '';
 
   let name = 'A shared list';
@@ -129,4 +136,4 @@ export async function GET(request: Request) {
     ),
     { width: 1200, height: 630 },
   );
-}
+});

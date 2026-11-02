@@ -169,13 +169,27 @@ export async function tvmazeShowByImdb(imdbId: string): Promise<TvmazeShow | nul
     runtime: raw.averageRuntime ?? raw.runtime ?? null,
     rating: raw.rating?.average ?? null,
     genres: (raw.genres ?? []).slice(0, 6),
-    officialSite: raw.officialSite ?? null,
+    // Third-party URLs are validated before they can reach an <a href> sink
+    // client-side — a compromised upstream must not be able to hand the UI
+    // a javascript: URL (2026-11-03 hardening).
+    officialSite: safeHttpUrl(raw.officialSite),
     scheduleDays: raw.schedule?.days ?? [],
     summary: stripHtml(raw.summary),
-    imageUrl: raw.image?.original ?? raw.image?.medium ?? null,
+    imageUrl: safeHttpUrl(raw.image?.original ?? raw.image?.medium),
   };
   cacheSet(key, show, 60 * 60 * 1000);
   return show;
+}
+
+/** Pass through http(s) URLs; null for anything else (javascript:, data:, …). */
+function safeHttpUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Full episode list for a TVmaze show id (season, number, name, summary…). */

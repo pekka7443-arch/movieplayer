@@ -56,19 +56,24 @@ restore_volume_bootstrap() {
     echo "[db-push-guard] restored config/bootstrap-admin.json from persistent volume."
   fi
 
-  # 2) ADMIN_* env keys (platform rewrites .env to DATABASE_URL-only each boot).
-  if [ -f "$PROJECT_ROOT/config/bootstrap-admin.json" ] &&
-     ! grep -q '^ADMIN_EMAIL=' "$PROJECT_ROOT/.env" 2>/dev/null; then
-    ADMIN_JSON="$(bun -e 'try{const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(c.email&&c.password)process.stdout.write(c.email+" "+c.password)}catch{}' "$PROJECT_ROOT/config/bootstrap-admin.json" 2>/dev/null || true)"
-    if [ -n "$ADMIN_JSON" ]; then
-      ADMIN_EMAIL_VAL="${ADMIN_JSON%% *}"
-      ADMIN_PASSWORD_VAL="${ADMIN_JSON#* }"
-      {
-        echo ""
-        echo "ADMIN_EMAIL=$ADMIN_EMAIL_VAL"
-        echo "ADMIN_PASSWORD=$ADMIN_PASSWORD_VAL"
-      } >> "$PROJECT_ROOT/.env"
-      echo "[db-push-guard] restored ADMIN_EMAIL/ADMIN_PASSWORD into .env from bootstrap config."
+  # 2) Environment keys the platform's .env rewrite drops (ADMIN_*, APP_BASE_URL,
+  #    AUTH_SECRET…). The volume holds an .env snapshot; every key MISSING from
+  #    the live .env but present in the snapshot is re-appended verbatim.
+  #    (AUTH_SECRET restoration keeps sessions + sealed TOTP secrets stable
+  #    across recycles; APP_BASE_URL pins email links against host poisoning.)
+  if [ -f "$VOL_ROOT/.env" ] && [ -f "$PROJECT_ROOT/.env" ]; then
+    RESTORED_KEYS=0
+    while IFS='=' read -r KEY VALUE; do
+      case "$KEY" in
+        ''|'#'*) continue ;;
+      esac
+      if ! grep -q "^${KEY}=" "$PROJECT_ROOT/.env" 2>/dev/null; then
+        printf '%s=%s\n' "$KEY" "$VALUE" >> "$PROJECT_ROOT/.env"
+        RESTORED_KEYS=$((RESTORED_KEYS + 1))
+      fi
+    done < "$VOL_ROOT/.env"
+    if [ "$RESTORED_KEYS" -gt 0 ]; then
+      echo "[db-push-guard] restored $RESTORED_KEYS env key(s) from the persistent volume snapshot."
     fi
   fi
 
@@ -80,6 +85,13 @@ restore_volume_bootstrap() {
     mkdir -p "$PROJECT_ROOT/db"
     cp "$VOL_ROOT/db/custom.db" "$LIVE_DB" 2>/dev/null || true
     echo "[db-push-guard] restored db/custom.db from persistent volume."
+  fi
+
+  # 4) Database file permissions: password/session hashes + sealed TOTP
+  #    secrets live in this file — owner-only (2026-11-03 hardening; the
+  #    platform restore resets it to 0644 on every boot).
+  if [ -f "$LIVE_DB" ]; then
+    chmod 600 "$LIVE_DB" 2>/dev/null || true
   fi
 }
 

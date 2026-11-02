@@ -154,7 +154,7 @@ export const GET = withApi('sports/stream', async (request) => {
   const authed = await requireAuthedUser(request);
   if (!authed) return apiError(401, 'unauthorized');
 
-  const limited = enforceRateLimit(request, 'stream');
+  const limited = await enforceRateLimit(request, 'stream');
   if (limited) return limited;
 
   const { searchParams } = new URL(request.url);
@@ -166,9 +166,10 @@ export const GET = withApi('sports/stream', async (request) => {
   let target: ResolvedTarget;
   try {
     target = await assertPublicHttpUrl(raw);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : 'blocked';
-    return new Response(`blocked: ${reason}`, { status: 403 });
+  } catch {
+    // Generic refusal — echoing the internal reason leaks which SSRF
+    // defense fired (2026-11-03 hardening: information disclosure).
+    return new Response('blocked', { status: 403 });
   }
 
   const opened = await openStream(target);

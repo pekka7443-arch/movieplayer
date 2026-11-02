@@ -85,7 +85,7 @@ export const GET = withApi('ratings', async (request) => {
 
 // POST /api/ratings → upsert score / note / watched for one title.
 export const POST = withApi('ratings-post', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const body = await readJsonBody(request);
@@ -127,7 +127,7 @@ export const POST = withApi('ratings-post', async (request) => {
 
 // DELETE /api/ratings?tmdbId=&mediaType= — forget a title's rating/watched.
 export const DELETE = withApi('ratings-delete', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);

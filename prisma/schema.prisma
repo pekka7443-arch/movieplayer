@@ -73,6 +73,7 @@ model User {
   verifyTokens   EmailVerificationToken[]
   loginAttempts  LoginAttempt[]
   adminNotes     AdminNote[]
+  authChallenges AuthChallenge[]
 
   followers      Follow[]     @relation("Follower")
   following      Follow[]     @relation("Following")
@@ -422,13 +423,46 @@ model AdminNote {
   @@index([targetUserId, createdAt])
 }
 
-/// Boot-persistent key/value store for process-lifetime invariants —
-/// currently the AUTH_SECRET restore copy (`auth_secret`) and its SHA-256
-/// fingerprint (`auth_secret_hash`) used by the boot hook and `bun run
-/// doctor` so the secret survives .env wipes / redeploys (Task 44).
-/// NOT user data; never exposed through any API.
+/// Boot-persistent key/value store for process-lifetime invariants.
+/// SECURITY NOTE (2026-11-03): the AUTH_SECRET plaintext row (`auth_secret`)
+/// was REMOVED — the secret now lives only in the runtime environment /
+/// project .env / the protected volume file, never in the database. Only the
+/// SHA-256 fingerprint (`auth_secret_hash`) remains here for drift detection.
+/// The `finnish_dub_providers` key is admin-curated public data.
 model SystemState {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+/// Single-use authentication challenges (2026-11-03 security hardening):
+/// pending-TOTP login handoffs. The raw token is a 256-bit random value
+/// given to the client; only its SHA-256 hash is stored. Consumption is
+/// atomic (conditional `updateMany WHERE consumedAt IS NULL`), so a
+/// challenge can complete exactly ONE login — replay dies at the DB.
+model AuthChallenge {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  /// 'totp' | 'password_reset' | 'email_verify' (future-proof enum-as-string)
+  purpose    String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Persistent token-bucket state for the shared rate limiter
+/// (2026-11-03 hardening — replaces the process-local Map, so limits survive
+/// restarts and are shared across workers). One row per `<bucket>:<ip>` or
+/// `<bucket>:acct:<hash>` key; swept periodically for idle rows.
+model RateLimitState {
+  key       String   @id
+  tokens    Float
+  updatedAt DateTime
+
+  @@index([updatedAt])
 }

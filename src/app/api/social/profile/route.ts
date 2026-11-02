@@ -128,7 +128,7 @@ const patchSchema = z.object({
 });
 
 export const POST = withApi('social-profile-update', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const auth = await requireAuthedUser(request);

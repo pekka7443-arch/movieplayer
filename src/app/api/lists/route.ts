@@ -58,7 +58,7 @@ const createSchema = z.object({
 
 // POST /api/lists → create a custom list.
 export const POST = withApi('lists-post', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const body = await readJsonBody(request);
@@ -113,7 +113,7 @@ const patchSchema = z.object({
 
 // PATCH /api/lists → rename / share toggle / reorder.
 export const PATCH = withApi('lists-patch', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const body = await readJsonBody(request);
@@ -132,7 +132,7 @@ export const PATCH = withApi('lists-patch', async (request) => {
 
 // DELETE /api/lists?id= → delete a list (items cascade).
 export const DELETE = withApi('lists-delete', async (request) => {
-  const guard = guardMutation(request, 'library');
+  const guard = await guardMutation(request, 'library');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);

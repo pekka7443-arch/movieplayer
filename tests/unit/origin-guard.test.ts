@@ -122,18 +122,31 @@ describe('same-origin guard', () => {
     expect(isSameOrigin(r)).toBe(false);
   });
 
-  it('accepts platform preview domains when Host is rewritten', () => {
+  it('rejects sibling platform subdomains when Host was rewritten (2026-11-03 hardening)', () => {
+    // Sibling *.z.ai / *.space-z.ai tenants are same-site (SameSite=Lax does
+    // NOT block their POSTs) but are NOT this deployment — they must fail
+    // the header comparison. Only a Sec-Fetch-Site: same-origin assertion
+    // (browser-issued) can pass with a rewritten Host.
     for (const origin of [
       'https://preview-abc123.space-z.ai',
       'https://chat.z.ai',
       'https://app.z.ai',
+      'https://evil.space-z.ai',
     ]) {
       const r = req('POST', {
         origin,
         host: 'localhost:3000',
       });
-      expect(isSameOrigin(r), origin).toBe(true);
+      expect(isSameOrigin(r), origin).toBe(false);
     }
+  });
+
+  it('accepts an origin that matches the request host (platform gateway preserves Host)', () => {
+    const r = req('POST', {
+      origin: 'https://movieplayer222.space-z.ai',
+      host: 'movieplayer222.space-z.ai',
+    });
+    expect(isSameOrigin(r)).toBe(true);
   });
 
   it('does not trust look-alike platform domains', () => {
@@ -145,12 +158,20 @@ describe('same-origin guard', () => {
   });
 
   // -- Referer fallback + no-origin paths ------------------------------------
-  it('falls back to Referer when Origin was stripped by a proxy', () => {
+  it('falls back to Referer when it matches the request host', () => {
+    const r = req('POST', {
+      referer: 'https://movieplayer222.space-z.ai/login',
+      host: 'movieplayer222.space-z.ai',
+    });
+    expect(isSameOrigin(r)).toBe(true);
+  });
+
+  it('rejects a sibling-subdomain Referer when the hosts do not match', () => {
     const r = req('POST', {
       referer: 'https://preview-abc.space-z.ai/login',
       host: 'localhost:3000',
     });
-    expect(isSameOrigin(r)).toBe(true);
+    expect(isSameOrigin(r)).toBe(false);
   });
 
   it('rejects a foreign Referer when Origin is absent', () => {

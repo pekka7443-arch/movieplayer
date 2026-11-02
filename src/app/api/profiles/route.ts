@@ -41,7 +41,7 @@ const createSchema = z.object({
 
 // POST /api/profiles → create (≤5 per account).
 export const POST = withApi('profiles-post', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);
@@ -94,7 +94,7 @@ const patchSchema = z.object({
 
 // PATCH /api/profiles → rename / avatar / kids flag.
 export const PATCH = withApi('profiles-patch', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);
@@ -117,7 +117,7 @@ export const PATCH = withApi('profiles-patch', async (request) => {
 // account's "main" bucket only if they were there; profile rows are keyed by
 // profileId and simply become unreachable, so we delete them too).
 export const DELETE = withApi('profiles-delete', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);

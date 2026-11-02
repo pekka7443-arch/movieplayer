@@ -5,7 +5,7 @@ import { resolveOwner, verifyPassword } from '@/lib/server/auth';
 import { withApi, apiError } from '@/lib/server/api';
 import { guardMutation, readJsonBody } from '@/lib/server/http';
 import { appBaseUrl, mailer } from '@/lib/server/mailer';
-import { signStatelessToken } from '@/lib/server/auth';
+import { createEmailVerificationToken } from '@/lib/server/tokens';
 import { writeAudit } from '@/lib/server/audit';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,7 @@ const schema = z.object({
  * state — a fresh verification link goes to the NEW address.
  */
 export const POST = withApi('account/email', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);
@@ -51,7 +51,7 @@ export const POST = withApi('account/email', async (request) => {
 
   let verificationSent = false;
   try {
-    const { token } = signStatelessToken('verify', user.id, 24 * 60 * 60);
+    const { token } = await createEmailVerificationToken(user.id, 24 * 60 * 60);
     const url = `${appBaseUrl(request)}/verify-email?token=${encodeURIComponent(token)}`;
     await mailer().send({
       to: newEmail,

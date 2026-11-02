@@ -69,7 +69,7 @@ const postSchema = z.object({
 // POST /api/comments → post a comment (signed-in users only; profanity is
 // masked, rate limited, audit-friendly).
 export const POST = withApi('comments-post', async (request) => {
-  const guard = guardMutation(request, 'comments');
+  const guard = await guardMutation(request, 'comments');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);
@@ -127,7 +127,7 @@ const mutationSchema = z.discriminatedUnion('action', [
 
 // PUT /api/comments → react / report / delete (own or admin).
 export const PUT = withApi('comments-mutate', async (request) => {
-  const guard = guardMutation(request, 'reactions');
+  const guard = await guardMutation(request, 'reactions');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);
@@ -161,7 +161,7 @@ export const PUT = withApi('comments-mutate', async (request) => {
   }
 
   if (input.action === 'report') {
-    const limited = enforceRateLimit(request, 'reports');
+    const limited = await enforceRateLimit(request, 'reports');
     if (limited) return limited;
     await db.report.create({
       data: { commentId: comment.id, ownerId: owner.userId, reason: input.reason ?? null },

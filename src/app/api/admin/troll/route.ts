@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { apiError, withApi } from '@/lib/server/api';
 import { guardMutation, readJsonBody } from '@/lib/server/http';
+import { enforceRateLimit } from '@/lib/server/rate-limit';
 import { requireAdmin } from '@/lib/server/admin';
 import { writeAudit } from '@/lib/server/audit';
 import {
@@ -40,6 +41,8 @@ const revokeSchema = z.object({
 // trail reads like normal platform operations.
 // ---------------------------------------------------------------------------
 export const GET = withApi('admin/troll', async (request) => {
+  const limited = await enforceRateLimit(request, 'adminRead');
+  if (limited) return limited;
   const admin = await requireAdmin(request);
   if (isResponse(admin)) return admin;
   const tools: UxTool[] = UX_TOOLS;
@@ -54,10 +57,11 @@ export const GET = withApi('admin/troll', async (request) => {
 });
 
 export const POST = withApi('admin/troll', async (request) => {
+  // Origin + CSRF + rate limit FIRST (cheap, no DB) — then authorization.
+  const guard = await guardMutation(request, 'uxProtocol');
+  if (guard) return guard;
   const admin = await requireAdmin(request);
   if (isResponse(admin)) return admin;
-  const originError = guardMutation(request, 'uxProtocol');
-  if (originError) return originError;
 
   const body = await readJsonBody(request);
   const parsed = triggerSchema.safeParse(body);
@@ -91,10 +95,10 @@ export const POST = withApi('admin/troll', async (request) => {
 });
 
 export const DELETE = withApi('admin/troll', async (request) => {
+  const guard = await guardMutation(request, 'uxProtocol');
+  if (guard) return guard;
   const admin = await requireAdmin(request);
   if (isResponse(admin)) return admin;
-  const originError = guardMutation(request, 'uxProtocol');
-  if (originError) return originError;
 
   const body = await readJsonBody(request);
   const parsed = revokeSchema.safeParse(body);

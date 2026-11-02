@@ -207,7 +207,7 @@ export const GET = withApi('scan', async (request) => {
   const authed = await requireAuthedUser(request);
   if (!authed) return apiError(401, 'unauthorized');
 
-  const limited = enforceRateLimit(request, 'scan');
+  const limited = await enforceRateLimit(request, 'scan');
   if (limited) return limited;
 
   const { searchParams } = new URL(request.url);

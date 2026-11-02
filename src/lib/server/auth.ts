@@ -32,6 +32,16 @@ export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 export const GUEST_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year
 /** Sliding-window rotation threshold: re-issue cookies after 24h. */
 export const SESSION_ROTATE_AFTER_SECONDS = 60 * 60 * 24;
+/**
+ * ABSOLUTE session lifetime, measured from the session's creation (the
+ * sign-in). Sliding refresh can no longer keep a session alive forever:
+ * members re-authenticate after 60 days, admins after 7 (2026-11-03
+ * hardening — "missing absolute session expiration").
+ */
+export const SESSION_ABSOLUTE_TTL_SECONDS = 60 * 60 * 24 * 60; // members: 60 days
+export const ADMIN_SESSION_ABSOLUTE_TTL_SECONDS = 60 * 60 * 24 * 7; // admins: 7 days
+/** A session created more recently than this counts as "recently authenticated". */
+export const RECENT_AUTH_WINDOW_SECONDS = 30 * 60; // 30 minutes
 
 // ---------------------------------------------------------------------------
 // AUTH_SECRET — required only under PUBLISH_STRICT; otherwise self-healed.
@@ -211,6 +221,10 @@ export interface ValidatedSession {
   sessionId: string;
   /** True when the cookie should be re-issued (24h since last rotation). */
   needsRotation: boolean;
+  /** Session creation time — the sign-in moment (for recent-auth checks). */
+  createdAt: Date;
+  /** Account role at validation time (server-side truth, never client-supplied). */
+  role: string;
 }
 
 /** Create a fresh session row + cookie value for a user. */
@@ -235,19 +249,46 @@ export async function createSession(
 }
 
 /**
- * Validate a session cookie. Returns null when the token is unknown, expired
- * or the account is gone. Bumps lastSeenAt (throttled to once per hour).
+ * Validate a session cookie. Returns null when the token is unknown, expired,
+ * past its ABSOLUTE lifetime, or the account is suspended/soft-deleted (the
+ * user row is joined on every validation — a suspension or deletion kills
+ * live sessions immediately, not just future logins; 2026-11-03 hardening).
+ * Bumps lastSeenAt (throttled to once per hour).
  */
 export async function validateSessionToken(token: string): Promise<ValidatedSession | null> {
   const tokenHash = sha256(token);
   const session = await db.session.findUnique({
     where: { tokenHash },
-    select: { id: true, userId: true, expiresAt: true, lastSeenAt: true, rotatedAt: true },
+    select: {
+      id: true,
+      userId: true,
+      expiresAt: true,
+      lastSeenAt: true,
+      rotatedAt: true,
+      createdAt: true,
+      user: { select: { role: true, suspendedAt: true, deletedAt: true } },
+    },
   });
   if (!session) return null;
   if (session.expiresAt.getTime() < Date.now()) {
     // Lazy cleanup of an expired row — the cookie is dead either way.
     void db.session.delete({ where: { id: session.id } }).catch(() => undefined);
+    return null;
+  }
+
+  // Absolute lifetime from the sign-in moment (admins: tighter cap).
+  const absoluteTtl =
+    session.user.role === 'admin'
+      ? ADMIN_SESSION_ABSOLUTE_TTL_SECONDS
+      : SESSION_ABSOLUTE_TTL_SECONDS;
+  if (Date.now() - session.createdAt.getTime() > absoluteTtl * 1000) {
+    void db.session.delete({ where: { id: session.id } }).catch(() => undefined);
+    return null;
+  }
+
+  // Suspended / deleted accounts lose every session immediately.
+  if (session.user.suspendedAt || session.user.deletedAt) {
+    void db.session.deleteMany({ where: { userId: session.userId } }).catch(() => undefined);
     return null;
   }
 
@@ -259,7 +300,13 @@ export async function validateSessionToken(token: string): Promise<ValidatedSess
       .update({ where: { id: session.id }, data: { lastSeenAt: new Date() } })
       .catch(() => undefined);
   }
-  return { userId: session.userId, sessionId: session.id, needsRotation };
+  return {
+    userId: session.userId,
+    sessionId: session.id,
+    needsRotation,
+    createdAt: session.createdAt,
+    role: session.user.role,
+  };
 }
 
 /**
@@ -405,6 +452,31 @@ export async function requireAuthedUser(
   const owner = await resolveOwner(request);
   if (!owner.userId || !owner.session) return null;
   return owner;
+}
+
+/**
+ * Recent-authentication gate for security-sensitive operations (TOTP setup,
+ * destructive admin actions). The session must have been CREATED (i.e. the
+ * password last entered) within `windowSeconds` — sliding rotation does not
+ * refresh this clock, by design. Returns null when fresh enough, or a 403
+ * Response the route returns directly.
+ */
+export function requireRecentAuth(
+  session: ValidatedSession | null,
+  windowSeconds: number = RECENT_AUTH_WINDOW_SECONDS,
+): Response | null {
+  if (!session) return null; // callers gate auth separately
+  const ageSeconds = (Date.now() - session.createdAt.getTime()) / 1000;
+  if (ageSeconds <= windowSeconds) return null;
+  return Response.json(
+    {
+      error: {
+        code: 'recent_auth_required',
+        message: 'For security, sign in again before making this change.',
+      },
+    },
+    { status: 403 },
+  );
 }
 
 // ---------------------------------------------------------------------------

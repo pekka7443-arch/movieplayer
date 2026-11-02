@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 // plays once per tab. Rate limited by IP.
 // ---------------------------------------------------------------------------
 export const GET = withApi('ux/poll', async (request) => {
-  const limited = enforceRateLimit(request, 'uxPoll');
+  const limited = await enforceRateLimit(request, 'uxPoll');
   if (limited) return limited;
 
   const afterRaw = new URL(request.url).searchParams.get('after') ?? '0';

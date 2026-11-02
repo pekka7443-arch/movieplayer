@@ -8,6 +8,8 @@ import { withRetries } from '@/lib/server/http';
 
 const CINEMETA_BASE = 'https://v3-cinemeta.strem.io';
 const TIMEOUT_MS = 9_000;
+/** YouTube video id shape — guards the embed URL against injected segments. */
+const TRAILER_KEY_RE = /^[\w-]{11}$/;
 
 // Small in-memory cache (survives dev hot reloads via globalThis).
 interface CacheEntry {
@@ -445,7 +447,9 @@ export async function cinemetaDetails(
     director: firstOf(meta.director),
     runtime: parseRuntime(meta.runtime),
     voteAverage: Number.parseFloat(meta.imdbRating ?? '') || 0,
-    trailerKey: trailer?.source ?? null,
+    // YouTube ids only — anything else would inject into the embed URL
+    // (2026-11-03 hardening).
+    trailerKey: TRAILER_KEY_RE.test(trailer?.source ?? '') ? (trailer!.source as string) : null,
     country: meta.country ?? null,
     released: typeof meta.released === 'string' && meta.released ? meta.released : null,
   };

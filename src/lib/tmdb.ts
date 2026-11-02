@@ -299,11 +299,12 @@ export async function fetchCatalogMeta(params: {
   if (params.language) search.set('language', params.language);
   if (params.country) search.set('country', params.country);
   // A TMDB key (when the user has one) unlocks the full-power discover path.
+  // Sent via the x-tmdb-key HEADER, never the query string — URLs land in
+  // proxy/access logs (2026-11-03 hardening).
   const key = getTmdbKey();
-  if (key) search.set('key', key);
   const data = await apiFetch<{ results: MetaSearchItem[] }>(
     `/api/meta/catalog?${search.toString()}`,
-    { headers: { accept: 'application/json' } }
+    { headers: { accept: 'application/json', ...(key ? { 'x-tmdb-key': key } : {}) } }
   );
   return data.results ?? [];
 }

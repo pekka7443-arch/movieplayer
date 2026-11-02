@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  * any other credential material.
  */
 export const GET = withApi('account/export', async (request) => {
-  const limited = enforceRateLimit(request, 'account');
+  const limited = await enforceRateLimit(request, 'account');
   if (limited) return limited;
 
   const owner = await resolveOwner(request);

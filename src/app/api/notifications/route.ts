@@ -187,7 +187,7 @@ const markSchema = z.object({ id: z.string().min(1).optional(), all: z.boolean()
 
 // POST /api/notifications → mark one / all as read.
 export const POST = withApi('notifications-read', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);
@@ -215,7 +215,7 @@ export const POST = withApi('notifications-read', async (request) => {
 
 // DELETE /api/notifications?id=<id> | ?all=1 — remove one / all notifications.
 export const DELETE = withApi('notifications-delete', async (request) => {
-  const guard = guardMutation(request, 'account');
+  const guard = await guardMutation(request, 'account');
   if (guard) return guard;
 
   const owner = await resolveOwner(request);

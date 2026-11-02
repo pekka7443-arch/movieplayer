@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import { apiError, withApi } from '@/lib/server/api';
+import { guardMutation, readJsonBody } from '@/lib/server/http';
+import { enforceRateLimit } from '@/lib/server/rate-limit';
 import { requireAdmin } from '@/lib/server/admin';
 import { writeAudit } from '@/lib/server/audit';
 import {
@@ -26,9 +28,13 @@ const providersBody = z.object({
 // POST { providers: string[] } — REPLACE the runtime list (persisted in the
 //   SystemState key "finnish_dub_providers") and hot-reload the in-memory
 //   copy the source scan reads — no server restart needed.
-// Admin role required — same guard as the other /api/admin routes.
+// Admin role required + full mutation guard (origin/CSRF/rate-limit/body
+//   cap) — same middleware as every other /api/admin route (2026-11-03
+//   hardening: this was the one mutating admin route without the guard).
 // ---------------------------------------------------------------------------
 export const GET = withApi('admin-finnish-providers', async (request) => {
+  const limited = await enforceRateLimit(request, 'adminRead');
+  if (limited) return limited;
   const admin = await requireAdmin(request);
   if (isResponse(admin)) return admin;
 
@@ -41,16 +47,12 @@ export const GET = withApi('admin-finnish-providers', async (request) => {
 });
 
 export const POST = withApi('admin-finnish-providers', async (request) => {
+  const guard = await guardMutation(request, 'uxProtocol');
+  if (guard) return guard;
   const admin = await requireAdmin(request);
   if (isResponse(admin)) return admin;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return apiError(400, 'bad_request', 'body must be JSON');
-  }
-
+  const body = await readJsonBody(request);
   const parsed = providersBody.safeParse(body);
   if (!parsed.success) {
     return apiError(400, 'bad_request', parsed.error.issues[0]?.message ?? 'invalid body');

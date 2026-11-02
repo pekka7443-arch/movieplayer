@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 // tab. Rate limited by IP.
 // ---------------------------------------------------------------------------
 export const GET = withApi('troll/poll', async (request) => {
-  const limited = enforceRateLimit(request, 'trollPoll');
+  const limited = await enforceRateLimit(request, 'trollPoll');
   if (limited) return limited;
 
   const afterRaw = new URL(request.url).searchParams.get('after') ?? '0';

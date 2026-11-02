@@ -24,28 +24,45 @@ export interface Mailer {
 }
 
 function htmlBody(email: OutgoingEmail): string {
+  const escapeHtml = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const safeUrl = email.actionUrl ? escapeHtml(email.actionUrl) : '';
+  const safeText = escapeHtml(email.text).replace(/\n/g, '<br />');
   const action =
-    email.actionUrl ?
-      `<p style="margin:24px 0"><a href="${email.actionUrl}" style="background:#e11d48;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-family:sans-serif">Open CineDeck</a></p>
-       <p style="font-family:sans-serif;font-size:12px;color:#888">Or copy this link: ${email.actionUrl}</p>`
-    : '';
+    email.actionUrl
+      ? `<p style="margin:24px 0"><a href="${safeUrl}" style="background:#e11d48;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-family:sans-serif">Open CineDeck</a></p>
+       <p style="font-family:sans-serif;font-size:12px;color:#888">Or copy this link: ${safeUrl}</p>`
+      : '';
   return (
     `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#222">` +
-    `<p>${email.text.replace(/\n/g, '<br />')}</p>${action}` +
+    `<p>${safeText}</p>${action}` +
     `<p style="font-size:11px;color:#aaa">CineDeck — stream everything.</p></div>`
   );
 }
 
+/** Strip token values from URLs before they touch the logs (2026-11-03
+ *  hardening: the console mailer used to log full reset/verify links — anyone
+ *  with log access could mint a valid password reset). Dev keeps full links
+ *  (the console adapter IS the dev delivery channel). */
+function redactUrlForLogs(url: string | undefined): string | undefined {
+  if (!url) return url;
+  return url.replace(/([?&](?:token|code)=)[^&\s]+/gi, '$1[redacted]');
+}
+
 function consoleMailer(): Mailer {
+  const isProd = process.env.NODE_ENV === 'production';
   return {
     async send(email) {
       logger.info(
         {
           to: email.to,
           subject: email.subject,
-          actionUrl: email.actionUrl,
+          actionUrl: isProd ? redactUrlForLogs(email.actionUrl) : email.actionUrl,
         },
-        'email (console adapter) — configure SMTP_URL to deliver for real',
+        isProd
+          ? 'email (console adapter) — token redacted; configure SMTP_URL to deliver for real'
+          : 'email (console adapter) — configure SMTP_URL to deliver for real',
       );
     },
   };
@@ -133,6 +150,11 @@ export function appBaseUrl(request?: Request): string {
   const configured = process.env.APP_BASE_URL;
   if (configured) return configured.replace(/\/$/, '');
   if (request) {
+    // No APP_BASE_URL configured: derive from request headers. NOTE — this
+    // is only safe when a trusted gateway normalizes Host AND the deployment
+    // is not directly reachable with a forged Host header; production
+    // deployments MUST set APP_BASE_URL (see .env.example) so emailed links
+    // can never be host-header-poisoned toward an attacker's domain.
     const url = new URL(request.url);
     const proto = request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '');
     const host = request.headers.get('host') ?? url.host;

@@ -12,7 +12,7 @@ import {
 import { withApi, apiError } from '@/lib/server/api';
 import { enforceSameOrigin, readJsonBody } from '@/lib/server/http';
 import { enforceRateLimit, clientIpOf } from '@/lib/server/rate-limit';
-import { signStatelessToken } from '@/lib/server/auth';
+import { createAuthChallenge } from '@/lib/server/tokens';
 import { geoLookup, truncateIp, classifyUserAgent } from '@/lib/server/geo';
 import { writeAudit } from '@/lib/server/audit';
 import {
@@ -33,9 +33,14 @@ const DELETE_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 
 // POST /api/auth/login → verify credentials, merge guest data, start session.
 // When the account has TOTP enabled the response instead carries
-// { totpRequired: true, pendingToken } — the client posts the code to
-// /api/auth/login/totp to finish signing in. Generic `invalid_credentials`
-// error for any failure so account existence is never revealed.
+// { totpRequired: true, pendingToken } — the pendingToken is a SINGLE-USE
+// DB-backed challenge (createAuthChallenge) consumed atomically by
+// /api/auth/login/totp; replaying it after a completed login fails.
+// Generic `invalid_credentials` error for any failure so account existence
+// is never revealed.
+//
+// Rate limiting: per-IP bucket AND per-ACCOUNT bucket (email-keyed) — IP
+// rotation cannot bypass the credential throttle (2026-11-03 hardening).
 //
 // Suspension: blocked with 403 account_suspended (reason shown). A suspension
 // whose end date has passed lifts automatically on the next attempt.
@@ -43,11 +48,18 @@ const DELETE_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 export const POST = withApi('auth/login', async (request) => {
   const originError = enforceSameOrigin(request);
   if (originError) return originError;
-  const limited = enforceRateLimit(request, 'login');
-  if (limited) return limited;
 
   const body = await readJsonBody(request);
   const parsed = loginSchema.safeParse(body);
+  // Pre-parse the email so the ACCOUNT bucket applies even on a malformed
+  // body (email still enumerable from the raw body when parseable).
+  const rawEmail =
+    typeof body === 'object' && body !== null && typeof (body as { email?: unknown }).email === 'string'
+      ? ((body as { email: string }).email ?? '').trim().toLowerCase()
+      : '';
+  const limited = await enforceRateLimit(request, 'login', rawEmail || undefined);
+  if (limited) return limited;
+
   if (!parsed.success) {
     return apiError(401, 'invalid_credentials');
   }
@@ -77,10 +89,11 @@ export const POST = withApi('auth/login', async (request) => {
   const user = await db.user.findUnique({ where: { email } });
 
   if (user && user.totpEnabled && user.totpSecret && verifyPassword(password, user.passwordHash)) {
-    // Password is right — hand out a 5-minute pending token for the 2FA step.
-    const pending = signStatelessToken('totp', user.id, 5 * 60);
+    // Password is right — hand out a 5-minute SINGLE-USE challenge for the
+    // 2FA step (hash persisted, atomically consumed by the totp route).
+    const { token } = await createAuthChallenge(user.id, 'totp', 5 * 60);
     logAttempt(user.id, true, 'totp_pending');
-    return Response.json({ totpRequired: true, pendingToken: pending.token });
+    return Response.json({ totpRequired: true, pendingToken: token });
   }
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
@@ -141,6 +154,17 @@ export const POST = withApi('auth/login', async (request) => {
   // Applies ONLY to role="admin" accounts: optional ADMIN_IP_ALLOWLIST check,
   // then the 3-active-session cap. Regular members are never limited.
   if (user.role === 'admin') {
+    // Optional hard requirement: administrators must have 2FA enrolled
+    // (ADMIN_REQUIRE_TOTP=1 — off by default so existing admins are never
+    // locked out; documented in .env.example / the security report).
+    if (process.env.ADMIN_REQUIRE_TOTP === '1' && !user.totpEnabled) {
+      logAttempt(user.id, false, 'admin_totp_required');
+      return apiError(
+        403,
+        'admin_totp_required',
+        'Administrators must enable two-factor authentication before signing in. Ask another administrator to send you a password-reset with 2FA enrollment instructions.',
+      );
+    }
     const blocked = await adminLoginGuard({ user, ip, userAgent, logAttempt });
     if (blocked) return blocked;
     if (await isAdminLoginFromNewDevice(user.id, userAgent)) {
@@ -152,6 +176,16 @@ export const POST = withApi('auth/login', async (request) => {
         country: geo.country,
         city: geo.city,
       });
+    }
+    if (!user.totpEnabled) {
+      void writeAudit({
+        actorEmail: user.email,
+        action: 'admin.login_without_totp',
+        targetType: 'user',
+        targetId: user.id,
+        targetLabel: user.email,
+        details: { note: 'admin account has no second factor enrolled' },
+      }).catch(() => undefined);
     }
   }
 
