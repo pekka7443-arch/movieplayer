@@ -584,6 +584,65 @@ describe('frame-ancestors platform contract', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// 11. Rendering / iframe CSP / theme contracts — the visible-runtime trio:
+//     blocked same-origin player iframe, React 19 client-script warning,
+//     hydration mismatch from browser-dependent first renders.
+// ---------------------------------------------------------------------------
+
+describe('rendering, iframe CSP and theme contracts', () => {
+  it('app-wide CSP frame-src allows the same-origin player proxy (no wildcards)', () => {
+    const proxySrc = readFileSync(`${process.cwd()}/src/proxy.ts`, 'utf8');
+    const match = /"frame-src ([^"]+)"/.exec(proxySrc);
+    expect(match).not.toBeNull();
+    const sources = match![1].split(' ');
+    // The player UI iframes /api/player-proxy (same origin) — without 'self'
+    // the outer player frame is blocked by this very CSP.
+    expect(sources[0]).toBe("'self'");
+    expect(sources).toContain('https://www.youtube-nocookie.com');
+    expect(sources).toContain('https://www.youtube.com');
+    for (const source of sources) {
+      expect(source).not.toBe('*');
+      expect(source.startsWith('http://*')).toBe(false);
+    }
+  });
+
+  it('no component depends on next-themes (in-component FOUC script warned on React 19)', () => {
+    // Import/dependency check — documentation comments mentioning the old
+    // package name are fine and intentional.
+    let hits = '';
+    try {
+      hits = execSync(`rg -l "from ['\\"]next-themes" src`, { cwd: process.cwd(), encoding: 'utf8' });
+    } catch {
+      // rg exits 1 on zero matches — the PASS case.
+    }
+    expect(hits.trim()).toBe('');
+    // The replacement provider must stay script-free: scripts created during
+    // client rendering never execute under React 19.
+    const themeProvider = readFileSync(`${process.cwd()}/src/lib/theme.tsx`, 'utf8');
+    expect(themeProvider).not.toContain('<script');
+  });
+
+  it('theme bootstrap is server-rendered in the root layout head with the CSP nonce', () => {
+    const layout = readFileSync(`${process.cwd()}/src/app/layout.tsx`, 'utf8');
+    expect(layout).toContain('dangerouslySetInnerHTML');
+    expect(layout).toMatch(/nonce=\{nonce/);
+  });
+
+  it('browser-dependent DOM is mount-gated in AmbientBackground (no hydration mismatch)', () => {
+    const src = readFileSync(
+      `${process.cwd()}/src/components/site/ambient-background.tsx`,
+      'utf8',
+    );
+    // The spotlight (the only useReducedMotion-conditional DOM in the app)
+    // must render only after hydration so SSR and the first client render
+    // match. useSyncExternalStore serves the server snapshot (false) during
+    // hydration and the client snapshot (true) after — no setState-in-effect.
+    expect(src).toMatch(/\{mounted && !reduceMotion && \(/);
+    expect(src).toMatch(/useSyncExternalStore\(/);
+  });
+});
+
 afterEach(() => {
   // Keep the isolated DB from growing across describes.
   void prisma.user.deleteMany({ where: { email: { endsWith: '@test.local' } } }).catch(() => undefined);

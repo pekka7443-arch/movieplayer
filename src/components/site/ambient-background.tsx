@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
 
 /**
@@ -16,6 +16,22 @@ import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-moti
  * glows use var(--cinedeck-accent) so they repaint with the user's theme.
  */
 export function AmbientBackground() {
+  // Browser-dependent DOM is gated behind hydration. framer-motion's
+  // useReducedMotion() reads matchMedia SYNCHRONOUSLY on the client's first
+  // render (useState(prefersReducedMotion.current)), while SSR always saw
+  // `false` — a reduced-motion user's initial client DOM omitted the
+  // spotlight the server had rendered → React hydration mismatch.
+  // useSyncExternalStore returns the SERVER snapshot (false) during the
+  // hydration render and the client snapshot (true) after it, so the first
+  // client render is byte-identical to the SSR HTML without any
+  // setState-in-effect; the spotlight then appears as a normal
+  // post-hydration update (and never for reduced-motion users).
+  const emptySubscribe = () => () => undefined;
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
   const reduceMotion = useReducedMotion();
 
   // Pointer spotlight — motion values only, no React state involved.
@@ -25,7 +41,7 @@ export function AmbientBackground() {
   const spotY = useSpring(pointerY, { stiffness: 42, damping: 18, mass: 0.7 });
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (!mounted || reduceMotion) return;
     // Touch devices get no spotlight (no hover to track).
     if (typeof window === 'undefined' || !window.matchMedia('(pointer: fine)').matches) return;
     const onMove = (e: PointerEvent) => {
@@ -34,7 +50,7 @@ export function AmbientBackground() {
     };
     window.addEventListener('pointermove', onMove, { passive: true });
     return () => window.removeEventListener('pointermove', onMove);
-  }, [pointerX, pointerY, reduceMotion]);
+  }, [mounted, pointerX, pointerY, reduceMotion]);
 
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -75,8 +91,9 @@ export function AmbientBackground() {
       {/* Vignette — dark mode only, pulls the eye to the content column */}
       <div className="absolute inset-0 hidden bg-[radial-gradient(95%_75%_at_50%_38%,transparent_52%,rgba(0,0,0,0.28)_100%)] dark:block" />
 
-      {/* Pointer spotlight — a soft accent halo that trails the cursor */}
-      {!reduceMotion && (
+      {/* Pointer spotlight — a soft accent halo that trails the cursor.
+          Mounted-gated: see the comment at the top of the component. */}
+      {mounted && !reduceMotion && (
         <motion.div
           className="absolute left-0 top-0 hidden size-[34rem] rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--cinedeck-accent)_9%,transparent),transparent_62%)] md:block"
           style={{ x: spotX, y: spotY, marginLeft: '-17rem', marginTop: '-17rem' }}

@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import { headers } from 'next/headers';
 
 import AppRoot from '@/components/site/app-root';
 import { cinemetaPopularMixed, cinemetaDetails } from '@/lib/server/cinemeta';
@@ -141,7 +140,5 @@ async function getHeroSeed(): Promise<MetaSearchItem[] | undefined> {
 
 export default async function Page() {
   const heroSeed = await getHeroSeed();
-  // CSP nonce from the proxy middleware → next-themes' inline bootstrap.
-  const cspNonce = (await headers()).get('x-nonce') ?? undefined;
-  return <AppRoot initialTrending={heroSeed} cspNonce={cspNonce} />;
+  return <AppRoot initialTrending={heroSeed} />;
 }

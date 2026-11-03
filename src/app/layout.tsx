@@ -76,6 +76,22 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {nonce ? <meta property="csp-nonce" content={nonce} /> : null}
+        {/* Theme bootstrap — applies the stored dark/light class BEFORE first
+            paint (no FOUC). It lives here in the server-rendered head instead
+            of inside a React component: React 19 never executes scripts
+            created during client rendering, so an in-component script both
+            warns ("Encountered a script tag while rendering React
+            component") and dies on client navigations. The nonce lets the
+            strict-dynamic production CSP run it. Semantics mirror what
+            next-themes did (storage key "theme", class attribute, dark
+            default) — see src/lib/theme.tsx. */}
+        <script
+          nonce={nonce || undefined}
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('theme');var d=t==='light'?'light':'dark';var e=document.documentElement;e.classList.remove('light','dark');e.classList.add(d);e.style.colorScheme=d}catch(e){}})()",
+          }}
+        />
         {/* Poster/backdrop CDNs — warm connections before the hero LCP image */}
         <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://assets.metahub.space" crossOrigin="anonymous" />

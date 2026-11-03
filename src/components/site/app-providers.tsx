@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ThemeProvider } from 'next-themes';
+import { ThemeProvider } from '@/lib/theme';
 import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
 import { useCinedeckStore } from '@/lib/store';
@@ -14,7 +14,7 @@ import {
   onReconnecting,
 } from '@/lib/reconnect';
 
-export function AppProviders({ children, cspNonce }: { children: ReactNode; cspNonce?: string }) {
+export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -76,12 +76,14 @@ export function AppProviders({ children, cspNonce }: { children: ReactNode; cspN
     });
   }, []);
 
-  // CSP nonce for next-themes' FOUC-prevention inline script — threaded from
-  // the server (proxy x-nonce header) so the SSR-rendered script carries it;
-  // the strict-dynamic production CSP would block a nonce-less variant.
+  // The pre-paint theme bootstrap lives in the ROOT layout <head>
+  // (server-rendered with the CSP nonce) — this provider is script-free, so
+  // React 19 never has to execute or warn about a client-created <script>
+  // (the old next-themes in-component FOUC script warned and never ran on
+  // client navigations).
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} nonce={cspNonce}>
+      <ThemeProvider defaultTheme="dark" enableSystem={false}>
         {children}
         <Toaster
           richColors

@@ -55,9 +55,13 @@ function buildCsp(nonce: string): string {
     "media-src 'self' blob: https:",
     "font-src 'self' data:",
     `connect-src ${connectSrc}`,
-    // Player frames are nested same-origin through /api/player-proxy; the
-    // provider host list lives in the proxy route + next.config frame-src.
-    'frame-src https://www.youtube-nocookie.com https://www.youtube.com',
+    // Player frames are nested same-origin: the UI renders
+    // <iframe src="/api/player-proxy?u=…"> (player-section.tsx), so frame-src
+    // MUST include 'self' — without it this CSP blocks the outer player
+    // iframe with Chromium's "This content is blocked" error page
+    // (2026-11-03 fix). The INNER iframe's provider host list lives in the
+    // player-proxy route's own CSP.
+    "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
     // hls.js spins up blob: workers for some transmuxing paths; the service
     // worker shell is same-origin.
     "worker-src 'self' blob:",
