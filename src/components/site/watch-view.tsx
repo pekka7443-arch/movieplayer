@@ -280,7 +280,7 @@ export function WatchView({
                 <MotionButton
                   type="button"
                   onClick={scrollToPlayer}
-                  className="h-11 rounded-lg bg-brand px-6 text-sm font-semibold text-white shadow-[0_8px_30px_-6px_rgba(229,9,20,0.55)] transition-colors duration-200 hover:bg-brand/90"
+                  className="h-11 rounded-lg bg-brand px-6 text-sm font-semibold text-white shadow-[0_8px_26px_-8px_color-mix(in_srgb,var(--cinedeck-accent)_45%,transparent)] transition-colors duration-200 hover:bg-brand/90"
                 >
                   <Play className="size-4 fill-white" aria-hidden />
                   Play

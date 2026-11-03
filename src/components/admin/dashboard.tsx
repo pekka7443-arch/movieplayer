@@ -29,6 +29,7 @@ import {
 
 import { logoutAccount } from '@/lib/auth-client';
 import { invalidateIdentityCaches, useSession } from '@/hooks/use-session';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { cn } from '@/lib/utils';
 import { AdmButton, Avatar, UpdatedAgo } from '@/components/admin/ui';
 
@@ -89,6 +90,13 @@ export function AdminDashboard({ initialTab }: { initialTab?: string }) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const { user, loading } = useSession();
+  // The session is localStorage-cached (useSession initialData): the server
+  // renders the guest view, so the first client render must agree or React 19
+  // throws a hydration mismatch (and the subsequent client re-render trips
+  // the head script-tag warning). Until hydration completes we show the same
+  // "Loading console…" shell the server rendered, then the real console.
+  const hydrated = useHydrated();
+  const identityLoading = loading || !hydrated;
   const [signingOut, setSigningOut] = useState(false);
 
   const active = useMemo(() => {
@@ -141,7 +149,7 @@ export function AdminDashboard({ initialTab }: { initialTab?: string }) {
     }
   };
 
-  if (loading) {
+  if (identityLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
         <div className="flex items-center gap-3 text-sm text-[#6b7280]">

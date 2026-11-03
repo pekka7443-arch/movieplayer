@@ -51,7 +51,6 @@ export function GuestSignupBanner() {
       <div className="relative mt-3 overflow-hidden rounded-2xl border border-brand/40 bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-4 py-3.5 sm:px-5">
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-10 right-0 h-28 w-64 rounded-full bg-brand/20 blur-3xl"
         />
         <div className="relative flex flex-wrap items-center gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand text-zinc-950 shadow-md">

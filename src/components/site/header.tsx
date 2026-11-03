@@ -57,6 +57,11 @@ function initialsOf(name: string | null, email: string): string {
   return (first + second).toUpperCase();
 }
 
+/**
+ * Compact premium navbar — 56px on desktop, quietly densifying once the
+ * page scrolls (border + deeper surface, no layout jump). Motion is limited
+ * to 150ms color transitions; no glow, pulse or ping effects.
+ */
 export function Header() {
   const router = useRouter();
   const params = useSearchParams();
@@ -98,8 +103,8 @@ export function Header() {
   const profiles = profilesQuery.data ?? [];
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
 
-  // Scroll-aware chrome: the header densifies and gains depth as the page
-  // scrolls, then relaxes back at the top.
+  // Scroll-aware chrome: the header gains a hairline border + deeper surface
+  // as the page scrolls, then relaxes back at the top.
   const { scrollY } = useScroll();
   const [scrolled, setScrolled] = useState(false);
   useMotionValueEvent(scrollY, 'change', (latest) => {
@@ -126,34 +131,32 @@ export function Header() {
   };
 
   const navLinkClasses = (active: boolean) =>
-    `rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+    `whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
       active
-        ? 'text-brand'
-        : 'text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100'
+        ? 'text-foreground'
+        : 'text-zinc-500 hover:text-foreground dark:text-zinc-400 dark:hover:text-foreground'
     }`;
+
+  const iconBtnClasses =
+    'size-9 shrink-0 max-md:size-10 text-zinc-500 hover:text-foreground hover:bg-white/5 dark:text-zinc-400 dark:hover:text-foreground dark:hover:bg-white/5';
 
   return (
     <header
-      className={`sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md transition-all duration-300 ${
+      className={`sticky top-0 z-50 border-b backdrop-blur-xl transition-colors duration-200 ${
         scrolled
-          ? 'border-zinc-200/60 shadow-[0_10px_38px_-12px_rgba(0,0,0,0.28)] dark:border-zinc-800/60 dark:shadow-black/50'
-          : 'border-transparent'
+          ? 'border-border bg-background/90'
+          : 'border-transparent bg-gradient-to-b from-background/95 to-background/70'
       }`}
     >
-      <div
-        className={`mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-3 px-4 transition-all duration-300 sm:px-6 ${
-          scrolled ? 'py-2' : 'py-3'
-        }`}
-      >
+      <div className="mx-auto flex min-h-14 w-full max-w-[1560px] flex-wrap items-center gap-2 px-3 sm:h-[60px] sm:min-h-0 sm:flex-nowrap sm:gap-3 sm:px-6">
         <button
           type="button"
           onClick={() => router.push('/', { scroll: false })}
           aria-label="CineDeck — back to home"
-          className="flex shrink-0 items-center gap-2.5 rounded-lg px-1 py-1 transition-all duration-200 hover:opacity-90 hover:scale-[1.03] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="flex shrink-0 items-center gap-2 rounded-md px-0.5 py-1 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         >
-          {/* User's hamster logo — round, bordered container so it reads as a
-              brand mark at small sizes. */}
-          <span className="cd-pulse size-9 overflow-hidden rounded-full ring-2 ring-brand/40 shadow-[0_0_18px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)]">
+          {/* Brand mark — the user's hamster logo in a quiet bordered chip. */}
+          <span className="size-8 overflow-hidden rounded-lg ring-1 ring-border sm:size-9">
             <img
               src="/user-logo.png"
               alt=""
@@ -163,7 +166,7 @@ export function Header() {
               aria-hidden
             />
           </span>
-          <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+          <span className="text-[15px] font-semibold tracking-tight text-foreground sm:text-base">
             Cine<span className="text-brand">Deck</span>
           </span>
         </button>
@@ -195,7 +198,7 @@ export function Header() {
           <button
             type="button"
             onClick={goAnime}
-            className={navLinkClasses(false) + ' inline-flex items-center gap-1.5'}
+            className={navLinkClasses(false) + ' inline-flex items-center gap-1'}
           >
             <Sparkles className="size-3.5 text-brand" aria-hidden />
             Anime
@@ -222,11 +225,11 @@ export function Header() {
         </nav>
 
         {/* Search takes the full second row on <md */}
-        <div className="order-3 w-full md:order-none md:w-72 md:flex-1 lg:w-96">
+        <div className="order-3 w-full min-w-0 md:order-none md:w-64 md:flex-1 lg:w-80">
           <SearchBar />
         </div>
 
-        <nav aria-label="Site actions" className="ml-auto flex items-center gap-1">
+        <nav aria-label="Site actions" className="ml-auto flex items-center gap-0.5 sm:gap-1">
           {/* Mobile menu — slides in from the right */}
           <Button
             variant="ghost"
@@ -234,9 +237,9 @@ export function Header() {
             aria-label="Open menu"
             aria-expanded={mobileMenuOpen}
             onClick={() => setMobileMenuOpen(true)}
-            className="size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 lg:hidden dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+            className={`${iconBtnClasses} lg:hidden`}
           >
-            <Menu className="size-5" aria-hidden />
+            <Menu className="size-[18px]" aria-hidden />
           </Button>
           <Button
             variant="ghost"
@@ -244,9 +247,9 @@ export function Header() {
             onClick={() => setPaletteOpen(true)}
             aria-label="Open command palette (Ctrl+K)"
             title="Command palette (Ctrl+K)"
-            className="hidden h-9 items-center gap-2 rounded-lg border border-zinc-200 px-2.5 text-xs text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900 lg:inline-flex dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+            className="hidden h-8 items-center gap-1.5 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors duration-150 hover:bg-white/5 hover:text-foreground lg:inline-flex dark:hover:bg-white/5"
           >
-            <CommandIcon className="size-3.5" aria-hidden />
+            <CommandIcon className="size-3" aria-hidden />
             <span>K</span>
           </Button>
           <LanguageMenu />
@@ -258,36 +261,36 @@ export function Header() {
             aria-label="Live sports — scores, schedules and free sports TV"
             title="Live Sports"
             onClick={() => router.push('/?view=sports', { scroll: false })}
-            className="relative size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+            className={`relative ${iconBtnClasses}`}
           >
-            <Trophy className="size-4.5 text-brand transition-transform duration-300 hover:rotate-12" aria-hidden />
-            {/* live dot — the sports section never sleeps */}
-            <span aria-hidden className="absolute right-1.5 top-1.5 flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-75" />
-              <span className="relative inline-flex size-2 rounded-full bg-red-500" />
-            </span>
+            <Trophy className="size-[17px]" aria-hidden />
+            {/* Live dot — static, quiet (no ping loop). */}
+            <span
+              aria-hidden
+              className="absolute right-[7px] top-[7px] size-[5px] rounded-full bg-red-500 ring-2 ring-background"
+            />
           </Button>
           <Button
             variant="ghost"
             size="icon"
             aria-label="Open CineDeck Arcade — games"
             onClick={openArcade}
-            className="hidden size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+            className={`hidden sm:inline-flex ${iconBtnClasses}`}
           >
-            <Gamepad2 className="size-4.5 text-brand" aria-hidden />
+            <Gamepad2 className="size-[17px]" aria-hidden />
           </Button>
           <Button
             variant="ghost"
             size="icon"
             aria-label="Open settings"
             onClick={openSettings}
-            className="relative size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+            className={`relative ${iconBtnClasses}`}
           >
-            <Settings2 className="size-4.5" aria-hidden />
+            <Settings2 className="size-[17px]" aria-hidden />
             {!hasKey && (
               <span
                 aria-hidden
-                className="absolute right-2 top-2 size-2 animate-pulse rounded-full bg-brand"
+                className="absolute right-[7px] top-[7px] size-[5px] rounded-full bg-brand ring-2 ring-background"
               />
             )}
           </Button>
@@ -296,7 +299,7 @@ export function Header() {
           {identityLoading ? (
             <span
               aria-hidden
-              className="ml-1 size-9 shrink-0 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800"
+              className="ml-1 size-8 shrink-0 animate-pulse rounded-full bg-muted"
             />
           ) : user ? (
             <DropdownMenu>
@@ -304,26 +307,26 @@ export function Header() {
                 <button
                   type="button"
                   aria-label={`Account menu — ${user.name || user.email}`}
-                  className="ml-1 flex shrink-0 items-center gap-2 rounded-full p-0.5 pr-0.5 transition-colors hover:bg-zinc-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 sm:pr-2.5 dark:hover:bg-zinc-800/60"
+                  className="ml-1 flex shrink-0 items-center gap-2 rounded-full p-0.5 transition-colors duration-150 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 sm:pr-2 dark:hover:bg-white/5"
                 >
-                  <span className="flex size-9 items-center justify-center rounded-full bg-brand text-xs font-bold text-brand-foreground shadow-[0_0_16px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)]">
+                  <span className="flex size-8 items-center justify-center rounded-full bg-brand text-xs font-bold text-brand-foreground">
                     {user.avatar ? (
                       <span aria-hidden className="text-lg leading-none">{user.avatar}</span>
                     ) : (
                       initialsOf(user.name, user.email)
                     )}
                   </span>
-                  <span className="hidden max-w-24 truncate text-sm font-medium text-zinc-700 lg:block dark:text-zinc-300">
+                  <span className="hidden max-w-24 truncate text-[13px] font-medium text-zinc-700 lg:block dark:text-zinc-300">
                     {user.name || user.email.split('@')[0]}
                   </span>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60 rounded-xl border-zinc-200 dark:border-zinc-800">
+              <DropdownMenuContent align="end" className="w-60 rounded-xl">
                 <DropdownMenuLabel className="space-y-0.5">
-                  <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  <p className="truncate text-sm font-semibold text-foreground">
                     {user.name || 'CineDeck member'}
                   </p>
-                  <p className="truncate text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                  <p className="truncate text-xs font-normal text-muted-foreground">
                     {user.email}
                   </p>
                 </DropdownMenuLabel>
@@ -368,18 +371,18 @@ export function Header() {
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => goSection('my-list')} className="gap-2 text-sm">
-                  <Bookmark className="size-4 text-brand" aria-hidden />
+                  <Bookmark className="size-4 text-muted-foreground" aria-hidden />
                   My List
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => goSection('continue-watching')} className="gap-2 text-sm">
-                  <History className="size-4 text-brand" aria-hidden />
+                  <History className="size-4 text-muted-foreground" aria-hidden />
                   Continue watching
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => router.push('/?view=stats', { scroll: false })}
                   className="gap-2 text-sm"
                 >
-                  <Trophy className="size-4 text-brand" aria-hidden />
+                  <Trophy className="size-4 text-muted-foreground" aria-hidden />
                   Watch stats & achievements
                 </DropdownMenuItem>
                 {user.role === 'admin' && (
@@ -387,12 +390,12 @@ export function Header() {
                     onClick={() => router.push('/admin')}
                     className="gap-2 text-sm"
                   >
-                    <Settings2 className="size-4 text-brand" aria-hidden />
+                    <Settings2 className="size-4 text-muted-foreground" aria-hidden />
                     Admin dashboard
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={openSettings} className="gap-2 text-sm">
-                  <Settings2 className="size-4" aria-hidden />
+                  <Settings2 className="size-4 text-muted-foreground" aria-hidden />
                   Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -406,14 +409,14 @@ export function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="ml-1 flex shrink-0 items-center gap-2">
+            <div className="ml-1 flex shrink-0 items-center gap-1.5">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={() => openAuth('signin')}
                 aria-label="Sign in"
-                className="h-9 w-9 gap-1.5 rounded-lg px-0 text-sm font-medium text-zinc-700 hover:bg-zinc-200/70 hover:text-zinc-900 sm:w-auto sm:px-3 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+                className="h-8 w-8 gap-1.5 rounded-md px-0 text-[13px] font-medium text-zinc-600 hover:bg-white/5 hover:text-foreground sm:w-auto sm:px-2.5 dark:text-zinc-300 dark:hover:bg-white/5 dark:hover:text-foreground"
               >
                 <UserRound className="size-4" aria-hidden />
                 <span className="hidden sm:inline">Sign in</span>
@@ -422,9 +425,9 @@ export function Header() {
                 type="button"
                 size="sm"
                 onClick={() => openAuth('signup')}
-                className="h-9 gap-1.5 rounded-lg bg-brand px-3.5 text-sm font-semibold text-zinc-950 shadow-[0_0_16px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)] hover:bg-brand/90"
+                className="h-8 gap-1.5 rounded-md bg-brand px-3 text-[13px] font-semibold text-brand-foreground transition-colors duration-150 hover:bg-brand/90"
               >
-                <LogIn className="size-4" aria-hidden />
+                <LogIn className="size-3.5" aria-hidden />
                 Sign up
               </Button>
             </div>
@@ -435,7 +438,7 @@ export function Header() {
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetContent
             side="right"
-            className="w-80 border-l border-border bg-background/95 backdrop-blur-xl"
+            className="w-80 border-l border-border bg-popover/95 backdrop-blur-xl"
           >
             <SheetHeader className="border-b border-border pb-4">
               <SheetTitle className="flex items-center gap-2 text-lg font-semibold">
@@ -459,7 +462,7 @@ export function Header() {
                   type="button"
                   onClick={action}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex min-h-[48px] items-center gap-3 rounded-lg px-3 text-[15px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                  className={`flex min-h-[48px] items-center gap-3 rounded-lg px-3 text-[15px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
                     active
                       ? 'bg-brand/10 text-brand'
                       : 'text-zinc-700 hover:bg-muted dark:text-zinc-300'

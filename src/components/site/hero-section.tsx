@@ -40,15 +40,12 @@ function genrePillsOf(item: HeroTrendingItem): string[] {
 }
 
 /**
- * Cinematic hero — the trending carousel, deliberately compact.
- *
- * The featured title's backdrop (or a blurred, darkened poster when only
- * artwork available) fills a ~2/3-viewport stage edge-to-edge; a layered
- * gradient burns it into the page background. Title, year, genre pills,
- * rating and a two-line description sit bottom-left over the art with
- * Play + More Info actions. The carousel auto-advances every 8 seconds with
- * a slow crossfade, pauses on hover/focus, is manually overridden by the
- * dot indicators, and all motion collapses under prefers-reduced-motion.
+ * Compact cinematic hero — 300px on phones, 340–380px on desktop, so the
+ * homepage shows content rows almost immediately below the fold. The featured
+ * title's backdrop crossfades every 8 seconds (paused on hover/focus, disabled
+ * under reduced motion) under a layered gradient that burns the art into the
+ * page background. Title, year, genre pills, rating and a two-line description
+ * sit bottom-left with Play + More Info actions.
  */
 export function HeroSection({
   trending,
@@ -125,18 +122,18 @@ export function HeroSection({
   return (
     <section
       aria-label="Featured titles"
-      className="relative -mx-4 -mt-6 overflow-hidden sm:-mx-6 sm:-mt-8"
+      className="relative -mx-4 -mt-5 overflow-hidden sm:-mx-6 sm:-mt-6"
       onPointerEnter={() => setRotatePaused(true)}
       onPointerLeave={() => setRotatePaused(false)}
       onFocus={() => setRotatePaused(true)}
       onBlur={() => setRotatePaused(false)}
     >
-      <div className="relative flex min-h-[46svh] flex-col justify-end md:min-h-[52svh]">
+      <div className="relative flex h-[300px] flex-col justify-end md:h-[340px] lg:h-[380px]">
         {trendingLoading ? (
-          <Skeleton className="absolute inset-0 size-full rounded-none bg-zinc-900" />
+          <Skeleton className="absolute inset-0 size-full rounded-none bg-muted" />
         ) : !featured || !featuredUrl ? (
           // Keyless + empty catalog: keep the connect card front and center.
-          <div className="flex min-h-[52svh] items-center justify-center px-4">
+          <div className="flex h-[320px] items-center justify-center px-4 md:h-[360px]">
             <div className="w-full max-w-md">
               <ConnectCard />
             </div>
@@ -153,13 +150,12 @@ export function HeroSection({
                 transition={
                   reduceMotion
                     ? { duration: 0 }
-                    : { duration: 1.2, ease: [0.25, 0.1, 0.25, 1] }
+                    : { duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }
                 }
                 className="absolute inset-0"
                 aria-hidden
               >
                 {featuredBackdrop ? (
-                   
                   <img
                     src={featuredBackdrop}
                     alt=""
@@ -172,47 +168,47 @@ export function HeroSection({
                     }
                   />
                 ) : (
-                  <div className="size-full bg-zinc-900" />
+                  <div className="size-full bg-muted" />
                 )}
                 {/* Burn the art into the canvas: bottom + left gradient bed */}
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-background/10" />
-                <div className="absolute inset-0 bg-gradient-to-r from-background/85 via-background/25 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-background to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c]/60 to-[#0a0a0c]/10" />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0c]/85 via-[#0a0a0c]/25 to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#0a0a0c] to-transparent" />
               </motion.div>
             </AnimatePresence>
 
-            {/* Featured content — bottom-left, like a premium streaming hero */}
+            {/* Featured content — bottom-left, compact */}
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={featuredUrl + featuredTitle}
-                initial={reduceMotion ? false : { opacity: 0, y: 26 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={reduceMotion ? undefined : { opacity: 0, y: -14 }}
-                transition={{ duration: reduceMotion ? 0 : 0.45, ease: [0.22, 1, 0.36, 1] }}
-                className="relative z-10 w-full px-4 pb-6 sm:px-6 md:pb-10 lg:px-10"
+                exit={reduceMotion ? undefined : { opacity: 0, y: -10 }}
+                transition={{ duration: reduceMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="relative z-10 w-full px-4 pb-5 sm:px-6 md:pb-7 lg:px-10"
               >
-                <div className="max-w-3xl">
-                  <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-300">
-                    <Clapperboard className="size-3.5 text-brand" aria-hidden />
+                <div className="max-w-2xl">
+                  <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                    <Clapperboard className="size-3 text-brand" aria-hidden />
                     Trending {hasKey ? 'this week' : 'now'}
                   </p>
 
-                  <h1 className="mt-2 text-2xl font-bold leading-[1.06] tracking-tight text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.55)] md:text-4xl lg:text-5xl">
+                  <h1 className="mt-1.5 line-clamp-2 text-xl font-bold leading-tight tracking-tight text-white md:text-3xl lg:text-[34px]">
                     {featuredTitle}
                   </h1>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-2.5 text-sm text-zinc-200">
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-zinc-300">
                     {featuredYear && <span className="font-medium">{featuredYear}</span>}
                     {featuredRating && (
                       <span className="inline-flex items-center gap-1 font-semibold text-white">
-                        <Star className="size-3.5 fill-brand text-brand" aria-hidden />
+                        <Star className="size-3 fill-brand text-brand" aria-hidden />
                         {featuredRating}
                       </span>
                     )}
                     {featuredPills.map((pill) => (
                       <span
                         key={pill}
-                        className="hidden rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm sm:inline-flex"
+                        className="hidden rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white sm:inline-flex"
                       >
                         {pill}
                       </span>
@@ -220,39 +216,32 @@ export function HeroSection({
                   </div>
 
                   {featuredOverview && (
-                    <p className="mt-3 hidden line-clamp-2 max-w-2xl text-sm leading-relaxed text-zinc-200/90 drop-shadow-[0_1px_8px_rgba(0,0,0,0.6)] sm:block">
+                    <p className="mt-2 hidden line-clamp-2 max-w-xl text-[13px] leading-relaxed text-zinc-300/90 sm:block">
                       {featuredOverview}
                     </p>
                   )}
 
-                  <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                  <div className="mt-3.5 flex flex-wrap items-center gap-2">
                     <MotionButton
                       type="button"
                       size="sm"
                       onClick={() => router.push(featuredUrl, { scroll: false })}
-                      whileHover={{ scale: 1.04 }}
+                      whileHover={{ scale: 1.03 }}
                       whileTap={{ scale: 0.97 }}
-                      className="h-10 gap-1.5 rounded-lg bg-brand px-5 text-sm font-semibold text-white shadow-[0_8px_30px_-8px_rgba(229,9,20,0.55)] transition-colors duration-200 hover:bg-brand/90 sm:h-9 sm:px-4 sm:text-[13px]"
+                      className="h-9 gap-1.5 rounded-md bg-brand px-4 text-[13px] font-semibold text-brand-foreground transition-colors duration-150 hover:bg-brand/90"
                     >
-                      <Play className="size-4 fill-white" aria-hidden />
+                      <Play className="size-4 fill-current" aria-hidden />
                       Play
                     </MotionButton>
-                    <motion.div
-                      className="inline-flex"
-                      whileHover={reduceMotion ? undefined : { scale: 1.04 }}
-                      whileTap={reduceMotion ? undefined : { scale: 0.97 }}
-                      transition={{ duration: reduceMotion ? 0 : 0.15, ease: 'easeOut' }}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => router.push(featuredUrl, { scroll: false })}
+                      className="h-9 rounded-md border-white/20 bg-white/10 px-3.5 text-[13px] font-medium text-white backdrop-blur-md transition-colors duration-150 hover:border-white/35 hover:bg-white/20"
                     >
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => router.push(featuredUrl, { scroll: false })}
-                        className="h-10 rounded-lg border-white/25 bg-white/10 px-4 text-sm font-medium text-white backdrop-blur-md transition-colors duration-200 hover:border-white/40 hover:bg-white/20 sm:h-9 sm:text-[13px]"
-                      >
-                        <Info className="size-4" aria-hidden />
-                        More Info
-                      </Button>
-                    </motion.div>
+                      <Info className="size-4" aria-hidden />
+                      More Info
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
@@ -260,7 +249,7 @@ export function HeroSection({
                       onClick={surprise}
                       aria-label="Surprise me — play a random trending title"
                       title="Surprise me"
-                      className="size-10 rounded-full border border-white/15 bg-black/30 text-zinc-200 backdrop-blur-md hover:bg-black/50 hover:text-white"
+                      className="size-9 rounded-full border border-white/15 bg-black/30 text-zinc-300 backdrop-blur-md hover:bg-black/50 hover:text-white"
                     >
                       <Dices className="size-4" aria-hidden />
                     </Button>
@@ -280,7 +269,7 @@ export function HeroSection({
                   const active = i === safeIndex;
                   const dotTitle = ('title' in item ? item.title : '') || `Featured ${i + 1}`;
                   return (
-                    <motion.button
+                    <button
                       key={i}
                       type="button"
                       role="tab"
@@ -290,13 +279,7 @@ export function HeroSection({
                         setRotateIndex(i);
                         setRotatePaused(true);
                       }}
-                      animate={{ scaleY: active ? 1.45 : 1 }}
-                      transition={
-                        reduceMotion
-                          ? { duration: 0 }
-                          : { type: 'spring', stiffness: 500, damping: 28 }
-                      }
-                      className={`h-1.5 rounded-full transition-[width,background-color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                      className={`h-1.5 rounded-full transition-[width,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
                         active
                           ? 'w-4 bg-brand'
                           : 'w-1.5 bg-white/30 hover:bg-white/60'
@@ -310,16 +293,16 @@ export function HeroSection({
         )}
       </div>
 
-      {/* Stats strip — one slim line, not a wall of cards */}
-      <div className="relative z-10 mx-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-border/60 py-3.5 text-[11px] text-zinc-500 sm:mx-6 sm:gap-x-6 sm:text-xs dark:text-zinc-400">
+      {/* Stats strip — one slim hairline line under the hero */}
+      <div className="relative z-10 mx-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border/60 py-2.5 text-[11px] text-zinc-500 sm:mx-6 sm:gap-x-6 dark:text-zinc-400">
         <span className="flex items-center gap-1.5">
           <Clapperboard className="size-3.5 text-brand" aria-hidden />
-          <strong className="font-semibold text-zinc-800 dark:text-zinc-100">10,000+</strong>
+          <strong className="font-semibold text-zinc-700 dark:text-zinc-200">10,000+</strong>
           keyless catalogs
         </span>
         <span className="flex items-center gap-1.5">
           <Server className="size-3.5 text-brand" aria-hidden />
-          <strong className="font-semibold text-zinc-800 dark:text-zinc-100">{PROVIDERS.length}</strong>
+          <strong className="font-semibold text-zinc-700 dark:text-zinc-200">{PROVIDERS.length}</strong>
           auto-scan + failover
         </span>
         <span className="flex items-center gap-1.5">

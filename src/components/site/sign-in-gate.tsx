@@ -71,7 +71,6 @@ export function SignInToWatchModal({
         <div className="relative px-6 pb-6 pt-8 text-center">
           <div
             aria-hidden
-            className="pointer-events-none absolute -top-14 left-1/2 h-36 w-72 -translate-x-1/2 rounded-full bg-brand-soft blur-3xl"
           />
           <motion.span
             initial={reduceMotion ? undefined : { scale: 0.6, opacity: 0 }}

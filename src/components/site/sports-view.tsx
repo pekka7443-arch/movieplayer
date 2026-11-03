@@ -687,10 +687,10 @@ function FavoriteStar({ home, away }: { home: string; away: string }) {
       }}
       className={cn(
         'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
-        isFav ? 'text-amber-500' : 'text-zinc-300 hover:text-amber-500 dark:text-zinc-600',
+        isFav ? 'text-brand' : 'text-zinc-300 hover:text-brand dark:text-zinc-600',
       )}
     >
-      <Star className={cn('size-4', isFav && 'fill-amber-500')} aria-hidden />
+      <Star className={cn('size-4', isFav && 'fill-brand')} aria-hidden />
     </button>
   );
 }
@@ -2298,7 +2298,6 @@ function WatchPage({
       <div className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-white/90 p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-16 right-0 -z-10 h-48 w-96 rounded-full bg-brand-soft blur-3xl"
         />
         <div className="flex items-center gap-2">
           <Button
@@ -2922,11 +2921,11 @@ export function SportsView() {
                 className={cn(
                   'h-8 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
                   favoritesOnly
-                    ? 'border-amber-400 bg-amber-400 text-zinc-950'
-                    : 'border-zinc-200 bg-white/70 text-zinc-600 hover:border-amber-400/60 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100',
+                    ? 'border-brand bg-brand text-brand-foreground'
+                    : 'border-zinc-200 bg-white/70 text-zinc-600 hover:border-brand/50 hover:text-foreground dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:text-zinc-100',
                 )}
               >
-                <Star className={cn('mr-1 inline size-3', favoritesOnly ? 'fill-zinc-950' : 'fill-amber-400 text-amber-500')} aria-hidden />
+                <Star className={cn('mr-1 inline size-3', favoritesOnly ? 'fill-brand-foreground' : 'fill-brand text-brand')} aria-hidden />
                 Favorites ({favorites.size})
               </button>
             )}

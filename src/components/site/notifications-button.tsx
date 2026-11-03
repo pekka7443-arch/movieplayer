@@ -112,12 +112,12 @@ export function NotificationsButton() {
           variant="ghost"
           size="icon"
           aria-label={unread > 0 ? `Notifications — ${unread} unread` : 'Notifications'}
-          className="relative size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+          className="relative size-9 max-md:size-10 shrink-0 text-zinc-500 hover:text-foreground hover:bg-white/5 dark:text-zinc-400 dark:hover:text-foreground dark:hover:bg-white/5"
         >
           {unread > 0 ? (
-            <BellRing className="size-4.5 text-brand" aria-hidden />
+            <BellRing className="size-[17px] text-brand" aria-hidden />
           ) : (
-            <Bell className="size-4.5" aria-hidden />
+            <Bell className="size-[17px]" aria-hidden />
           )}
           {unread > 0 && (
             <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-brand text-[9px] font-bold text-brand-foreground" aria-hidden>
@@ -126,7 +126,7 @@ export function NotificationsButton() {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 rounded-xl border-zinc-200 p-1.5 dark:border-zinc-800">
+      <DropdownMenuContent align="end" className="w-80 rounded-xl p-1.5">
         <div className="flex items-center justify-between px-2.5 py-1.5">
           <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
             Notifications

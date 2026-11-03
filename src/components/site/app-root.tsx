@@ -21,6 +21,7 @@ import { BottomNav } from '@/components/site/bottom-nav';
 import { OnboardingTour } from '@/components/site/onboarding-tour';
 import { CookieConsent } from '@/components/site/consent-banner';
 import { useSession } from '@/hooks/use-session';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { useCinedeckStore, hydrateActiveProfile } from '@/lib/store';
 import { ViewSkeleton } from '@/components/site/view-skeleton';
 import type { MediaType } from '@/lib/tmdb';
@@ -111,7 +112,13 @@ function MaintenanceGate({ children }: { children: React.ReactNode }) {
     refetchInterval: 60_000,
   });
   const { user } = useSession();
-  const maintenance = flagData?.flags['maintenance'] === true && user?.role !== 'admin';
+  // Identity is localStorage-cached (useSession initialData) — the server and
+  // the first client render must agree, so treat the user as a guest until
+  // hydration completes (same pattern as the header account zone). An admin
+  // briefly sees the maintenance screen and then passes through.
+  const hydrated = useHydrated();
+  const knownUser = hydrated ? user : null;
+  const maintenance = flagData?.flags['maintenance'] === true && knownUser?.role !== 'admin';
 
   if (!maintenance) return <>{children}</>;
   return (
@@ -199,10 +206,10 @@ function App({
   return (
     <AppProviders>
       <MaintenanceGate>
-      <div className="flex min-h-svh flex-col text-zinc-900 dark:text-zinc-100">
+      <div className="flex min-h-svh flex-col text-foreground">
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[80] focus:rounded-lg focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-brand-foreground"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[80] focus:rounded-md focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-brand-foreground"
         >
           Skip to content
         </a>
@@ -215,15 +222,15 @@ function App({
         <main
           id="main-content"
           tabIndex={-1}
-          className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-[calc(env(safe-area-inset-bottom)+72px)] py-6 sm:px-6 sm:py-8 md:pb-8"
+          className="mx-auto w-full max-w-[1560px] flex-1 px-4 pb-[calc(env(safe-area-inset-bottom)+68px)] pt-1 sm:px-6 md:pb-8"
         >
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={viewKey}
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
               animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-              transition={{ duration: reduceMotion ? 0 : 0.25, ease: 'easeOut' }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
             >
               {viewKey === 'admin' ? null : viewKey === 'watch' ? (
                 <WatchView tmdbId={id ?? undefined} imdbId={imdbId ?? undefined} mediaType={type} season={season} episode={episode} />

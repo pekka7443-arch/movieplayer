@@ -45,13 +45,13 @@ function ResultRow({
       onClick={() => onSelect(item)}
       data-active={active || undefined}
       className={
-        'flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors focus-visible:outline-none ' +
+        'flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors duration-150 focus-visible:outline-none ' +
         (active
-          ? 'bg-amber-400/10 ring-1 ring-amber-400/40 dark:bg-amber-400/10'
-          : 'hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70')
+          ? 'bg-brand/10 ring-1 ring-brand/40'
+          : 'hover:bg-white/5 focus-visible:bg-white/5')
       }
     >
-      <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950">
+      <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
         {poster ? (
           <img src={poster} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
@@ -72,13 +72,13 @@ function ResultRow({
             className={
               'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ' +
               (item.mediaType === 'tv'
-                ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300'
-                : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400')
+                ? 'bg-brand/10 text-brand'
+                : 'bg-muted text-muted-foreground')
             }
           >
             {item.mediaType}
           </span>
-          <span className="font-mono text-[11px] text-amber-600/90 dark:text-amber-400/90">ID {item.id}</span>
+          <span className="font-mono text-[11px] text-muted-foreground/80">ID {item.id}</span>
           {item.voteAverage > 0 && (
             <span className="text-[11px] text-zinc-500">★ {item.voteAverage.toFixed(1)}</span>
           )}
@@ -103,13 +103,13 @@ function MetaResultRow({
       onClick={() => onSelect(item)}
       data-active={active || undefined}
       className={
-        'flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors focus-visible:outline-none ' +
+        'flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors duration-150 focus-visible:outline-none ' +
         (active
-          ? 'bg-amber-400/10 ring-1 ring-amber-400/40 dark:bg-amber-400/10'
-          : 'hover:bg-zinc-200/80 focus-visible:bg-zinc-200/80 dark:hover:bg-zinc-800/70 dark:focus-visible:bg-zinc-800/70')
+          ? 'bg-brand/10 ring-1 ring-brand/40'
+          : 'hover:bg-white/5 focus-visible:bg-white/5')
       }
     >
-      <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950">
+      <span className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
         {item.poster ? (
           <img src={item.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
@@ -128,13 +128,13 @@ function MetaResultRow({
             className={
               'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ' +
               (item.mediaType === 'tv'
-                ? 'bg-amber-400/15 text-amber-600 dark:text-amber-300'
-                : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400')
+                ? 'bg-brand/10 text-brand'
+                : 'bg-muted text-muted-foreground')
             }
           >
             {item.mediaType}
           </span>
-          <span className="font-mono text-[11px] text-amber-600/90 dark:text-amber-400/90">{item.imdbId}</span>
+          <span className="font-mono text-[11px] text-muted-foreground/80">{item.imdbId}</span>
           {item.voteAverage > 0 && (
             <span className="text-[11px] text-zinc-500">★ {item.voteAverage.toFixed(1)}</span>
           )}
@@ -280,9 +280,9 @@ export function SearchBar() {
       href={`https://areena.yle.fi/haku?q=${encodeURIComponent(trimmed)}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-2.5 rounded-lg border-t border-zinc-200/70 px-3 py-2.5 text-[12px] text-zinc-600 transition-colors hover:bg-sky-50 hover:text-sky-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 dark:border-zinc-800/70 dark:text-zinc-400 dark:hover:bg-sky-950/30 dark:hover:text-sky-300"
+      className="flex items-center gap-2.5 rounded-lg border-t border-border/70 px-3 py-2.5 text-[12px] text-zinc-600 transition-colors duration-150 hover:bg-brand/5 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:border-border/70 dark:text-zinc-400 dark:hover:text-brand"
     >
-      <Tv className="size-3.5 shrink-0 text-sky-500" aria-hidden />
+      <Tv className="size-3.5 shrink-0 text-brand/80" aria-hidden />
       <span className="min-w-0 flex-1">
         Can’t find it here? Search “{trimmed}” on YLE Areena
         <span className="block text-[10px] text-zinc-400 dark:text-zinc-400">
@@ -318,7 +318,7 @@ export function SearchBar() {
     if (isFetching && metaResults.length === 0 && metaQuery.isPending) {
       body = (
         <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
-          <Loader2 className="size-4 animate-spin text-amber-500 dark:text-amber-400" aria-hidden />
+          <Loader2 className="size-4 animate-spin text-brand" aria-hidden />
           Searching…
         </div>
       );
@@ -333,7 +333,7 @@ export function SearchBar() {
       // misleading "No results"; the reconnect poll auto-refreshes on wake.
       body = (
         <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
-          <SearchX className="size-4 text-amber-500 dark:text-amber-400" aria-hidden />
+          <SearchX className="size-4 text-brand" aria-hidden />
           <span>Search is unreachable right now — reconnecting automatically…</span>
         </div>
       );
@@ -385,7 +385,7 @@ export function SearchBar() {
   } else if (isFetching) {
     body = (
       <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
-        <Loader2 className="size-4 animate-spin text-amber-500 dark:text-amber-400" aria-hidden />
+        <Loader2 className="size-4 animate-spin text-brand" aria-hidden />
         Searching TMDB…
       </div>
     );
@@ -400,7 +400,7 @@ export function SearchBar() {
     // misleading "No results"; the reconnect poll auto-refreshes on wake.
     body = (
       <div className="flex items-center gap-3 px-3 py-6 text-sm text-zinc-600 dark:text-zinc-400">
-        <SearchX className="size-4 text-amber-500 dark:text-amber-400" aria-hidden />
+        <SearchX className="size-4 text-brand" aria-hidden />
         <span>Search is unreachable right now — reconnecting automatically…</span>
       </div>
     );
@@ -465,7 +465,7 @@ export function SearchBar() {
         onKeyDown={onInputKeyDown}
         placeholder="Search movies & shows…  /"
         aria-label="Search movies and shows by title"
-        className="h-10 rounded-lg border-zinc-200 bg-white/80 pl-9 pr-10 text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:border-amber-400/60 focus-visible:ring-amber-400/20 [&::-webkit-search-cancel-button]:hidden dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:placeholder:text-zinc-600"
+        className="h-9 rounded-lg border-border bg-card/70 pl-9 pr-10 text-sm text-foreground backdrop-blur-sm transition-colors duration-150 placeholder:text-zinc-500 focus-visible:border-brand/50 focus-visible:ring-brand/20 [&::-webkit-search-cancel-button]:hidden dark:bg-white/[0.06] dark:placeholder:text-zinc-500"
       />
       {voice.supported && (
         <button
@@ -473,10 +473,10 @@ export function SearchBar() {
           onClick={voice.toggle}
           aria-label={voice.listening ? 'Stop voice search' : 'Search by voice'}
           aria-pressed={voice.listening}
-          className={`absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+          className={`absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
             voice.listening
               ? 'bg-red-500/15 text-red-500'
-              : 'text-zinc-400 hover:bg-zinc-200/70 hover:text-zinc-700 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-200'
+              : 'text-zinc-400 hover:bg-white/5 hover:text-foreground dark:hover:bg-white/5 dark:hover:text-foreground'
           }`}
         >
           {voice.listening ? (
@@ -490,7 +490,7 @@ export function SearchBar() {
         <div
           role="listbox"
           aria-label="Search results"
-          className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 p-1 shadow-xl shadow-black/10 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/40 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-700"
+          className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-xl border border-border bg-popover/95 p-1 shadow-xl shadow-black/20 backdrop-blur-md"
         >
           {filterBanner}
           {body}
@@ -502,7 +502,7 @@ export function SearchBar() {
                 browse
               </span>
               <span className="inline-flex items-center gap-1">
-                <kbd className="rounded border border-amber-400/50 bg-amber-400/10 px-1 font-mono text-[9px] text-amber-600 dark:border-amber-400/40 dark:text-amber-400">↵</kbd>
+                <kbd className="rounded border border-brand/40 bg-brand/10 px-1 font-mono text-[9px] text-brand">↵</kbd>
                 play now
               </span>
               <span className="inline-flex items-center gap-1">

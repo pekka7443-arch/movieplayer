@@ -73,7 +73,7 @@ export default async function RootLayout({
   // pick the nonce up from here, so strict-dynamic CSP never blocks them.
   const nonce = (await headers()).get("x-nonce") ?? "";
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         {nonce ? <meta property="csp-nonce" content={nonce} /> : null}
         {/* Theme bootstrap — applies the stored dark/light class BEFORE first

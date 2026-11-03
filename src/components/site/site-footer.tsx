@@ -23,13 +23,8 @@ export function SiteFooter() {
 
   return (
     <footer className="mt-auto">
-      {/* Brand gradient hairline instead of a flat border */}
-      <div
-        aria-hidden
-        className="h-px w-full bg-gradient-to-r from-transparent via-brand/60 to-transparent"
-      />
-      <div className="border-t border-zinc-200/40 bg-zinc-50/80 backdrop-blur-sm dark:border-zinc-800/40 dark:bg-zinc-950/60">
-      <div className="mx-auto w-full max-w-[1440px] px-4 py-10 sm:px-6">
+      <div className="border-t border-border bg-card/40">
+      <div className="mx-auto w-full max-w-[1560px] px-4 py-8 sm:px-6">
         <div className="grid gap-8 md:grid-cols-4">
           <div>
             <div className="flex items-center gap-2.5">
@@ -106,7 +101,7 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-4 text-[11px] text-zinc-500 dark:border-zinc-800/60 dark:text-zinc-400">
+        <div className="mt-7 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4 text-[11px] text-muted-foreground">
           <p>© {new Date().getFullYear()} CineDeck — movies &amp; shows, one press away.</p>
           <nav aria-label="Legal" className="flex flex-wrap items-center gap-3">
             {([
@@ -120,17 +115,14 @@ export function SiteFooter() {
                 onClick={() =>
                   router.push(`/?view=legal#${anchor}`, { scroll: false })
                 }
-                className="rounded-md transition-colors hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                className="rounded-md transition-colors duration-150 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 {label}
               </button>
             ))}
           </nav>
           <p className="flex items-center gap-2">
-            <span className="relative flex size-1.5" aria-hidden>
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-70" />
-              <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
-            </span>
+            <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
             All systems keyless · built for the big screen · free accounts, zero ads
           </p>
         </div>

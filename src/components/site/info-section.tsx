@@ -140,7 +140,7 @@ export function InfoSection({
               {inListPending ? (
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
               ) : inList ? (
-                <BookmarkCheck className="size-3.5 text-amber-500 dark:text-amber-400" aria-hidden />
+                <BookmarkCheck className="size-3.5 text-brand" aria-hidden />
               ) : (
                 <Bookmark className="size-3.5" aria-hidden />
               )}
@@ -223,7 +223,7 @@ export function InfoSection({
       {/* Info column */}
       <div className="min-w-0">
         {details.tagline && (
-          <p className="mb-2 text-sm italic text-amber-600/90 dark:text-amber-400/90">“{details.tagline}”</p>
+          <p className="mb-2 text-sm italic text-muted-foreground">“{details.tagline}”</p>
         )}
         {details.overview ? (
           <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{details.overview}</p>
@@ -294,7 +294,7 @@ export function InfoSection({
             {inListPending ? (
               <Loader2 className="size-3.5 animate-spin" aria-hidden />
             ) : inList ? (
-              <BookmarkCheck className="size-3.5 text-amber-500 dark:text-amber-400" aria-hidden />
+              <BookmarkCheck className="size-3.5 text-brand" aria-hidden />
             ) : (
               <Bookmark className="size-3.5" aria-hidden />
             )}
@@ -307,7 +307,7 @@ export function InfoSection({
               size="sm"
               onClick={() => (playbackLocked ? openAuthForWatch(trailerNotice) : setTrailerOpen(true))}
               aria-label={playbackLocked ? 'Sign in to watch the trailer' : 'Play trailer'}
-              className="h-9 gap-1.5 rounded-lg bg-amber-400 px-4 text-xs font-semibold text-zinc-950 hover:bg-amber-300"
+              className="h-9 gap-1.5 rounded-lg bg-brand px-4 text-xs font-semibold text-brand-foreground hover:bg-brand/90"
             >
               {playbackLocked ? (
                 <Lock className="size-3.5" aria-hidden />

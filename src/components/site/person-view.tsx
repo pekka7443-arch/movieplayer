@@ -160,7 +160,7 @@ export function PersonView({ personId }: { personId: number }) {
                       }}
                     />
                     {credit.credit && (
-                      <span className="pointer-events-none absolute inset-x-1.5 bottom-[74px] z-10 truncate rounded bg-zinc-950/80 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+                      <span className="pointer-events-none absolute inset-x-1.5 bottom-[74px] z-10 truncate rounded bg-zinc-950/80 px-1.5 py-0.5 text-[10px] font-medium text-zinc-100">
                         {credit.credit}
                         {credit.episodeCount ? ` · ${credit.episodeCount} eps` : ''}
                       </span>

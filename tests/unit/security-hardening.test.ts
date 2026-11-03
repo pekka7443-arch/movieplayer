@@ -629,17 +629,23 @@ describe('rendering, iframe CSP and theme contracts', () => {
     expect(layout).toMatch(/nonce=\{nonce/);
   });
 
-  it('browser-dependent DOM is mount-gated in AmbientBackground (no hydration mismatch)', () => {
+  it('AmbientBackground is fully static (zero hydration surface)', () => {
     const src = readFileSync(
       `${process.cwd()}/src/components/site/ambient-background.tsx`,
       'utf8',
     );
-    // The spotlight (the only useReducedMotion-conditional DOM in the app)
-    // must render only after hydration so SSR and the first client render
-    // match. useSyncExternalStore serves the server snapshot (false) during
-    // hydration and the client snapshot (true) after — no setState-in-effect.
-    expect(src).toMatch(/\{mounted && !reduceMotion && \(/);
-    expect(src).toMatch(/useSyncExternalStore\(/);
+    // The premium redesign reduced the atmosphere layer to a purely static
+    // backdrop (glow + grain + vignette). The contract is now STRICTER than
+    // mount-gating: the component must not read ANY browser state during
+    // render — no framer-motion hooks (useReducedMotion), no
+    // useSyncExternalStore mounted gate, no pointer tracking, no effects —
+    // so a hydration mismatch here is structurally impossible.
+    expect(src).not.toMatch(/useReducedMotion|useSyncExternalStore|useEffect|useState/);
+    expect(src).not.toMatch(/addEventListener/);
+    expect(src).not.toMatch(/matchMedia/);
+    // It stays decorative and behind the content.
+    expect(src).toContain('aria-hidden');
+    expect(src).toContain('-z-10');
   });
 });
 

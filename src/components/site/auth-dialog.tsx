@@ -311,7 +311,6 @@ export function AuthDialog() {
         <div className="relative border-b border-zinc-200 bg-white/70 px-6 pb-5 pt-6 dark:border-zinc-800/80 dark:bg-zinc-900/40">
           <div
             aria-hidden
-            className="pointer-events-none absolute -top-16 right-0 h-40 w-56 rounded-full bg-brand-soft blur-3xl"
           />
           <DialogHeader className="space-y-2 text-left">
             <span className="flex size-11 items-center justify-center rounded-xl bg-brand text-brand-foreground shadow-[0_0_18px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)]">

@@ -104,7 +104,7 @@ export function EmptyState({
         <button
           type="button"
           onClick={onAction}
-          className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-brand px-5 text-sm font-semibold text-white shadow-[0_4px_20px_-4px_rgba(229,9,20,0.5)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-brand/90 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+          className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-md bg-brand px-5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-brand/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
         >
           {actionLabel}
         </button>

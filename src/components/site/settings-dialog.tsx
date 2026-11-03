@@ -48,7 +48,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LANGUAGES } from '@/lib/languages';
-import { applyAccentColor, clearTmdbKey, getTmdbKey, setTmdbKey, updateSettings, useHasTmdbKey, useSettings } from '@/lib/settings';
+import { applyAccentColor, DEFAULT_ACCENT, clearTmdbKey, getTmdbKey, setTmdbKey, updateSettings, useHasTmdbKey, useSettings } from '@/lib/settings';
 import { useCinedeckStore } from '@/lib/store';
 import { useClearHistory, useClearWatchlist } from '@/hooks/use-media';
 import { AccountPanel, SecurityPanel, DangerZonePanel } from '@/components/site/account-security';
@@ -65,19 +65,19 @@ import {
 } from '@/lib/library';
 import { useQuery } from '@tanstack/react-query';
 
-/** Curated palette of preset accent colors — every one is bright enough to
- * pair with the dark zinc-950 text we use as foreground. */
+/** Curated palette of preset accent colors — CineDeck Noir's indigo-violet
+ * first, then a restrained set of cinematic alternatives. */
 const ACCENT_PRESETS: { name: string; value: string }[] = [
-  { name: 'Amber', value: '#fbbf24' },
-  { name: 'Sunset', value: '#fb923c' },
-  { name: 'Coral', value: '#f87171' },
-  { name: 'Pink', value: '#f472b6' },
-  { name: 'Violet', value: '#c084fc' },
-  { name: 'Indigo', value: '#818cf8' },
-  { name: 'Ocean', value: '#38bdf8' },
-  { name: 'Mint', value: '#34d399' },
-  { name: 'Lime', value: '#a3e635' },
-  { name: 'Sand', value: '#d4b896' },
+  { name: 'Indigo', value: '#6c5ce7' },
+  { name: 'Violet', value: '#8b5cf6' },
+  { name: 'Cobalt', value: '#4c6ef5' },
+  { name: 'Steel Blue', value: '#3b82f6' },
+  { name: 'Teal', value: '#14b8a6' },
+  { name: 'Emerald', value: '#10b981' },
+  { name: 'Amber', value: '#f59e0b' },
+  { name: 'Crimson', value: '#e50914' },
+  { name: 'Rose', value: '#f43f5e' },
+  { name: 'Slate', value: '#94a3b8' },
 ];
 
 /**
@@ -338,15 +338,15 @@ function SettingsBody() {
               }
             }}
             className="h-9 w-32 rounded-lg border-zinc-200 bg-white/80 font-mono text-sm text-zinc-800 focus-visible:border-brand/60 focus-visible:ring-brand/20 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200"
-            placeholder="#e50914"
+            placeholder="#6c5ce7"
             aria-label="Accent color hex value"
           />
           <button
             type="button"
             onClick={() => {
-              updateSettings({ accentColor: '#e50914' });
-              applyAccentColor('#e50914');
-              toast('Accent reset to amber', { description: 'Back to the default brand color.' });
+              updateSettings({ accentColor: DEFAULT_ACCENT });
+              applyAccentColor(DEFAULT_ACCENT);
+              toast('Accent reset to CineDeck Indigo', { description: 'Back to the default brand color.' });
             }}
             className="text-xs text-zinc-500 underline-offset-2 transition-colors hover:text-brand hover:underline"
           >

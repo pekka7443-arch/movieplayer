@@ -186,8 +186,6 @@ export function FinnishView() {
         aria-label="Finnish content"
         className="relative overflow-hidden rounded-lg border border-border bg-card p-6 sm:p-10"
       >
-        <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-64 w-96 rotate-12 bg-gradient-to-b from-[#002f6c]/25 via-[#002f6c]/10 to-transparent blur-2xl" />
-        <div aria-hidden className="pointer-events-none absolute -left-20 bottom-0 h-40 w-72 -rotate-6 bg-sky-100/40 blur-3xl dark:bg-sky-900/10" />
         <div className="relative max-w-2xl">
           <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#2f6db4] dark:text-sky-300">
             <Flag className="size-3.5" aria-hidden />

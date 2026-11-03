@@ -84,7 +84,7 @@ export const GET = withApi('og', async (request) => {
               width: 56,
               height: 56,
               borderRadius: 14,
-              background: '#e50914',
+              background: '#6c5ce7',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

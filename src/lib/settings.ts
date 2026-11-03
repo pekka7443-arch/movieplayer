@@ -14,7 +14,7 @@ export interface CinedeckSettings {
   saveHistory: boolean;
   /** Preferred provider id (null → default server) */
   preferredServer: string | null;
-  /** Hex accent color (e.g. "#e50914"). Applied to :root as --cinedeck-accent. */
+  /** Hex accent color (e.g. "#6c5ce7"). Applied to :root as --cinedeck-accent. */
   accentColor: string;
   /** After the source scan, auto-jump to the healthiest mirror (off = stay on your preferred server). */
   autoPickSource: boolean;
@@ -53,11 +53,14 @@ function clampFailoverSeconds(value: unknown): number {
   return Math.min(FAILOVER_SECONDS_MAX, Math.max(FAILOVER_SECONDS_MIN, n));
 }
 
+/** Signature indigo-violet — the CineDeck Noir default brand accent. */
+export const DEFAULT_ACCENT = '#6c5ce7';
+
 export const DEFAULT_SETTINGS: CinedeckSettings = {
   language: DEFAULT_LANGUAGE,
   saveHistory: true,
   preferredServer: null,
-  accentColor: '#e50914',
+  accentColor: DEFAULT_ACCENT,
   autoPickSource: true,
   preferCaptionSources: true,
   autoFailover: true,
@@ -86,7 +89,7 @@ function normalizeContentType(value: unknown): 'all' | 'movie' | 'tv' {
 export function applyAccentColor(color: string | null | undefined): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  const value = color && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color) ? color : '#e50914';
+  const value = color && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color) ? color : DEFAULT_ACCENT;
   root.style.setProperty('--cinedeck-accent', value);
   // Auto-pick foreground based on luminance: dark text on bright accents,
   // white text on dark accents. Keeps button text readable for any color.
@@ -199,7 +202,7 @@ export function getSettings(): CinedeckSettings {
             typeof parsed.accentColor === 'string' &&
             /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(parsed.accentColor)
               ? parsed.accentColor
-              : '#e50914',
+              : DEFAULT_ACCENT,
           autoPickSource: typeof parsed.autoPickSource === 'boolean' ? parsed.autoPickSource : true,
           preferCaptionSources:
             typeof parsed.preferCaptionSources === 'boolean' ? parsed.preferCaptionSources : true,

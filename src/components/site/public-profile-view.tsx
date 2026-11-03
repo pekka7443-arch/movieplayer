@@ -192,7 +192,6 @@ export function PublicProfileView({ username }: { username: string }) {
     <div className="space-y-8">
       {/* Header card */}
       <section className="relative overflow-hidden rounded-lg border border-border bg-card p-6 sm:p-8">
-        <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-56 w-80 rounded-full bg-brand/10 blur-3xl" />
         <div className="relative flex flex-wrap items-center gap-5">
           <span className="flex size-20 shrink-0 items-center justify-center rounded-full bg-brand text-3xl font-bold text-white shadow-lg">
             {data.user.avatar ? (

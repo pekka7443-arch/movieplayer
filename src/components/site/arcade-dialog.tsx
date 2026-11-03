@@ -201,22 +201,22 @@ function EmojiQuiz({ onFinish }: { onFinish?: (score: number, total: number) => 
           <p className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
             {score} / {rounds.length}
           </p>
-          <p className="mt-1 text-sm font-medium text-amber-600 dark:text-amber-400">{rating.title}</p>
+          <p className="mt-1 text-sm font-medium text-brand">{rating.title}</p>
         </div>
         <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
           <span className="inline-flex items-center gap-1">
-            <Trophy className="size-3.5 text-amber-500 dark:text-amber-400" aria-hidden />
+            <Trophy className="size-3.5 text-brand" aria-hidden />
             Best game: {bestScore}
           </span>
           <span className="inline-flex items-center gap-1">
-            <Flame className="size-3.5 text-amber-500 dark:text-amber-400" aria-hidden />
+            <Flame className="size-3.5 text-brand" aria-hidden />
             Best streak: {bestStreak}
           </span>
         </div>
         <Button
           type="button"
           onClick={restart}
-          className="mt-1 h-10 gap-2 rounded-lg bg-amber-400 px-5 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+          className="mt-1 h-10 gap-2 rounded-lg bg-brand px-5 text-sm font-semibold text-brand-foreground hover:bg-brand/90"
         >
           <RefreshCw className="size-4" aria-hidden />
           Play again
@@ -234,13 +234,13 @@ function EmojiQuiz({ onFinish }: { onFinish?: (score: number, total: number) => 
         </span>
         <span className="inline-flex items-center gap-3">
           <span className="inline-flex items-center gap-1" aria-label={`Score: ${score}`}>
-            <Trophy className="size-3.5 text-amber-500 dark:text-amber-400" aria-hidden />
+            <Trophy className="size-3.5 text-brand" aria-hidden />
             {score}
           </span>
           <span className="inline-flex items-center gap-1" aria-label={`Streak: ${streak}`}>
             <Flame
               className={
-                'size-3.5 ' + (streak > 0 ? 'text-amber-500 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-400')
+                'size-3.5 ' + (streak > 0 ? 'text-brand' : 'text-zinc-400 dark:text-zinc-400')
               }
               aria-hidden
             />
@@ -262,7 +262,7 @@ function EmojiQuiz({ onFinish }: { onFinish?: (score: number, total: number) => 
                   ? 'bg-emerald-500'
                   : 'bg-red-500'
                 : i === index
-                  ? 'bg-amber-400'
+                  ? 'bg-brand'
                   : 'bg-zinc-200 dark:bg-zinc-800')
             }
           />
@@ -297,7 +297,7 @@ function EmojiQuiz({ onFinish }: { onFinish?: (score: number, total: number) => 
             const isAnswer = option === round.item.answer;
             const isChosen = option === chosen;
             let style =
-              'border-zinc-200 bg-white text-zinc-800 hover:border-amber-400/60 hover:bg-amber-400/5 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:hover:border-amber-400/50 dark:hover:bg-amber-400/10';
+              'border-zinc-200 bg-white text-zinc-800 hover:border-brand/50 hover:bg-brand/5 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:hover:border-brand/50 dark:hover:bg-brand/10';
             if (chosen) {
               if (isAnswer) {
                 style =
@@ -338,7 +338,7 @@ function EmojiQuiz({ onFinish }: { onFinish?: (score: number, total: number) => 
           ) : (
             <span className="text-zinc-600 dark:text-zinc-400">
               Nope — it was{' '}
-              <span className="font-semibold text-amber-600 dark:text-amber-400">{round.item.answer}</span> (
+              <span className="font-semibold text-brand">{round.item.answer}</span> (
               {round.item.year})
             </span>
           ))}
@@ -420,16 +420,16 @@ function YearQuiz() {
           <p className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
             {score} / {rounds.length}
           </p>
-          <p className="mt-1 text-sm font-medium text-amber-600 dark:text-amber-400">{rating.title}</p>
+          <p className="mt-1 text-sm font-medium text-brand">{rating.title}</p>
         </div>
         <p className="inline-flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
-          <Trophy className="size-3.5 text-amber-500 dark:text-amber-400" aria-hidden />
+          <Trophy className="size-3.5 text-brand" aria-hidden />
           Best game: {bestScore}
         </p>
         <Button
           type="button"
           onClick={restart}
-          className="mt-1 h-10 gap-2 rounded-lg bg-amber-400 px-5 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+          className="mt-1 h-10 gap-2 rounded-lg bg-brand px-5 text-sm font-semibold text-brand-foreground hover:bg-brand/90"
         >
           <RefreshCw className="size-4" aria-hidden />
           Play again
@@ -445,7 +445,7 @@ function YearQuiz() {
           Round {index + 1} / {rounds.length}
         </span>
         <span className="inline-flex items-center gap-1" aria-label={`Score: ${score}`}>
-          <Trophy className="size-3.5 text-amber-500 dark:text-amber-400" aria-hidden />
+          <Trophy className="size-3.5 text-brand" aria-hidden />
           {score}
         </span>
       </div>
@@ -461,7 +461,7 @@ function YearQuiz() {
                   ? 'bg-emerald-500'
                   : 'bg-red-500'
                 : i === index
-                  ? 'bg-amber-400'
+                  ? 'bg-brand'
                   : 'bg-zinc-200 dark:bg-zinc-800')
             }
           />
@@ -496,7 +496,7 @@ function YearQuiz() {
             const isAnswer = option === round.year;
             const isChosen = option === chosen;
             let style =
-              'border-zinc-200 bg-white text-zinc-800 hover:border-amber-400/60 hover:bg-amber-400/5 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:hover:border-amber-400/50 dark:hover:bg-amber-400/10';
+              'border-zinc-200 bg-white text-zinc-800 hover:border-brand/50 hover:bg-brand/5 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:hover:border-brand/50 dark:hover:bg-brand/10';
             if (chosen !== null) {
               if (isAnswer) {
                 style =
@@ -534,7 +534,7 @@ function YearQuiz() {
           ) : (
             <span className="text-zinc-600 dark:text-zinc-400">
               Nope —{' '}
-              <span className="font-semibold text-amber-600 dark:text-amber-400">{round.title}</span> came out in{' '}
+              <span className="font-semibold text-brand">{round.title}</span> came out in{' '}
               {round.year}
             </span>
           ))}
@@ -645,7 +645,7 @@ function DailyChallenge() {
           <p className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
             {score} / {rounds.length}
           </p>
-          <p className="mt-1 text-sm font-medium text-amber-600 dark:text-amber-400">
+          <p className="mt-1 text-sm font-medium text-brand">
             {rating.title} · Daily challenge complete
           </p>
           <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -662,8 +662,8 @@ function DailyChallenge() {
         <span className="font-medium">
           {todayIso()} · Round {Math.min(index + 1, rounds.length)} / {rounds.length}
         </span>
-        {alreadyDone && started && <span className="font-medium text-amber-600 dark:text-amber-400">Good luck!</span>}
-        {alreadyDone && !started && <span className="text-amber-600 dark:text-amber-400">Replay for fun — today&apos;s score is already saved</span>}
+        {alreadyDone && started && <span className="font-medium text-brand">Good luck!</span>}
+        {alreadyDone && !started && <span className="text-brand">Replay for fun — today&apos;s score is already saved</span>}
       </div>
 
       <div className="flex gap-1.5" aria-hidden>
@@ -677,7 +677,7 @@ function DailyChallenge() {
                   ? 'bg-emerald-500'
                   : 'bg-red-500'
                 : i === index
-                  ? 'bg-amber-400'
+                  ? 'bg-brand'
                   : 'bg-zinc-200 dark:bg-zinc-800')
             }
           />
@@ -710,7 +710,7 @@ function DailyChallenge() {
             const isAnswer = option === round.item.answer;
             const isChosen = option === chosen;
             let style =
-              'border-zinc-200 bg-white text-zinc-800 hover:border-amber-400/60 hover:bg-amber-400/5 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:hover:border-amber-400/50 dark:hover:bg-amber-400/10';
+              'border-zinc-200 bg-white text-zinc-800 hover:border-brand/50 hover:bg-brand/5 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:hover:border-brand/50 dark:hover:bg-brand/10';
             if (chosen) {
               if (isAnswer) {
                 style =
@@ -750,7 +750,7 @@ function DailyChallenge() {
           ) : (
             <span className="text-zinc-600 dark:text-zinc-400">
               Nope — it was{' '}
-              <span className="font-semibold text-amber-600 dark:text-amber-400">{round.item.answer}</span> (
+              <span className="font-semibold text-brand">{round.item.answer}</span> (
               {round.item.year})
             </span>
           ))}
@@ -860,14 +860,14 @@ function Leaderboard() {
                 className={
                   'flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ' +
                   (i === 0
-                    ? 'border-amber-400/50 bg-amber-400/5'
+                    ? 'border-brand/50 bg-brand/5'
                     : 'border-zinc-200 bg-white/60 dark:border-zinc-800 dark:bg-zinc-900/50')
                 }
               >
                 <span
                   className={
                     'w-6 shrink-0 text-center font-mono text-xs font-bold ' +
-                    (i === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-500')
+                    (i === 0 ? 'text-brand' : 'text-zinc-400 dark:text-zinc-500')
                   }
                   aria-hidden
                 >
@@ -985,7 +985,7 @@ function Roulette() {
             className={
               'rounded-full px-3 py-1 text-xs font-medium transition-colors ' +
               (mood === m.id
-                ? 'bg-amber-400 text-zinc-950'
+                ? 'bg-brand text-brand-foreground'
                 : 'bg-zinc-200/70 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:bg-zinc-800/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200')
             }
           >
@@ -1001,7 +1001,7 @@ function Roulette() {
           className={
             'truncate text-lg font-semibold tracking-tight transition-colors sm:text-xl ' +
             (result
-              ? 'text-amber-600 dark:text-amber-300'
+              ? 'text-brand'
               : spinning
                 ? 'text-zinc-500 dark:text-zinc-400'
                 : 'text-zinc-400 dark:text-zinc-400')
@@ -1022,7 +1022,7 @@ function Roulette() {
           type="button"
           onClick={spin}
           disabled={spinning}
-          className="h-10 gap-2 rounded-lg bg-amber-400 px-6 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-60"
+          className="h-10 gap-2 rounded-lg bg-brand px-6 text-sm font-semibold text-brand-foreground hover:bg-brand/90 disabled:opacity-60"
         >
           <Dices className={'size-4 ' + (spinning ? 'animate-bounce' : '')} aria-hidden />
           {spinning ? 'Rolling…' : 'Spin'}
@@ -1038,7 +1038,7 @@ function Roulette() {
             animate={{ opacity: 1, y: 0 }}
             exit={reduceMotion ? undefined : { opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="rounded-xl border border-amber-400/40 bg-amber-400/5 p-4 text-center"
+            className="rounded-xl border border-brand/40 bg-brand/5 p-4 text-center"
             role="status"
           >
             <p className="text-3xl" aria-hidden>
@@ -1051,7 +1051,7 @@ function Roulette() {
             <Button
               type="button"
               onClick={() => openInCinedeck(result)}
-              className="mt-3 h-9 gap-2 rounded-lg bg-amber-400 px-4 text-xs font-semibold text-zinc-950 hover:bg-amber-300"
+              className="mt-3 h-9 gap-2 rounded-lg bg-brand px-4 text-xs font-semibold text-brand-foreground hover:bg-brand/90"
             >
               <Play className="size-3.5" aria-hidden />
               Watch in CineDeck
@@ -1082,7 +1082,7 @@ export function ArcadeDialog() {
       <DialogContent className="z-[70] max-w-lg gap-5 overflow-hidden border-zinc-200 bg-white p-6 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
-            <Gamepad2 className="size-5 text-amber-500 dark:text-amber-400" aria-hidden />
+            <Gamepad2 className="size-5 text-brand" aria-hidden />
             CineDeck Arcade
           </DialogTitle>
           <DialogDescription className="text-sm text-zinc-500">
@@ -1094,21 +1094,21 @@ export function ArcadeDialog() {
           <TabsList className="grid w-full grid-cols-3 bg-zinc-100 dark:bg-zinc-950/60">
             <TabsTrigger
               value="quiz"
-              className="gap-1.5 data-[state=active]:bg-amber-400 data-[state=active]:text-zinc-950"
+              className="gap-1.5 data-[state=active]:bg-brand data-[state=active]:text-brand-foreground"
             >
               <Sparkles className="size-3.5" aria-hidden />
               Quiz
             </TabsTrigger>
             <TabsTrigger
               value="roulette"
-              className="gap-1.5 data-[state=active]:bg-amber-400 data-[state=active]:text-zinc-950"
+              className="gap-1.5 data-[state=active]:bg-brand data-[state=active]:text-brand-foreground"
             >
               <Dices className="size-3.5" aria-hidden />
               Roulette
             </TabsTrigger>
             <TabsTrigger
               value="board"
-              className="gap-1.5 data-[state=active]:bg-amber-400 data-[state=active]:text-zinc-950"
+              className="gap-1.5 data-[state=active]:bg-brand data-[state=active]:text-brand-foreground"
             >
               <Trophy className="size-3.5" aria-hidden />
               Board
@@ -1131,7 +1131,7 @@ export function ArcadeDialog() {
                   className={
                     'rounded-full px-3 py-1 text-xs font-medium transition-colors ' +
                     (quizMode === m.id
-                      ? 'bg-amber-400 text-zinc-950'
+                      ? 'bg-brand text-brand-foreground'
                       : 'bg-zinc-200/70 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 dark:bg-zinc-800/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200')
                   }
                 >

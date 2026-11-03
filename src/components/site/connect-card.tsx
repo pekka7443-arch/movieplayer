@@ -18,7 +18,7 @@ export function ConnectCard({ compact = false }: { compact?: boolean }) {
     return (
       <div className="flex h-full min-h-56 flex-col justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-200/40 p-6 dark:border-zinc-800 dark:bg-zinc-900/40">
         <div className="flex items-center gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 text-amber-500 dark:text-amber-400">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
             <KeyRound className="size-5" aria-hidden />
           </span>
           <div>
@@ -29,7 +29,7 @@ export function ConnectCard({ compact = false }: { compact?: boolean }) {
         <ol className="mt-4 space-y-2.5">
           {steps.map((step) => (
             <li key={step.n} className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-amber-600 dark:bg-zinc-800 dark:text-amber-400">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-brand dark:bg-zinc-800 dark:text-brand">
                 {step.n}
               </span>
               {step.text}
@@ -40,7 +40,7 @@ export function ConnectCard({ compact = false }: { compact?: boolean }) {
           <Button
             type="button"
             onClick={openSettings}
-            className="h-10 rounded-lg bg-amber-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+            className="h-10 rounded-lg bg-brand px-4 text-sm font-semibold text-brand-foreground hover:bg-brand/90"
           >
             <KeyRound className="size-4" aria-hidden />
             Add your free API key
@@ -49,7 +49,7 @@ export function ConnectCard({ compact = false }: { compact?: boolean }) {
             href={TMDB_KEY_URL}
             target="_blank"
             rel="noreferrer"
-            className="text-xs text-zinc-500 underline-offset-2 transition-colors hover:text-amber-600 hover:underline dark:hover:text-amber-400"
+            className="text-xs text-zinc-500 underline-offset-2 transition-colors hover:text-brand hover:underline dark:hover:text-brand"
           >
             Get a key ↗
           </a>
@@ -60,7 +60,7 @@ export function ConnectCard({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="flex flex-col items-start gap-4 rounded-xl border border-zinc-200 bg-white/70 p-6 dark:border-zinc-800/60 dark:bg-zinc-900/60">
-      <span className="flex size-11 items-center justify-center rounded-xl bg-amber-400/10 text-amber-500 dark:text-amber-400">
+      <span className="flex size-11 items-center justify-center rounded-xl bg-brand-soft text-brand">
         <KeyRound className="size-5.5" aria-hidden />
       </span>
       <div>
@@ -74,7 +74,7 @@ export function ConnectCard({ compact = false }: { compact?: boolean }) {
         <Button
           type="button"
           onClick={openSettings}
-          className="h-10 rounded-lg bg-amber-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+          className="h-10 rounded-lg bg-brand px-4 text-sm font-semibold text-brand-foreground hover:bg-brand/90"
         >
           <KeyRound className="size-4" aria-hidden />
           Add your free API key
@@ -83,7 +83,7 @@ export function ConnectCard({ compact = false }: { compact?: boolean }) {
           href={TMDB_KEY_URL}
           target="_blank"
           rel="noreferrer"
-          className="text-xs text-zinc-500 underline-offset-2 transition-colors hover:text-amber-600 hover:underline dark:hover:text-amber-400"
+          className="text-xs text-zinc-500 underline-offset-2 transition-colors hover:text-brand hover:underline dark:hover:text-brand"
         >
           Get a key ↗
         </a>

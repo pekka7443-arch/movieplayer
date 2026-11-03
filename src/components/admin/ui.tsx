@@ -47,10 +47,20 @@ export function useRefreshPing(dataUpdatedAt: number | undefined): void {
 }
 
 export function UpdatedAgo({ className }: { className?: string }) {
-  const [at, setAt] = useState<number>(Date.now());
+  // Hydration-safe ticking clock: `at` starts as null so the SSR HTML and the
+  // first client render both produce the same stable text ("Updated just
+  // now"). Reading Date.now() during render (useState initializer + seconds
+  // math) made the server and client disagree on every load → React 19
+  // hydration mismatch → the whole tree regenerated client-side (and the
+  // layout's head <script> then tripped the "Encountered a script tag"
+  // warning as a downstream symptom). The real timestamp is set post-mount.
+  const [at, setAt] = useState<number | null>(null);
   const [, setTick] = useState(0);
 
   useEffect(() => {
+    // Microtask (not synchronous setState) keeps the effect lint-clean while
+    // still resolving before the first paint after hydration.
+    Promise.resolve().then(() => setAt(Date.now()));
     const onPing = (e: Event) => {
       const detail = (e as CustomEvent<number>).detail;
       if (typeof detail === 'number') setAt(detail);
@@ -63,7 +73,7 @@ export function UpdatedAgo({ className }: { className?: string }) {
     };
   }, []);
 
-  const seconds = Math.max(0, Math.round((Date.now() - at) / 1_000));
+  const seconds = at == null ? 0 : Math.max(0, Math.round((Date.now() - at) / 1_000));
   return (
     <span className={cn('font-mono text-[11px] tabular-nums text-[#6b7280]', className)} aria-live="off">
       Updated {seconds < 5 ? 'just now' : `${seconds}s ago`}

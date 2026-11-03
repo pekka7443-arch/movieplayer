@@ -13,15 +13,15 @@ export function ThemeToggle() {
       size="icon"
       aria-label="Toggle light/dark theme"
       title="Toggle theme"
-      className="size-10 shrink-0 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800/60"
+      className="size-9 max-md:size-10 shrink-0 text-zinc-500 hover:text-foreground hover:bg-white/5 dark:text-zinc-400 dark:hover:text-foreground dark:hover:bg-white/5"
       onClick={() => {
         // Read the live class so it works before the theme provider hydrates.
         const isDark = document.documentElement.classList.contains('dark');
         setTheme(isDark ? 'light' : 'dark');
       }}
     >
-      <Sun className="hidden size-4.5 dark:block" aria-hidden />
-      <Moon className="size-4.5 dark:hidden" aria-hidden />
+      <Sun className="hidden size-[17px] dark:block" aria-hidden />
+      <Moon className="size-[17px] dark:hidden" aria-hidden />
     </Button>
   );
 }

@@ -46,6 +46,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCinedeckStore } from '@/lib/store';
 import { useHasTmdbKey } from '@/lib/settings';
 import { useSession } from '@/hooks/use-session';
+import { useHydrated } from '@/hooks/use-hydrated';
 import {
   useCatalog,
   useGenreRow,
@@ -106,13 +107,12 @@ function SectionHeading({
   hint?: string;
   seeAll?: { label?: string; onClick: () => void };
 }) {
-  // Section heading: small accent vertical bar + bold tracking-tight title,
+  // Section heading: quiet, compact — small brand icon + tight semibold title,
   // optional "See all" affordance on the right edge.
   return (
-    <div className="mb-2 flex flex-wrap items-baseline gap-2.5">
-      <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-zinc-900 md:text-xl dark:text-zinc-100">
-        <span className="h-3.5 w-1 rounded-full bg-brand md:h-4" aria-hidden />
-        <Icon className="size-5 text-brand" aria-hidden />
+    <div className="mb-2 flex flex-wrap items-baseline gap-2">
+      <h2 className="flex items-center gap-1.5 text-[15px] font-semibold tracking-tight text-foreground md:text-base">
+        <Icon className="size-4 text-brand" aria-hidden />
         {title}
       </h2>
       {hint && <span className="hidden text-xs text-zinc-500 sm:inline dark:text-zinc-400">{hint}</span>}
@@ -121,7 +121,7 @@ function SectionHeading({
           type="button"
           onClick={seeAll.onClick}
           aria-label={seeAll.label ?? `See all — ${title}`}
-          className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md text-xs font-medium text-zinc-500 transition-colors hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 md:text-[13px] dark:text-zinc-400"
+          className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md text-xs font-medium text-zinc-500 transition-colors duration-150 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 dark:text-zinc-400"
         >
           {seeAll.label ?? 'See all'}
           <ArrowRight className="size-3.5" aria-hidden />
@@ -134,10 +134,10 @@ function SectionHeading({
 /** Skeleton stripe shown by LazySection until the row scrolls near. */
 function RowSkeletonStripe() {
   return (
-    <div className="flex gap-3 overflow-hidden sm:gap-4">
+    <div className="flex gap-2.5 overflow-hidden">
       {Array.from({ length: 10 }).map((_, i) => (
-        <div key={i} className="w-[130px] shrink-0 sm:w-[160px] md:w-[180px]">
-          <Skeleton className="animate-shimmer aspect-[2/3] w-full rounded-lg bg-zinc-200 dark:bg-zinc-900" />
+        <div key={i} className="w-[118px] shrink-0 sm:w-[140px] md:w-[150px] lg:w-[156px]">
+          <Skeleton className="animate-shimmer aspect-[2/3] w-full rounded-lg bg-muted" />
         </div>
       ))}
     </div>
@@ -185,6 +185,57 @@ function CyclingHighlight() {
 }
 
 /**
+ * Compact Live Sports band — one quiet row that opens the sports view.
+ * Static live dot, no glow blobs or shine sweeps; motion limited to a 150ms
+ * arrow nudge and the (reduced-motion-aware) cycling highlight.
+ */
+function SportsTeaser() {
+  const router = useRouter();
+  const reduceMotion = useReducedMotion();
+  return (
+    <motion.section
+      initial={reduceMotion ? undefined : { opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: reduceMotion ? 0 : 0.35, ease: 'easeOut' }}
+      aria-labelledby="sports-teaser"
+    >
+      <button
+        type="button"
+        id="sports-teaser"
+        onClick={() => router.push('/?view=sports', { scroll: false })}
+        className="group flex w-full items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5 text-left transition-colors duration-150 hover:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+      >
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-soft">
+          <Trophy className="size-4 text-brand" aria-hidden />
+        </span>
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+            <span className="relative flex size-2" aria-hidden>
+              <span className="relative inline-flex size-2 rounded-full bg-red-500 ring-2 ring-red-500/25" />
+            </span>
+            Live Sports
+          </span>
+          <span className="block truncate text-[11px] text-muted-foreground">
+            Live scores, schedules, replays &amp; 280+ free sports TV channels — keyless.
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className="ml-auto hidden shrink-0 items-center text-xs font-medium text-muted-foreground md:inline-flex"
+        >
+          <CyclingHighlight />
+        </span>
+        <ArrowRight
+          className="ml-auto size-4 shrink-0 text-zinc-500 transition-transform duration-150 group-hover:translate-x-1 group-hover:text-brand md:ml-3"
+          aria-hidden
+        />
+      </button>
+    </motion.section>
+  );
+}
+
+/**
  * Renders its children only once scrolled close to the viewport — keeps the
  * (now much bigger) home page fast: below-fold rows fetch when approached.
  */
@@ -224,9 +275,9 @@ function LazySection({
     <section ref={ref} id={id} aria-label={label} aria-busy={!visible}>
       {visible ? (
         <motion.div
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
           animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-          transition={{ duration: reduceMotion ? 0 : 0.4, ease: 'easeOut' }}
+          transition={{ duration: reduceMotion ? 0 : 0.3, ease: 'easeOut' }}
         >
           {children}
         </motion.div>
@@ -252,20 +303,20 @@ function HistoryCard({ item }: { item: HistoryItem }) {
   };
 
   return (
-    <div className="group relative w-32 shrink-0 snap-start sm:w-36">
+    <div className="group relative w-[118px] shrink-0 snap-start sm:w-[140px] md:w-[150px] lg:w-[156px]">
       <button
         type="button"
         onClick={open}
         aria-label={`Continue ${item.title}${item.season && item.episode ? ` S${item.season}E${item.episode}` : ''}`}
         className="block w-full text-left focus-visible:outline-none"
       >
-        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-lg border border-border bg-card transition-all duration-200 group-hover:border-brand/50 dark:bg-zinc-900/60">
+        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-lg border border-border/80 bg-card transition-[border-color,box-shadow] duration-200 group-hover:border-brand/50 group-hover:shadow-[0_14px_36px_-12px_rgba(0,0,0,0.65)]">
           {poster ? (
             <img
               src={poster}
               alt={`${item.title} poster`}
               loading="lazy"
-              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.05]"
+              className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.04]"
             />
           ) : (
             <span className="flex size-full items-center justify-center font-mono text-xs text-zinc-500 dark:text-zinc-700">
@@ -273,13 +324,13 @@ function HistoryCard({ item }: { item: HistoryItem }) {
             </span>
           )}
           {/* hover play overlay */}
-          <span className="absolute inset-0 flex items-center justify-center bg-zinc-950/60 opacity-0 backdrop-blur-[2px] transition-opacity duration-200 group-hover:opacity-100">
-            <span className="flex size-11 items-center justify-center rounded-full bg-brand text-white">
-              <Play className="size-5 fill-white" aria-hidden />
+          <span className="absolute inset-0 flex items-center justify-center bg-zinc-950/60 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <span className="flex size-10 items-center justify-center rounded-full bg-brand text-white">
+              <Play className="size-4.5 fill-white" aria-hidden />
             </span>
           </span>
           {item.mediaType === 'tv' && item.season != null && item.episode != null && (
-            <span className="absolute left-2 top-2 rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-red-400 backdrop-blur">
+            <span className="absolute left-2 top-2 rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-red-400">
               S{item.season}·E{item.episode}
             </span>
           )}
@@ -330,27 +381,27 @@ function WatchlistCard({ item }: { item: WatchlistItem }) {
   const poster = tmdbImg(item.posterPath, 'w500');
 
   return (
-    <div className="group relative w-32 shrink-0 snap-start sm:w-36">
+    <div className="group relative w-[118px] shrink-0 snap-start sm:w-[140px] md:w-[150px] lg:w-[156px]">
       <button
         type="button"
         onClick={() => router.push(`/?id=${item.tmdbId}&type=${item.mediaType}`, { scroll: false })}
         aria-label={`Open ${item.title}`}
         className="block w-full text-left focus-visible:outline-none"
       >
-        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-lg border border-border bg-card transition-all duration-200 group-hover:border-brand/50 dark:bg-zinc-900/60">
+        <span className="relative block aspect-[2/3] w-full overflow-hidden rounded-lg border border-border/80 bg-card transition-[border-color,box-shadow] duration-200 group-hover:border-brand/50 group-hover:shadow-[0_14px_36px_-12px_rgba(0,0,0,0.65)]">
           {poster ? (
             <img
               src={poster}
               alt={`${item.title} poster`}
               loading="lazy"
-              className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.05]"
+              className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.04]"
             />
           ) : (
             <span className="flex size-full items-center justify-center font-mono text-xs text-zinc-500 dark:text-zinc-700">
               #{item.tmdbId}
             </span>
           )}
-          <span className="absolute bottom-2 left-2 rounded bg-zinc-950/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 backdrop-blur">
+          <span className="absolute bottom-2 left-2 rounded bg-zinc-950/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
             {item.mediaType}
           </span>
         </span>
@@ -438,10 +489,10 @@ function RecommendationsRow({ enabled }: { enabled: boolean }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 22 }}
+      initial={{ opacity: 0, y: 14 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-70px' }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
       ref={ref}
     >
       <SectionHeading
@@ -486,10 +537,10 @@ function CatalogRow({
   const items = query.data;
   const reduceMotion = useReducedMotion();
   const reveal = {
-    initial: reduceMotion ? undefined : { opacity: 0, y: 22 },
+    initial: reduceMotion ? undefined : { opacity: 0, y: 14 },
     whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true, margin: '-70px' },
-    transition: { duration: 0.5, ease: 'easeOut' as const },
+    viewport: { once: true, margin: '-60px' },
+    transition: { duration: reduceMotion ? 0 : 0.35, ease: 'easeOut' as const },
   };
 
   return (
@@ -555,14 +606,14 @@ function FinnishSection() {
         : 'Suomalaista sisältöä';
 
   const reveal = {
-    initial: reduceMotion ? undefined : { opacity: 0, y: 22 },
+    initial: reduceMotion ? undefined : { opacity: 0, y: 14 },
     whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true, margin: '-70px' },
-    transition: { duration: 0.5, ease: 'easeOut' as const },
+    viewport: { once: true, margin: '-60px' },
+    transition: { duration: reduceMotion ? 0 : 0.35, ease: 'easeOut' as const },
   };
 
   return (
-    <motion.section {...reveal} ref={ref} id="finnish" aria-labelledby="finnish-picks" className="scroll-mt-24">
+    <motion.section {...reveal} ref={ref} id="finnish" aria-labelledby="finnish-picks" className="scroll-mt-20">
       <div id="finnish-picks">
         <SectionHeading
           icon={Flag}
@@ -688,7 +739,7 @@ function NewThisWeekRow() {
   return (
     <GenreMediaRow
       icon={CalendarDays}
-      title="New This Week"
+      title="Recently Added"
       hint="Fresh releases, last 14 days"
       state={state}
     />
@@ -775,9 +826,9 @@ function AnimeSection({ animeRef }: { animeRef: React.RefObject<HTMLElement | nu
       id="anime-section"
       ref={animeRef}
       aria-labelledby="anime-heading"
-      className="scroll-mt-24 space-y-7 md:space-y-10"
+      className="scroll-mt-20 space-y-7 md:space-y-10"
     >
-      <div id="anime-heading" className="scroll-mt-24">
+      <div id="anime-heading" className="scroll-mt-20">
         <SectionHeading icon={Sparkles} title="Anime" hint="Series & films from Japan — keyless too" />
       </div>
       <LazySection id="anime-series" label="Popular anime series">
@@ -1105,6 +1156,12 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
   const hasKey = useHasTmdbKey();
   const reduceMotion = useReducedMotion();
   const { user } = useSession();
+  // Identity is localStorage-cached (useSession initialData): the server and
+  // the first client render must agree, so identity-dependent rendering
+  // (sync hints, custom-lists block, empty-state copy) treats the visitor as
+  // a guest until hydration completes — same pattern as the header.
+  const identityHydrated = useHydrated();
+  const knownUser = identityHydrated ? user : null;
   // Anime section anchor — the header/bottom-nav "Anime" entries scroll here
   // via the section-id helpers (same element the ref is attached to).
   const animeRef = useRef<HTMLElement | null>(null);
@@ -1197,38 +1254,39 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
     [watchlistItems, contentType],
   );
 
-  const syncHint = user ? 'Synced to your account' : 'Saved on this device';
+  const syncHint = knownUser ? 'Synced to your account' : 'Saved on this device';
   const currentYear = new Date().getFullYear();
 
-  // Scroll-reveal for every home section: rises in once, 70px before it
-  // would enter the viewport.
+  // Scroll-reveal for every home section: rises in once, 60px before it
+  // would enter the viewport. Quiet: 0.35s, 14px travel.
   const fadeIn = {
-    initial: reduceMotion ? undefined : { opacity: 0, y: 22 },
+    initial: reduceMotion ? undefined : { opacity: 0, y: 14 },
     whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true, margin: '-70px' },
-    transition: { duration: 0.5, ease: 'easeOut' as const },
+    viewport: { once: true, margin: '-60px' },
+    transition: { duration: reduceMotion ? 0 : 0.35, ease: 'easeOut' as const },
   };
 
   return (
-    <div className="space-y-7 md:space-y-10">
+    <div className="space-y-6 md:space-y-7">
       <HeroSection
         trending={filteredTrending}
         trendingLoading={trendingQuery.isPending}
         hasKey={hasKey}
       />
 
-      {/* Global content filter — Movies / TV Series / All. Slides the amber
-          pill, persists the choice and filters every row + search below. */}
+      {/* Global content filter — Movies / TV Series / All. Compact single
+          row; slides the accent pill, persists the choice and filters every
+          row + search below. */}
       <motion.section {...fadeIn} aria-label="Browse filter">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-zinc-200 bg-white/70 px-4 py-3 shadow-sm backdrop-blur-sm dark:border-zinc-800/60 dark:bg-zinc-900/50">
-          <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-card/60 px-3 py-2">
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             <LayoutGrid className="size-3.5 text-brand" aria-hidden />
             Browse
           </span>
           <div
             role="group"
             aria-label="Show movies or series"
-            className="flex rounded-xl border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-950/60"
+            className="flex rounded-md border border-border bg-background p-0.5"
           >
             {([
               { id: 'all', label: 'All', icon: LayoutGrid },
@@ -1242,18 +1300,18 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
                   type="button"
                   aria-pressed={active}
                   onClick={() => setContentType(id)}
-                  whileTap={reduceMotion ? undefined : { scale: 0.95 }}
-                  className={`relative flex h-8 items-center gap-1.5 overflow-hidden rounded-lg px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 sm:px-4 ${
+                  whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+                  className={`relative flex h-7 items-center gap-1.5 overflow-hidden rounded px-3 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 sm:px-3.5 ${
                     active
                       ? 'text-brand-foreground'
-                      : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                      : 'text-zinc-500 hover:text-foreground dark:text-zinc-400'
                   }`}
                 >
                   {active && (
                     <motion.span
                       layoutId="content-filter-pill"
-                      className="absolute inset-0 rounded-lg bg-brand shadow-[0_0_16px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)]"
-                      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                      className="absolute inset-0 rounded bg-brand"
+                      transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
                     />
                   )}
                   <span className="relative z-10 flex items-center gap-1.5">
@@ -1264,7 +1322,7 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
               );
             })}
           </div>
-          <span className="ml-auto hidden text-[11px] text-zinc-500 md:inline dark:text-zinc-400">
+          <span className="ml-auto hidden text-[11px] text-muted-foreground md:inline">
             {contentType === 'all'
               ? 'Showing everything — pick Movies or TV Series to filter every row'
               : `Showing ${contentType === 'movie' ? 'movies only' : 'series only'} — every row, the hero and search respect this`}
@@ -1272,130 +1330,9 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
         </div>
       </motion.section>
 
-      {/* Live Sports teaser band */}
-      <motion.section {...fadeIn} aria-labelledby="sports-teaser">
-        <button
-          type="button"
-          id="sports-teaser"
-          onClick={() => router.push('/?view=sports', { scroll: false })}
-          className="group relative flex w-full items-center gap-3.5 overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 px-4 py-3 text-left transition-all duration-300 hover:border-brand/40 hover:shadow-[0_16px_44px_-14px_color-mix(in_srgb,var(--cinedeck-accent)_35%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 md:py-4 dark:border-zinc-800 dark:bg-zinc-900/60"
-        >
-          <span
-            aria-hidden
-            className="pointer-events-none absolute -right-10 -top-16 h-44 w-72 rounded-full bg-brand-soft blur-3xl"
-          />
-          <span aria-hidden className="cd-shine" />
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
-            <Trophy className="size-4.5 text-brand" aria-hidden />
-          </span>
-          <span className="min-w-0">
-            <span className="flex items-center gap-2 text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-              <span className="relative flex size-2" aria-hidden>
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-70" />
-                <span className="relative inline-flex size-2 rounded-full bg-red-500" />
-              </span>
-              Live Sports
-            </span>
-            <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">
-              Live scores, schedules, replays &amp; 280+ free sports TV channels — keyless.
-            </span>
-          </span>
-          <span
-            aria-hidden
-            className="ml-auto hidden shrink-0 items-center text-xs font-medium text-zinc-500 md:inline-flex dark:text-zinc-400"
-          >
-            <CyclingHighlight />
-          </span>
-          <ArrowRight
-            className="ml-auto size-5 shrink-0 text-zinc-400 transition-transform duration-300 group-hover:translate-x-1.5 group-hover:text-brand md:ml-4"
-            aria-hidden
-          />
-        </button>
-      </motion.section>
-
-      {/* Continue watching */}
-      <motion.section {...fadeIn} aria-labelledby="continue-watching">
-        <div id="continue-watching" className="scroll-mt-24">
-          <SectionHeading icon={History} title="Continue watching" hint={syncHint} />
-        </div>
-        {historyQuery.isPending ? (
-          <div className="flex gap-3 overflow-hidden sm:gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="w-32 shrink-0 sm:w-36">
-                <Skeleton className="animate-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
-              </div>
-            ))}
-          </div>
-        ) : filteredHistory.length === 0 ? (
-          <EmptyState
-            variant="history"
-            title={
-              historyItems.length > 0
-                ? `No ${contentType === 'tv' ? 'series' : 'movies'} in progress`
-                : 'Nothing watched yet'
-            }
-            subtitle={
-              historyItems.length > 0
-                ? 'Switch the browse filter to All to see everything in progress.'
-                : 'Press play on anything — CineDeck remembers exactly where you left off, down to the second.'
-            }
-          />
-        ) : (
-          <MediaRow label="Continue watching">
-            {filteredHistory.map((item) => (
-              <HistoryCard key={item.id} item={item} />
-            ))}
-          </MediaRow>
-        )}
-      </motion.section>
-
-      {/* My List */}
-      <motion.section {...fadeIn} aria-labelledby="my-list">
-        <div id="my-list" className="scroll-mt-24">
-          <SectionHeading icon={Bookmark} title="My List" hint={syncHint} />
-        </div>
-        {watchlistQuery.isPending ? (
-          <div className="flex gap-3 overflow-hidden sm:gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="w-32 shrink-0 sm:w-36">
-                <Skeleton className="animate-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
-              </div>
-            ))}
-          </div>
-        ) : filteredWatchlist.length === 0 ? (
-          <EmptyState
-            variant="list"
-            title="Your list is empty"
-            subtitle={
-              watchlistItems.length > 0
-                ? 'Switch the browse filter to All to see everything you saved.'
-                : user
-                  ? 'Hover any poster and hit + to save it here — your queue for movie night.'
-                  : 'Save titles with the + on any poster, or create a free account to sync them everywhere.'
-            }
-          />
-        ) : (
-          <MediaRow label="My List">
-            {filteredWatchlist.map((item) => (
-              <WatchlistCard key={item.id} item={item} />
-            ))}
-          </MediaRow>
-        )}
-      </motion.section>
-
-      {/* Custom lists — create, curate, share (renders under My List) */}
-      {user && (
-        <motion.section {...fadeIn} aria-label="Custom lists wrapper" className="mb-8">
-          <CustomLists />
-        </motion.section>
-      )}
-
-      {/* "Because you watched X" / "Top picks for you" — TMDB-key-only */}
-      <RecommendationsRow enabled={hasKey} />
-
       {/* Trending — horizontal scroll row (type follows the browse filter) */}
       <motion.section {...fadeIn} aria-labelledby="trending-week">
-        <div id="trending-week" className="scroll-mt-24">
+        <div id="trending-week" className="scroll-mt-20">
           <SectionHeading
             icon={TrendingUp}
             title={contentType === 'movie' ? 'Trending Movies' : contentType === 'tv' ? 'Trending Series' : 'Trending Now'}
@@ -1436,85 +1373,10 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
         )}
       </motion.section>
 
-      {/* ------------------------------------------------------------------
-          Genre catalog rows 1–9 (Part 1) + Anime (Part 2) + the Finnish
-          home-turf row + row 10 — every row lazy inside LazySection, unique
-          ids, SectionHeading with its own Lucide icon.
-          ------------------------------------------------------------------ */}
-      <LazySection id="new-this-week" label="New this week">
-        <NewThisWeekRow />
-      </LazySection>
-      <LazySection id="binge-worthy-series" label="Binge-worthy series">
-        <BingeWorthyRow enabled />
-      </LazySection>
-      <LazySection id="action-thriller" label="Action & thriller">
-        <ActionThrillerRow />
-      </LazySection>
-      <LazySection id="comedy-picks" label="Comedy picks">
-        <ComedyPicksRow />
-      </LazySection>
-      <LazySection id="award-winners" label="Award winners">
-        <AwardWinnersRow />
-      </LazySection>
-      <LazySection id="hidden-gems" label="Hidden gems">
-        <HiddenGemsRow />
-      </LazySection>
-      <LazySection id="documentaries" label="Documentaries">
-        <DocumentariesRow />
-      </LazySection>
-      <LazySection id="classic-cinema" label="Classic cinema">
-        <ClassicCinemaRow />
-      </LazySection>
-      <LazySection id="sci-fi-fantasy" label="Sci-Fi & fantasy">
-        <SciFiFantasyRow />
-      </LazySection>
-
-      {/* Anime — id + ref anchor for the header / bottom-nav Anime entries. */}
-      <AnimeSection animeRef={animeRef} />
-
-      {/* Suomalainen sisältö — the home-turf row. Embed servers rarely index
-          Finnish titles, so every item carries both IMDB + TMDB ids and the
-          scan tries both; title pages surface Yle Areena as fallback. */}
-      <FinnishSection />
-
-      <LazySection id="quick-watch" label="Quick watch">
-        <QuickWatchRow />
-      </LazySection>
-
-      {/* Popular Movies — hidden while the filter shows series only */}
-      {contentType !== 'tv' && (
-      <motion.section {...fadeIn} aria-labelledby="popular-movies">
-        <div id="popular-movies" className="scroll-mt-24">
-          <SectionHeading
-            icon={Film}
-            title="Popular Movies"
-            hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'}
-            seeAll={{ onClick: () => router.push('/?view=search&browse=popular&type=movie', { scroll: false }) }}
-          />
-        </div>
-        {popularMoviesQuery.isPending ? (
-          <RowSkeletonStripe />
-        ) : popularMoviesQuery.isError ? null : popularMovies && popularMovies.length > 0 ? (
-          <MediaRow label="Popular Movies">
-            {popularMovies.map((item, index) => (
-              <MediaCard
-                key={rowKeyOf(item)}
-                item={toCardItem(item)}
-                priority={index < 4}
-                index={index}
-              />
-            ))}
-          </MediaRow>
-        ) : (
-          <RowEmptyState text="No popular movies right now." />
-        )}
-      </motion.section>
-      )}
-
       {/* Popular TV Shows — hidden while the filter shows movies only */}
       {contentType !== 'movie' && (
       <motion.section {...fadeIn} aria-labelledby="popular-tv">
-        <div id="popular-tv" className="scroll-mt-24">
+        <div id="popular-tv" className="scroll-mt-20">
           <SectionHeading
             icon={Tv}
             title="Popular TV Shows"
@@ -1540,6 +1402,163 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
         )}
       </motion.section>
       )}
+
+      {/* Continue watching */}
+      <motion.section {...fadeIn} aria-labelledby="continue-watching">
+        <div id="continue-watching" className="scroll-mt-20">
+          <SectionHeading icon={History} title="Continue watching" hint={syncHint} />
+        </div>
+        {historyQuery.isPending ? (
+          <div className="flex gap-3 overflow-hidden sm:gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="w-32 shrink-0 sm:w-36">
+                <Skeleton className="animate-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+              </div>
+            ))}
+          </div>
+        ) : filteredHistory.length === 0 ? (
+          <EmptyState
+            variant="history"
+            title={
+              historyItems.length > 0
+                ? `No ${contentType === 'tv' ? 'series' : 'movies'} in progress`
+                : 'Nothing watched yet'
+            }
+            subtitle={
+              historyItems.length > 0
+                ? 'Switch the browse filter to All to see everything in progress.'
+                : 'Press play on anything — CineDeck remembers exactly where you left off, down to the second.'
+            }
+          />
+        ) : (
+          <MediaRow label="Continue watching">
+            {filteredHistory.map((item) => (
+              <HistoryCard key={item.id} item={item} />
+            ))}
+          </MediaRow>
+        )}
+      </motion.section>
+
+      {/* My List */}
+      <motion.section {...fadeIn} aria-labelledby="my-list">
+        <div id="my-list" className="scroll-mt-20">
+          <SectionHeading icon={Bookmark} title="My List" hint={syncHint} />
+        </div>
+        {watchlistQuery.isPending ? (
+          <div className="flex gap-3 overflow-hidden sm:gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="w-32 shrink-0 sm:w-36">
+                <Skeleton className="animate-shimmer aspect-[2/3] w-full rounded-xl bg-zinc-200 dark:bg-zinc-900" />
+              </div>
+            ))}
+          </div>
+        ) : filteredWatchlist.length === 0 ? (
+          <EmptyState
+            variant="list"
+            title="Your list is empty"
+            subtitle={
+              watchlistItems.length > 0
+                ? 'Switch the browse filter to All to see everything you saved.'
+                : knownUser
+                  ? 'Hover any poster and hit + to save it here — your queue for movie night.'
+                  : 'Save titles with the + on any poster, or create a free account to sync them everywhere.'
+            }
+          />
+        ) : (
+          <MediaRow label="My List">
+            {filteredWatchlist.map((item) => (
+              <WatchlistCard key={item.id} item={item} />
+            ))}
+          </MediaRow>
+        )}
+      </motion.section>
+
+      {/* Custom lists — create, curate, share (renders under My List) */}
+      {knownUser && (
+        <motion.section {...fadeIn} aria-label="Custom lists wrapper" className="mb-8">
+          <CustomLists />
+        </motion.section>
+      )}
+
+      {/* Popular Movies — hidden while the filter shows series only */}
+      {contentType !== 'tv' && (
+      <motion.section {...fadeIn} aria-labelledby="popular-movies">
+        <div id="popular-movies" className="scroll-mt-20">
+          <SectionHeading
+            icon={Film}
+            title="Popular Movies"
+            hint={hasKey ? 'All-time on TMDB' : 'Cinemeta top'}
+            seeAll={{ onClick: () => router.push('/?view=search&browse=popular&type=movie', { scroll: false }) }}
+          />
+        </div>
+        {popularMoviesQuery.isPending ? (
+          <RowSkeletonStripe />
+        ) : popularMoviesQuery.isError ? null : popularMovies && popularMovies.length > 0 ? (
+          <MediaRow label="Popular Movies">
+            {popularMovies.map((item, index) => (
+              <MediaCard
+                key={rowKeyOf(item)}
+                item={toCardItem(item)}
+                priority={index < 4}
+                index={index}
+              />
+            ))}
+          </MediaRow>
+        ) : (
+          <RowEmptyState text="No popular movies right now." />
+        )}
+      </motion.section>
+      )}
+      <LazySection id="new-this-week" label="New this week">
+        <NewThisWeekRow />
+      </LazySection>
+
+      {/* Anime — id + ref anchor for the header / bottom-nav Anime entries. */}
+      <AnimeSection animeRef={animeRef} />
+
+      {/* Suomalainen sisältö — the home-turf row. Embed servers rarely index
+          Finnish titles, so every item carries both IMDB + TMDB ids and the
+          scan tries both; title pages surface Yle Areena as fallback. */}
+      <FinnishSection />
+      {/* Live Sports — compact premium band (scores, replays, free channels) */}
+      <SportsTeaser />
+
+      {/* "Because you watched X" / "Top picks for you" — TMDB-key-only */}
+      <RecommendationsRow enabled={hasKey} />
+
+      {/* ------------------------------------------------------------------
+          More to explore — genre catalog rows, quick watch, top rated and the
+          interactive Explore browser. Kept after the ten headline sections so
+          the homepage leads with the content that matters most.
+          ------------------------------------------------------------------ */}
+      <LazySection id="binge-worthy-series" label="Binge-worthy series">
+        <BingeWorthyRow enabled />
+      </LazySection>
+      <LazySection id="action-thriller" label="Action & thriller">
+        <ActionThrillerRow />
+      </LazySection>
+      <LazySection id="comedy-picks" label="Comedy picks">
+        <ComedyPicksRow />
+      </LazySection>
+      <LazySection id="award-winners" label="Award winners">
+        <AwardWinnersRow />
+      </LazySection>
+      <LazySection id="hidden-gems" label="Hidden gems">
+        <HiddenGemsRow />
+      </LazySection>
+      <LazySection id="documentaries" label="Documentaries">
+        <DocumentariesRow />
+      </LazySection>
+      <LazySection id="classic-cinema" label="Classic cinema">
+        <ClassicCinemaRow />
+      </LazySection>
+      <LazySection id="sci-fi-fantasy" label="Sci-Fi & fantasy">
+        <SciFiFantasyRow />
+      </LazySection>
+
+      <LazySection id="quick-watch" label="Quick watch">
+        <QuickWatchRow />
+      </LazySection>
 
       {/* Top Rated — keyless imdbRating catalog, type follows the browse filter */}
       <LazySection id="top-rated" label="Top rated">
@@ -1600,8 +1619,8 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
                   {active && (
                     <motion.span
                       layoutId="explore-genre-pill"
-                      className="absolute inset-0 rounded-full bg-brand shadow-[0_0_14px_color-mix(in_srgb,var(--cinedeck-accent)_30%,transparent)]"
-                      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                      className="absolute inset-0 rounded-full bg-brand"
+                      transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
                     />
                   )}
                   <span className="relative z-10">{genre}</span>
@@ -1628,7 +1647,7 @@ export function HomeView({ initialTrending }: { initialTrending?: MetaSearchItem
                     <motion.span
                       layoutId="explore-type-pill"
                       className="absolute inset-0 rounded-md bg-brand"
-                      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                      transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
                     />
                   )}
                   <span className="relative z-10 flex items-center gap-1.5">

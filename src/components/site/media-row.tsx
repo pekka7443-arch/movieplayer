@@ -28,9 +28,8 @@ export function SectionHeadingBar({
 }) {
   return (
     <div className="mb-2 flex items-baseline gap-2.5">
-      <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-zinc-900 md:text-xl dark:text-zinc-100">
-        <span className="h-3.5 w-1 rounded-full bg-brand md:h-4" aria-hidden />
-        {Icon && <Icon className="size-4 text-brand md:size-5" aria-hidden />}
+      <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-foreground md:text-base">
+        {Icon && <Icon className="size-4 text-brand" aria-hidden />}
         {title}
       </h2>
       {hint && (
@@ -40,7 +39,7 @@ export function SectionHeadingBar({
         <button
           type="button"
           onClick={seeAll.onClick}
-          className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 md:text-[13px]"
+          className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md text-xs font-medium text-muted-foreground transition-colors duration-150 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           aria-label={seeAll.label ?? `See all — ${title}`}
         >
           {seeAll.label ?? 'See all'}
@@ -86,12 +85,11 @@ export function MediaRow({ children, label }: { children: ReactNode; label: stri
   };
 
   const arrowClasses =
-    'pointer-events-auto size-7 rounded-full border border-border bg-card/95 text-zinc-700 shadow-lg shadow-black/10 backdrop-blur transition-all duration-200 hover:bg-muted hover:text-zinc-900 disabled:pointer-events-none disabled:opacity-0 dark:bg-card/95 dark:text-zinc-300 dark:shadow-black/40 dark:hover:bg-muted dark:hover:text-zinc-100';
+    'pointer-events-auto size-7 rounded-full border border-border/80 bg-popover/95 text-zinc-400 shadow-md shadow-black/20 backdrop-blur transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-0';
 
-  // Hover micro-interaction for the scroll arrows: nudge toward the direction
-  // they scroll, spring back on tap. Collapses under reduced motion.
+  // Hover micro-interaction for the scroll arrows: gentle scale, 150ms.
   const arrowMotion = (direction: 1 | -1) => ({
-    whileHover: reduceMotion ? undefined : { scale: 1.1, x: direction * 2 },
+    whileHover: reduceMotion ? undefined : { scale: 1.08 },
     whileTap: reduceMotion ? undefined : { scale: 0.95 },
     transition: { duration: reduceMotion ? 0 : 0.15, ease: 'easeOut' as const },
   });
@@ -101,7 +99,7 @@ export function MediaRow({ children, label }: { children: ReactNode; label: stri
       <div
         ref={scrollerRef}
         onScroll={updateEdges}
-        className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4"
+        className="flex snap-x gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2.5"
         style={{ scrollBehavior: 'smooth' }}
       >
         {children}
@@ -124,7 +122,7 @@ export function MediaRow({ children, label }: { children: ReactNode; label: stri
       />
 
       {/* Left arrow — always visible on mobile, hover-revealed on desktop. */}
-      <div className="pointer-events-none absolute -left-1.5 top-1/2 z-10 -translate-y-1/2 sm:-left-2 md:-left-4 md:opacity-0 md:transition-opacity md:duration-200 md:group-hover/row:opacity-100">
+      <div className="pointer-events-none absolute -left-1.5 top-1/2 z-10 -translate-y-1/2 sm:-left-2 md:opacity-0 md:transition-opacity md:duration-150 md:group-hover/row:opacity-100">
         <motion.div className="inline-flex" {...arrowMotion(-1)}>
           <Button
             type="button"
@@ -140,7 +138,7 @@ export function MediaRow({ children, label }: { children: ReactNode; label: stri
         </motion.div>
       </div>
       {/* Right arrow — same reveal behavior. */}
-      <div className="pointer-events-none absolute -right-1.5 top-1/2 z-10 -translate-y-1/2 sm:-right-2 md:-right-4 md:opacity-0 md:transition-opacity md:duration-200 md:group-hover/row:opacity-100">
+      <div className="pointer-events-none absolute -right-1.5 top-1/2 z-10 -translate-y-1/2 sm:-right-2 md:opacity-0 md:transition-opacity md:duration-150 md:group-hover/row:opacity-100">
         <motion.div className="inline-flex" {...arrowMotion(1)}>
           <Button
             type="button"

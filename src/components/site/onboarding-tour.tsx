@@ -68,7 +68,6 @@ export function OnboardingTour() {
         <div className="relative border-b border-zinc-200 bg-white/70 px-6 pb-5 pt-6 dark:border-zinc-800/80 dark:bg-zinc-900/40">
           <span
             aria-hidden
-            className="pointer-events-none absolute -top-14 right-0 h-36 w-52 rounded-full bg-brand-soft blur-3xl"
           />
           <DialogHeader className="space-y-2 text-left">
             <span className="flex size-10 items-center justify-center rounded-xl bg-brand text-brand-foreground shadow-[0_0_18px_color-mix(in_srgb,var(--cinedeck-accent)_25%,transparent)]">

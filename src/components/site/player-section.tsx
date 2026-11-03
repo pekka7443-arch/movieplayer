@@ -944,7 +944,6 @@ export function PlayerSection({
       {/* Ambient amber glow behind the player */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-10 left-1/2 -z-10 h-48 w-[42rem] max-w-full -translate-x-1/2 rounded-full bg-brand-soft blur-3xl"
       />
 
       {/* Heading + badges */}
