@@ -23,12 +23,13 @@
 //   9. readJsonBody size cap.
 
 import { execSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { FRAME_ANCESTORS, FRAME_ANCESTOR_SOURCES } from '@/lib/frame-ancestors';
 import { projectRoot } from '@/lib/server/project-root';
 
 const TMP_DIR = mkdtempSync(join(tmpdir(), 'cinedeck-sechard-'));
@@ -523,6 +524,63 @@ describe('TOTP secret boot migration', () => {
 
     const modernRow = await prisma.user.findUniqueOrThrow({ where: { id: modern.id } });
     expect(sealed.openStoredSecret(modernRow.totpSecret, modern.id)).toBe('JBSWY3DPEHPK3PXPSEALED');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. Frame-ancestors platform contract — keeps the z.ai preview/publish
+//     embed alive. Narrowing this list is what produced Chromium's
+//     "This content is blocked. Ask the site owner to fix it." error in
+//     every embedded view (2026-11-03 regression).
+// ---------------------------------------------------------------------------
+
+describe('frame-ancestors platform contract', () => {
+  it('allows exactly the platform embed origins (self + z.ai/space-z.ai + localhost)', () => {
+    const required = [
+      "'self'",
+      'https://chat.z.ai',
+      'https://z.ai',
+      'https://*.z.ai',
+      'https://*.space-z.ai',
+      'http://localhost:*',
+    ];
+    for (const source of required) {
+      expect(FRAME_ANCESTOR_SOURCES).toContain(source);
+      expect(FRAME_ANCESTORS).toContain(source);
+    }
+    // No wildcard-everything and no plaintext-HTTP wildcard may ever appear.
+    for (const source of FRAME_ANCESTORS.split(' ')) {
+      expect(source).not.toBe('*');
+      expect(source.startsWith('http://*')).toBe(false);
+    }
+  });
+
+  it('proxy.ts and player-proxy route consume the shared constant (no drifted mirrors)', () => {
+    const proxySrc = readFileSync(`${process.cwd()}/src/proxy.ts`, 'utf8');
+    const routeSrc = readFileSync(
+      `${process.cwd()}/src/app/api/player-proxy/route.ts`,
+      'utf8',
+    );
+    expect(proxySrc).toContain("from '@/lib/frame-ancestors'");
+    expect(routeSrc).toContain('from "@/lib/frame-ancestors"');
+    // Local redefinitions must stay gone — the two CSPs must never drift.
+    expect(proxySrc).not.toMatch(/const FRAME_ANCESTORS/);
+    expect(routeSrc).not.toMatch(/const FRAME_ANCESTORS/);
+  });
+
+  it('nothing in src/ sets X-Frame-Options (frame-ancestors is authoritative)', () => {
+    // Match QUOTED header-key usage only — documentation that merely mentions
+    // the header name (backtick comments) is not an offender.
+    let offenders = '';
+    try {
+      offenders = execSync(`rg -i "['\\"]x-frame-options" src`, {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+      });
+    } catch {
+      // rg exits 1 on zero matches — that is the PASS case.
+    }
+    expect(offenders.trim()).toBe('');
   });
 });
 

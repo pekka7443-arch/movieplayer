@@ -176,11 +176,30 @@ if (portOpen) {
     const res = await fetch('http://127.0.0.1:3000/');
     httpOk = res.status === 200;
     const csp = res.headers.get('content-security-policy') ?? '';
-    cspOk = /frame-ancestors[^;]*z\.ai/.test(csp);
-    cspDetail = csp.match(/frame-ancestors[^;]*/)?.[0] ?? 'no frame-ancestors found';
+    // Platform contract (README deploy checklist): EVERY source below must be
+    // present, or the z.ai preview/publish iframe blocks the app with
+    // Chromium's "This content is blocked" error page. A loose /z\.ai/ match
+    // once passed the doctor while the allowlist had been narrowed to
+    // chat.z.ai only — which broke the actual platform embed.
+    const requiredAncestors = [
+      "'self'",
+      'https://chat.z.ai',
+      'https://z.ai',
+      'https://*.z.ai',
+      'https://*.space-z.ai',
+      'http://localhost:*',
+    ];
+    const ancestors = csp.match(/frame-ancestors[^;]*/)?.[0] ?? '';
+    const missing = requiredAncestors.filter((src) => !ancestors.includes(src));
+    cspOk = missing.length === 0;
+    cspDetail = ancestors || 'no frame-ancestors found';
     xfoAbsent = res.headers.get('x-frame-options') === null;
     record('http: GET / → 200', httpOk, `status ${res.status}`);
-    record('csp: frame-ancestors allows z.ai', cspOk, cspOk ? cspDetail : `BAD: ${cspDetail}`);
+    record(
+      'csp: frame-ancestors platform contract',
+      cspOk,
+      cspOk ? cspDetail : `BAD: missing ${missing.join(', ')} in "${cspDetail}"`,
+    );
     record(
       'csp: no X-Frame-Options conflict',
       xfoAbsent,

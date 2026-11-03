@@ -19,27 +19,26 @@
 //
 // 3. HSTS in production (the platform serves the app over HTTPS).
 //
-// 4. Clickjacking: frame-ancestors allows 'self', the platform chat embed
-//    (chat.z.ai), the published preview domains (*.space-z.ai) and localhost
-//    for development. Arbitrary *.z.ai sibling subdomains are NOT allowed to
-//    frame the app (2026-11-03 hardening) — the platform preview embed lives
-//    on chat.z.ai, and top-level visits need no frame permission at all.
+// 4. Clickjacking: frame-ancestors allows 'self' plus the PLATFORM EMBED
+//    ORIGINS — see src/lib/frame-ancestors.ts (single source of truth, shared
+//    with the player-proxy CSP). The z.ai platform renders CineDeck inside
+//    its own UI via iframes whose parent origins span the z.ai /
+//    space-z.ai domains — NOT only chat.z.ai. Narrowing the list below the
+//    README platform contract breaks every embedded view with Chromium's
+//    "This content is blocked. Ask the site owner to fix it." error page
+//    (2026-11-03 regression, fixed same day). Embedding is orthogonal to
+//    request trust: mutating-request origin checks stay strict in
+//    src/lib/server/http.ts, so a sibling tenant that frames the app still
+//    cannot forge authenticated requests.
 
 import { NextRequest, NextResponse } from 'next/server';
+
+import { FRAME_ANCESTORS } from '@/lib/frame-ancestors';
 
 const CSRF_COOKIE = 'cinedeck_csrf';
 const PLAYER_PROXY_PATH = '/api/player-proxy';
 
 const isProd = process.env.NODE_ENV === 'production';
-
-/** Trusted frame ancestors — kept in sync with src/app/api/player-proxy CSP. */
-const FRAME_ANCESTORS = [
-  "'self'",
-  'https://chat.z.ai',
-  'https://z.ai',
-  'https://*.space-z.ai',
-  'http://localhost:*',
-].join(' ');
 
 function buildCsp(nonce: string): string {
   const scriptSrc = isProd

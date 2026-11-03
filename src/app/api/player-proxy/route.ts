@@ -1,3 +1,4 @@
+import { FRAME_ANCESTORS } from "@/lib/frame-ancestors";
 import { PROVIDERS } from "@/lib/providers";
 import { withApi, apiError } from "@/lib/server/api";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
@@ -84,8 +85,9 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
-/** Trusted frame ancestors — mirrored from src/middleware.ts. */
-const FRAME_ANCESTORS = "'self' https://chat.z.ai https://z.ai https://*.space-z.ai http://localhost:*";
+// Trusted frame ancestors come from the shared platform contract in
+// src/lib/frame-ancestors.ts — the same list the app-wide middleware CSP
+// uses, so the shell and the player can never drift apart.
 
 export const GET = withApi("player-proxy", async (request) => {
   // PHASE 2: the proxy serves playable provider pages → accounts only.
