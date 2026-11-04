@@ -75,7 +75,14 @@ worklog*.bak
 # isolated build/dev artifact dirs
 /.next-build/
 /.next-dev/
-config/bootstrap-admin.json
+
+# runtime secrets & bootstrap files — resolved from the persistent volume at
+# boot (seed.ts / auth-secret-store.ts); NEVER ship them inside repo.tar
+/config/
+
+# manual pre-change backups live on the persistent volume (/tmp/my-project/backups)
+# — 100+MB tarballs here previously bloated the deploy package
+/backups/
 
 # internal notes & CI artifacts (never publish)
 /worklog.md
