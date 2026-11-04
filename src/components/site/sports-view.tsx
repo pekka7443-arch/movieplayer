@@ -596,14 +596,50 @@ function StreamingPanel({ event }: { event: SportsEvent }) {
 /** Streaming tab — every curated service with its league coverage. */
 function ServicesTab() {
   const t = useUiStrings();
+  const [freeOnly, setFreeOnly] = useState(false);
+  // Free options first by default — stable sort keeps the curated order inside each group.
+  const services = useMemo(() => {
+    const freeFirst = [...STREAMING_SERVICES].sort(
+      (a, b) => (a.kind === 'free' ? 0 : 1) - (b.kind === 'free' ? 0 : 1),
+    );
+    return freeOnly ? freeFirst.filter((s) => s.kind === 'free') : freeFirst;
+  }, [freeOnly]);
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{t.streamingServices}</h2>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{t.servicesSubtitle}</p>
       </div>
+      <div className="flex items-center gap-1.5" role="group" aria-label={t.filterFreeOnly}>
+        <button
+          type="button"
+          onClick={() => setFreeOnly(false)}
+          aria-pressed={!freeOnly}
+          className={
+            'h-7 rounded-full px-3 text-[11px] font-semibold transition-colors ' +
+            (!freeOnly
+              ? 'bg-brand text-brand-foreground'
+              : 'border border-zinc-200 bg-white/70 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300')
+          }
+        >
+          {t.filterAll}
+        </button>
+        <button
+          type="button"
+          onClick={() => setFreeOnly(true)}
+          aria-pressed={freeOnly}
+          className={
+            'h-7 rounded-full px-3 text-[11px] font-semibold transition-colors ' +
+            (freeOnly
+              ? 'bg-brand text-brand-foreground'
+              : 'border border-zinc-200 bg-white/70 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300')
+          }
+        >
+          {t.filterFreeOnly}
+        </button>
+      </div>
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {STREAMING_SERVICES.map((svc) => (
+        {services.map((svc) => (
           <li
             key={svc.id}
             className="flex flex-col rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm transition-colors hover:border-brand/40 dark:border-zinc-800 dark:bg-zinc-900/70"

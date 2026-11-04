@@ -79,6 +79,8 @@ export interface UiStrings {
   openService: string;
   freeLabel: string;
   paidLabel: string;
+  filterAll: string;
+  filterFreeOnly: string;
   servicesDisclaimer: string;
 }
 
@@ -143,6 +145,8 @@ const en: UiStrings = {
   openService: 'Open',
   freeLabel: 'Free',
   paidLabel: 'Subscription',
+  filterAll: 'All',
+  filterFreeOnly: 'Free only',
   servicesDisclaimer: 'Curated for Finland · 2025\u201326 season. Rights move around — confirm the exact game in the service.',
 };
 
@@ -207,6 +211,8 @@ const fi: UiStrings = {
   openService: 'Avaa',
   freeLabel: 'Ilmainen',
   paidLabel: 'Tilaus',
+  filterAll: 'Kaikki',
+  filterFreeOnly: 'Vain ilmaiset',
   servicesDisclaimer: 'Koottu Suomen näkyvyyksistä · kausi 2025–26. Oikeudet vaihtuvat — varmista tarkka ottelu palvelusta.',
 };
 
@@ -271,6 +277,8 @@ const sv: UiStrings = {
   openService: 'Öppna',
   freeLabel: 'Gratis',
   paidLabel: 'Prenumeration',
+  filterAll: 'Alla',
+  filterFreeOnly: 'Endast gratis',
   servicesDisclaimer: 'Kurerat för Finland · säsong 2025–26. Rättigheter ändras — bekräfta matchen i tjänsten.',
 };
 

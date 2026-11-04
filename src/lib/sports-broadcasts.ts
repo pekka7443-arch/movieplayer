@@ -14,6 +14,10 @@
 //   veikkaus.fi → VeikkausTV (free selected games). Re-probed 2026-11-04: all
 //   200, except viaplay.fi root (curl 403 bot-shield, real browser 200) and
 //   veikkaus.fi VeikkausTV (curl 503 bot-shield, path verified live via search).
+//   Viaplay TV (viaplaytv.fi) added 2026-11-04 — a FREE-to-air sports channel
+//   (channel 21 in cable/antenna networks; no free online stream, watch on TV):
+//   Bundesliga, EFL Championship, UEFA EL/Conference, ski jumping, alpine,
+//   darts, MotoGP (per viaplaytv.fi).
 // Rights move between seasons — the UI carries a "confirm the exact game"
 // disclaimer alongside these badges.
 //
@@ -89,6 +93,16 @@ export const STREAMING_SERVICES: StreamingService[] = [
     coverage: ['IIHF Worlds', 'National teams', 'Athletics'],
   },
   {
+    id: 'viaplaytv',
+    name: 'Viaplay TV (kanava 21)',
+    shortName: 'Viaplay TV',
+    monogram: 'VTV',
+    color: '#d97706',
+    kind: 'free',
+    url: 'https://viaplaytv.fi',
+    coverage: ['Bundesliga', 'Championship', 'UEFA Europe', 'Ski jumping', 'Alpine skiing', 'Darts', 'MotoGP'],
+  },
+  {
     id: 'veikkaustv',
     name: 'VeikkausTV',
     shortName: 'VeikkausTV',
@@ -150,6 +164,13 @@ const RULES: MatchRule[] = [
   { serviceId: 'yle', sports: ['Ice Hockey'], re: /iihf|world championship|maailmanmestaru/i, prio: 1 },
   // VeikkausTV (free with a Veikkaus account)
   { serviceId: 'veikkaustv', sports: ['Soccer'], re: /veikkausliiga/i, prio: 2 },
+  // Viaplay TV — free-to-air channel 21 (secondary pill behind the paid rights holder)
+  { serviceId: 'viaplaytv', sports: ['Soccer'], re: /^german bundesliga$|^bundesliga$/i, prio: 2 },
+  { serviceId: 'viaplaytv', sports: ['Soccer'], re: /^english league championship$|^efl championship$|^championship$/i, prio: 2 },
+  { serviceId: 'viaplaytv', sports: ['Soccer'], re: /europa conference league|conference league|europa league/i, prio: 2 },
+  { serviceId: 'viaplaytv', sports: ['Motorsport'], re: /motogp|moto grand prix/i, prio: 2 },
+  { serviceId: 'viaplaytv', sports: ['Skiing', 'Winter Sports'], re: /fis|alpine|ski jumping|mäkihyppy|alppihiihto/i, prio: 2 },
+  { serviceId: 'viaplaytv', sports: ['Darts'], re: /.*/, prio: 2 },
 ];
 
 export interface ServiceBroadcast {
