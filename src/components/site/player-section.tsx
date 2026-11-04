@@ -1172,13 +1172,15 @@ export function PlayerSection({
             type="button"
             variant="ghost"
             size="sm"
+            asChild
             aria-label={`Open ${provider.name} in a new tab`}
             title={`Open ${provider.name} in a new tab`}
-            onClick={() => window.open(embedUrl, '_blank', 'noopener,noreferrer')}
             className="h-9 gap-1.5 rounded-lg px-3 text-xs text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
           >
-            <ExternalLink className="size-3.5" aria-hidden />
-            <span className="hidden sm:inline">New tab</span>
+            <a href={embedUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="size-3.5" aria-hidden />
+              <span className="hidden sm:inline">New tab</span>
+            </a>
           </Button>
           <Button
             type="button"

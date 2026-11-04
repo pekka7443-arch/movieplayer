@@ -8,10 +8,12 @@
 // Hand-curated for the 2025–26 season from the services' own pages:
 //   mtv.fi/urheilu, mtv.fi/ohjelmat/liiga (Liiga, Mestarien liiga, La Liga,
 //   Serie A, WRC), hbomax.com/fi/fi/sports (Eurosport: NBA, tennis, snooker,
-//   IIHF World Championship), viaplay.fi (NHL, Valioliiga, Bundesliga, F1),
-//   ruutu.fi (Veikkausliiga), areena.yle.fi (free MM-kisat/maajoukkueet),
-//   veikkaus.fi → VeikkausTV (free selected games). All URLs probed 200 (or
-//   bot-shielded-but-real for viaplay.fi / veikkaus.fi).
+//   IIHF World Championship), viaplay.fi/urheilu (NHL, Valioliiga, Bundesliga,
+//   F1), ruutu.fi/urheilu (Veikkausliiga), areena.yle.fi (free
+//   MM-kisat/maajoukkueet — /urheilu path 404s on Areena, root is correct),
+//   veikkaus.fi → VeikkausTV (free selected games). Re-probed 2026-11-04: all
+//   200, except viaplay.fi root (curl 403 bot-shield, real browser 200) and
+//   veikkaus.fi VeikkausTV (curl 503 bot-shield, path verified live via search).
 // Rights move between seasons — the UI carries a "confirm the exact game"
 // disclaimer alongside these badges.
 //
@@ -63,7 +65,7 @@ export const STREAMING_SERVICES: StreamingService[] = [
     monogram: 'V',
     color: '#ec0c40',
     kind: 'subscription',
-    url: 'https://viaplay.fi',
+    url: 'https://viaplay.fi/urheilu',
     coverage: ['NHL', 'Premier League', 'Bundesliga', 'Formula 1'],
   },
   {
@@ -73,7 +75,7 @@ export const STREAMING_SERVICES: StreamingService[] = [
     monogram: 'R+',
     color: '#1d4ed8',
     kind: 'subscription',
-    url: 'https://www.ruutu.fi',
+    url: 'https://www.ruutu.fi/urheilu',
     coverage: ['Veikkausliiga'],
   },
   {

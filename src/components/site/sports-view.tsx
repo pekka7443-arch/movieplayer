@@ -487,14 +487,15 @@ function LinksRow({ event, dense }: { event: SportsEvent; dense?: boolean }) {
       {WATCH_LINKS(event).map((link) => (
         <Button
           key={link.label}
-          type="button"
           variant="outline"
           size="sm"
-          onClick={() => window.open(link.href, '_blank', 'noopener,noreferrer')}
+          asChild
           className="h-8 gap-1.5 rounded-lg border-zinc-200 bg-white/70 text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
         >
-          {link.label}
-          <ExternalLink className="size-3" aria-hidden />
+          <a href={link.href} target="_blank" rel="noopener noreferrer">
+            {link.label}
+            <ExternalLink className="size-3" aria-hidden />
+          </a>
         </Button>
       ))}
     </div>
@@ -633,13 +634,14 @@ function ServicesTab() {
               ))}
             </div>
             <Button
-              type="button"
               size="sm"
-              onClick={() => window.open(svc.url, '_blank', 'noopener,noreferrer')}
+              asChild
               className="mt-3 h-8 w-full gap-1.5 rounded-lg bg-brand text-xs font-semibold text-brand-foreground hover:bg-brand/90"
             >
-              {t.openService}
-              <ExternalLink className="size-3.5" aria-hidden />
+              <a href={svc.url} target="_blank" rel="noopener noreferrer">
+                {t.openService}
+                <ExternalLink className="size-3.5" aria-hidden />
+              </a>
             </Button>
           </li>
         ))}
@@ -1146,14 +1148,15 @@ function ChannelPlayer({ channel, onClose }: { channel: SportsChannel; onClose: 
           <p className="text-[11px] text-zinc-500">Free live channel via iptv-org</p>
         </div>
         <Button
-          type="button"
           variant="ghost"
           size="sm"
-          onClick={() => window.open(channel.url, '_blank', 'noopener,noreferrer')}
+          asChild
           className="ml-auto h-8 gap-1.5 rounded-lg px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
         >
-          <ExternalLink className="size-3.5" aria-hidden />
-          <span className="hidden sm:inline">Open stream</span>
+          <a href={channel.url} target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">Open stream</span>
+          </a>
         </Button>
         <Button
           type="button"
@@ -1433,14 +1436,15 @@ function LivePlayer({
                 {WATCH_LINKS(event).slice(0, 3).map((link) => (
                   <Button
                     key={link.label}
-                    type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(link.href, '_blank', 'noopener,noreferrer')}
+                    asChild
                     className="h-8 gap-1.5 rounded-lg border-zinc-700 bg-transparent text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white"
                   >
-                    {link.label}
-                    <ExternalLink className="size-3" aria-hidden />
+                    <a href={link.href} target="_blank" rel="noopener noreferrer">
+                      {link.label}
+                      <ExternalLink className="size-3" aria-hidden />
+                    </a>
                   </Button>
                 ))}
                 <Button
@@ -2126,16 +2130,19 @@ function ReplayPlayer({ event }: { event: SportsEvent }) {
               </p>
             </div>
             <Button
-              type="button"
               variant="ghost"
               size="sm"
-              onClick={() =>
-                window.open(`https://www.youtube.com/watch?v=${active.videoId}`, '_blank', 'noopener,noreferrer')
-              }
+              asChild
               className="ml-auto h-8 shrink-0 gap-1.5 rounded-lg px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             >
-              <ExternalLink className="size-3.5" aria-hidden />
-              <span className="hidden sm:inline">YouTube</span>
+              <a
+                href={`https://www.youtube.com/watch?v=${active.videoId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="size-3.5" aria-hidden />
+                <span className="hidden sm:inline">YouTube</span>
+              </a>
             </Button>
           </div>
         )}
