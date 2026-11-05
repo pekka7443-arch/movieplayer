@@ -19,6 +19,7 @@ import {
   MapPin,
   Radar,
   RotateCw,
+  ShoppingCart,
   SkipForward,
   Star,
   Unplug,
@@ -1194,6 +1195,25 @@ export function PlayerSection({
           >
             <MapPin className="size-3.5" aria-hidden />
             <span className="hidden sm:inline">Where to watch</span>
+          </Button>
+          {/* Buy / Rent — the legal route: JustWatch lists every licensed
+              service carrying the title (subscriptions, purchase, rental). */}
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            aria-label="Buy or rent this title — see every licensed service on JustWatch"
+            title="Buy / Rent — licensed services on JustWatch"
+            className="h-9 gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 text-xs font-medium text-sky-600 hover:bg-sky-500/20 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
+          >
+            <a
+              href={`https://www.justwatch.com/us/search?q=${encodeURIComponent(title || '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ShoppingCart className="size-3.5" aria-hidden />
+              <span className="hidden sm:inline">Buy / Rent</span>
+            </a>
           </Button>
           <Button
             type="button"
